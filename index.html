@@ -93,7 +93,7 @@
       <!-- ── 選單：選關 ────────────────────────────── -->
       <section id="screen-menu" class="screen" hidden>
         <div class="screen-head">
-          <h1>字戰三國</h1>
+          <h1 id="menu-title">字戰三國</h1>
           <p class="tagline">一字一兵，成詞成將</p>
         </div>
         <div id="level-list" class="level-list"></div>
@@ -126,6 +126,15 @@
           <span id="shop-renown" class="muted"></span>
         </div>
         <div id="shop-body" class="codex-body"></div>
+      </section>
+
+      <!-- ── 開發人員密技面板：選單標題連點 7 下開啟 ──── -->
+      <section id="screen-dev" class="screen" hidden>
+        <div class="screen-head row">
+          <button id="dev-back" class="icon-btn">←</button>
+          <h2>開發密技</h2>
+        </div>
+        <div id="dev-body" class="codex-body"></div>
       </section>
 
       <!-- ── 圖鑑 ──────────────────────────────────── -->

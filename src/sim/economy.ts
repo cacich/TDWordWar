@@ -6,9 +6,10 @@ import { pickWeighted } from '../core/rng'
 import { GLYPHS } from '../data/glyphs'
 import type { GameState, GlyphDef } from './types'
 
-/** 征兵花費：隨波次與「本波已征兵次數」上升 */
+/** 征兵花費：隨波次與「本波已征兵次數」上升；輕裝簡從（costMul）打折 */
 export function recruitCost(state: GameState): number {
-  return 8 + Math.floor(state.wave * 1.6) + 2 * state.recruitsThisWave
+  const base = 8 + Math.floor(state.wave * 1.6) + 2 * state.recruitsThisWave
+  return Math.max(1, Math.round(base * state.perks.costMul))
 }
 
 /** 每波結算的固定收入 */
@@ -61,6 +62,8 @@ export interface RollContext {
   familiar?: ReadonlySet<string>
   /** 心願單 */
   wishes?: readonly string[]
+  /** 廣結善緣：疊在 FAMILIAR_BOOST 上的額外倍率，預設 1（中性） */
+  familiarBoostMul?: number
 }
 
 export function rollGlyph(rng: () => number, wave: number, ctx: RollContext = {}): GlyphDef {
@@ -68,7 +71,7 @@ export function rollGlyph(rng: () => number, wave: number, ctx: RollContext = {}
   const candidates = ctx.pool?.length ? GLYPHS.filter((g) => ctx.pool!.includes(g.char)) : GLYPHS
   return pickWeighted(rng, candidates, (g) => {
     let weight = w[g.rarity - 1]
-    if (ctx.familiar?.has(g.char)) weight *= FAMILIAR_BOOST
+    if (ctx.familiar?.has(g.char)) weight *= FAMILIAR_BOOST * (ctx.familiarBoostMul ?? 1)
     if (ctx.wishes?.includes(g.char)) weight *= WISH_BOOST
     return weight
   })
@@ -87,9 +90,9 @@ export function smeltRefund(atkValue: number): number {
   return Math.max(1, Math.round(atkValue * 0.12))
 }
 
-/** 熔爐重抽：把手牌上所有字換成新的，比征兵便宜但不增加張數 */
+/** 熔爐重抽：把手牌上所有字換成新的，比征兵便宜但不增加張數；輕裝簡從（costMul）打折 */
 export function rerollCost(state: GameState): number {
-  return 4 + Math.floor(state.wave / 2)
+  return Math.max(1, Math.round((4 + Math.floor(state.wave / 2)) * state.perks.costMul))
 }
 
 /** 鏟除退款比例：字牌全額、武將只退 3 成（設計決定：拆將要有重量） */

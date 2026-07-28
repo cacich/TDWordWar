@@ -3,6 +3,15 @@
  * 這是唯一同時知道全部四層的檔案，其他模組彼此不直接依賴。
  */
 import { Audio, type SfxName } from './core/audio'
+import {
+  devAddFood,
+  devAddRenown,
+  devClearBoard,
+  devClearEnemies,
+  devFullHeal,
+  devGiveGlyph,
+  devUnlockCodex,
+} from './core/devtools'
 import { startLoop, type LoopHandle } from './core/loop'
 import { saveMeta } from './core/save'
 import { LEVEL_ORDER } from './data/levels'
@@ -285,6 +294,38 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.audio.play(res.ok ? 'combine' : 'deny')
     saveMeta(this.meta)
     this.screens.renderShop()
+    this.hud.toast(res.msg)
+  }
+
+  // ── 開發密技（僅供測試，見 core/devtools.ts） ────────
+  devAddRenown(amount: number): void {
+    devAddRenown(this.meta, amount)
+    saveMeta(this.meta)
+    this.hud.toast(`聲望 +${amount}`)
+  }
+  devAddFood(amount: number): void {
+    devAddFood(this.state, amount)
+    this.hud.toast(`糧 +${amount}`)
+  }
+  devFullHeal(): void {
+    devFullHeal(this.state)
+    this.hud.toast('生命全滿')
+  }
+  devClearBoard(): void {
+    devClearBoard(this.state)
+    this.hud.toast('已清空棋盤字牌')
+  }
+  devClearEnemies(): void {
+    devClearEnemies(this.state)
+    this.hud.toast('已清空敵人')
+  }
+  devUnlockCodex(): void {
+    devUnlockCodex(this.meta)
+    saveMeta(this.meta)
+    this.hud.toast('圖鑑已全部解鎖')
+  }
+  devGiveGlyph(char: string): void {
+    const res = devGiveGlyph(this.state, char)
     this.hud.toast(res.msg)
   }
   show(screen: ScreenName): void {

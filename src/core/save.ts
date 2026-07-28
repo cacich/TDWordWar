@@ -3,6 +3,7 @@
  * 注意：只存局外 meta 進度，不存局內狀態（GameState 內含 rng 閉包，不可直接序列化）。
  * 若要做局內續玩，需改為存 { seed, rngCallCount } 並在載入時重播 —— 見 docs/llm-wiki/04-invariants.md
  */
+import { SHOP_BY_KEY } from '../data/shop'
 import { MAX_HAND_SIZE, MAX_WISH_SLOTS, type MetaProgress } from '../sim/state'
 
 /** 版本升級時保留舊 key，loadMeta 會依序往回找並補上新欄位的預設值 */
@@ -19,7 +20,7 @@ export const EMPTY_META: MetaProgress = {
   seenGlyphs: [],
   seenGenerals: [],
   best: {},
-  items: [],
+  items: {},
 }
 
 export function loadMeta(): MetaProgress {
@@ -41,11 +42,34 @@ export function loadMeta(): MetaProgress {
       seenGlyphs: arr(p.seenGlyphs),
       seenGenerals: arr(p.seenGenerals),
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
-      items: arr(p.items),
+      items: items(p.items),
     }
   } catch {
     return { ...EMPTY_META }
   }
+}
+
+/**
+ * 商城道具等級。舊版存檔的 items 是 string[]（一次性擁有，等同 Lv.1），
+ * 這裡相容轉換；新版是 Record<key, level>，逐一夾在該道具的等級上限內。
+ */
+function items(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (Array.isArray(v)) {
+    for (const k of v) {
+      if (typeof k === 'string' && SHOP_BY_KEY[k]) out[k] = 1
+    }
+    return out
+  }
+  if (v && typeof v === 'object') {
+    for (const [k, lv] of Object.entries(v as Record<string, unknown>)) {
+      const def = SHOP_BY_KEY[k]
+      if (!def || typeof lv !== 'number') continue
+      const clamped = clamp(Math.floor(lv), 0, def.max)
+      if (clamped > 0) out[k] = clamped
+    }
+  }
+  return out
 }
 
 export function saveMeta(meta: MetaProgress): void {

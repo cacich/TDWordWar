@@ -307,6 +307,28 @@ export interface Perks {
   atkMul: number
   /** 全場友軍攻速倍率 */
   apsMul: number
+  /** 每次攻擊的爆擊機率 */
+  critChance: number
+  /** 爆擊傷害倍率（只在 critChance > 0 時有意義） */
+  critMul: number
+  /** 起始與上限生命額外加成 */
+  extraLives: number
+  /** 征兵／重抽花費倍率（<1 = 打折） */
+  costMul: number
+  /** 熟悉度加權的額外倍率（疊在 economy.FAMILIAR_BOOST 上） */
+  familiarBoostMul: number
+  /** 敵人漏過大營時，不扣血命的機率 */
+  leakBlockChance: number
+  /** 範圍／貫穿型攻擊（pierce／splash）的額外傷害倍率 */
+  splashMul: number
+  /** 擊殺獲得的糧食倍率 */
+  bountyMul: number
+  /** 敵人移動速度倍率（<1 = 減速） */
+  enemySpeedMul: number
+  /** 全場友軍射程的額外倍率（疊在 combat.RANGE_MUL 之上） */
+  rangeMul: number
+  /** 技能與羈絆組合技冷卻時間倍率（<1 = 更快回轉） */
+  cdMul: number
 }
 
 // ── 遊戲狀態 ──────────────────────────────────────────

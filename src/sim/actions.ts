@@ -36,7 +36,12 @@ export function recruit(state: GameState): ActionResult {
 
   state.food -= cost
   state.recruitsThisWave++
-  const ctx = { pool: state.pool, familiar: familiarChars(state), wishes: state.wishes }
+  const ctx = {
+    pool: state.pool,
+    familiar: familiarChars(state),
+    wishes: state.wishes,
+    familiarBoostMul: state.perks.familiarBoostMul,
+  }
   for (let i = 0; i < state.hand.length; i++) {
     if (state.hand[i] === null) {
       const char = rollGlyph(state.rng, state.wave, ctx).char
@@ -58,7 +63,12 @@ export function rerollHand(state: GameState): ActionResult {
   if (state.food < cost) return fail(`糧不足（重抽需要 ${cost}）`)
 
   state.food -= cost
-  const ctx = { pool: state.pool, familiar: familiarChars(state), wishes: state.wishes }
+  const ctx = {
+    pool: state.pool,
+    familiar: familiarChars(state),
+    wishes: state.wishes,
+    familiarBoostMul: state.perks.familiarBoostMul,
+  }
   for (let i = 0; i < state.hand.length; i++) {
     if (state.hand[i] === null) continue
     state.hand[i] = { char: rollGlyph(state.rng, state.wave, ctx).char, level: 1 }

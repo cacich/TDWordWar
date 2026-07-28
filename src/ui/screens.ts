@@ -6,13 +6,13 @@ import { GENERALS } from '../data/generals'
 import { GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
 import { UPGRADES } from '../data/upgrades'
-import { SHOP } from '../data/shop'
+import { SHOP, itemLevel } from '../data/shop'
 import { TIER_COLOR, TIER_LABEL } from '../render/theme'
 import { FX_COLOR } from '../render/fx'
 import type { MetaProgress } from '../sim/state'
 import type { GlyphCategory } from '../sim/types'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | null
+export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
@@ -20,6 +20,14 @@ export interface ScreensHost {
   show(screen: ScreenName): void
   buyUpgrade(key: string): void
   buyItem(key: string): void
+  // ── 開發密技（見 core/devtools.ts） ──
+  devAddRenown(amount: number): void
+  devAddFood(amount: number): void
+  devFullHeal(): void
+  devClearBoard(): void
+  devClearEnemies(): void
+  devUnlockCodex(): void
+  devGiveGlyph(char: string): void
 }
 
 const CATEGORY_TITLE: Record<GlyphCategory, string> = {
@@ -48,6 +56,8 @@ export class Screens {
   private shop = el('screen-shop')
   private shopBody = el('shop-body')
   private shopRenown = el('shop-renown')
+  private dev = el('screen-dev')
+  private devBody = el('dev-body')
   private renownCount = el('renown-count')
   private levelList = el('level-list')
   private codexBody = el('codex-body')
@@ -56,6 +66,9 @@ export class Screens {
   private tabGeneral = el('tab-general')
   private tab: 'glyph' | 'general' = 'glyph'
   private current: ScreenName = null
+  /** 選單標題連點次數，用來偷偷打開開發密技面板 */
+  private titleTaps = 0
+  private titleTapAt = 0
 
   constructor(private host: ScreensHost) {
     el('btn-codex').addEventListener('click', () => this.host.show('codex'))
@@ -64,8 +77,22 @@ export class Screens {
     el('forge-back').addEventListener('click', () => this.host.show('menu'))
     el('btn-shop').addEventListener('click', () => this.host.show('shop'))
     el('shop-back').addEventListener('click', () => this.host.show('menu'))
+    el('dev-back').addEventListener('click', () => this.host.show('menu'))
+    el('menu-title').addEventListener('click', () => this.handleTitleTap())
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
+  }
+
+  /** 開發密技彩蛋：選單標題在 2.5 秒內連點 7 下開啟面板（Android 開發者選項的老把戲） */
+  private handleTitleTap(): void {
+    const now = performance.now()
+    if (now - this.titleTapAt > 2500) this.titleTaps = 0
+    this.titleTapAt = now
+    this.titleTaps++
+    if (this.titleTaps >= 7) {
+      this.titleTaps = 0
+      this.host.show('dev')
+    }
   }
 
   show(screen: ScreenName): void {
@@ -74,28 +101,35 @@ export class Screens {
     this.codex.hidden = screen !== 'codex'
     this.forge.hidden = screen !== 'forge'
     this.shop.hidden = screen !== 'shop'
+    this.dev.hidden = screen !== 'dev'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
     if (screen === 'shop') this.renderShop()
+    if (screen === 'dev') this.renderDev()
   }
 
-  /** 商城：花聲望買被動道具（一次性擁有） */
+  /** 商城：花聲望買被動道具，每種最高 3 級，買一級生效一級 */
   renderShop(): void {
     const meta = this.host.getMeta()
     this.shopRenown.textContent = `聲望 ${meta.renown}`
     this.shopBody.innerHTML = ''
     for (const item of SHOP) {
-      const owned = meta.items.includes(item.key)
+      const lv = itemLevel(meta, item.key)
+      const maxed = lv >= item.max
+      const cost = maxed ? 0 : item.cost(lv)
+      const detailLines = [`<div class="fg-desc">${item.desc}</div>`]
+      if (lv > 0) detailLines.push(`<div class="fg-desc">目前：${item.detail(lv)}</div>`)
+      if (!maxed) detailLines.push(`<div class="fg-desc">下一級：${item.detail(lv + 1)}</div>`)
       const row = document.createElement('div')
       row.className = 'forge-row'
       row.innerHTML = `<div>
-          <div class="fg-name">${item.name}${owned ? ' <span class="muted">已擁有</span>' : ''}</div>
-          <div class="fg-desc">${item.desc}</div>
+          <div class="fg-name">${item.name} <span class="muted">Lv.${lv}/${item.max}</span></div>
+          ${detailLines.join('')}
         </div>`
       const btn = document.createElement('button')
-      btn.textContent = owned ? '已購買' : `聲望 ${item.cost}`
-      btn.disabled = owned || meta.renown < item.cost
+      btn.textContent = maxed ? '已滿級' : `聲望 ${cost}`
+      btn.disabled = maxed || meta.renown < cost
       btn.addEventListener('click', () => this.host.buyItem(item.key))
       row.appendChild(btn)
       this.shopBody.appendChild(row)
@@ -103,9 +137,53 @@ export class Screens {
     const note = document.createElement('div')
     note.className = 'codex-detail'
     note.innerHTML =
-      '道具皆為被動效果，購買後永久擁有，<b>下一局開始</b>套用。<br>' +
+      '每種道具最高 3 級，買一級生效一級，皆為被動效果，<b>下一局開始</b>套用。<br>' +
       '<span class="muted">聲望與兵書共用，於每局結束依抵達波次結算。</span>'
     this.shopBody.appendChild(note)
+  }
+
+  /** 開發密技面板：測試用直接竄改 state／meta，不經過 sim/actions.ts 的驗證 */
+  private renderDev(): void {
+    this.devBody.innerHTML = ''
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML = '僅供測試，效果不計入商城／兵書平衡，正式遊玩請勿使用。'
+    this.devBody.appendChild(note)
+
+    const actions: { label: string; run: () => void }[] = [
+      { label: '+1000 聲望', run: () => this.host.devAddRenown(1000) },
+      { label: '+500 糧', run: () => this.host.devAddFood(500) },
+      { label: '生命全滿', run: () => this.host.devFullHeal() },
+      { label: '清空棋盤字牌', run: () => this.host.devClearBoard() },
+      { label: '清空敵人／跳下一波', run: () => this.host.devClearEnemies() },
+      { label: '全圖鑑解鎖', run: () => this.host.devUnlockCodex() },
+    ]
+    const bar = document.createElement('div')
+    bar.className = 'dev-actions'
+    for (const a of actions) {
+      const btn = document.createElement('button')
+      btn.textContent = a.label
+      btn.addEventListener('click', a.run)
+      bar.appendChild(btn)
+    }
+    this.devBody.appendChild(bar)
+
+    const label = document.createElement('div')
+    label.className = 'codex-section'
+    label.textContent = '點一下直接塞進手牌（一階）'
+    this.devBody.appendChild(label)
+
+    const grid = document.createElement('div')
+    grid.className = 'codex-grid'
+    for (const g of GLYPHS) {
+      const cell = document.createElement('div')
+      cell.className = 'codex-cell'
+      cell.innerHTML = `<div class="cx-char">${g.char}</div>`
+      cell.addEventListener('click', () => this.host.devGiveGlyph(g.char))
+      grid.appendChild(cell)
+    }
+    this.devBody.appendChild(grid)
   }
 
   /** 兵書：局外養成 */

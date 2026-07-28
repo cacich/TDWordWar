@@ -779,6 +779,25 @@ body {
   cursor: not-allowed;
 }
 
+/* ── 開發密技面板 ──────────────────────────── */
+.dev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--ui) * 0.42);
+  margin-bottom: calc(var(--ui) * 0.7);
+}
+
+.dev-actions button {
+  border: 1.5px solid var(--ink);
+  background: var(--gold);
+  color: #fff;
+  border-radius: calc(var(--ui) * 0.56);
+  padding: calc(var(--ui) * 0.42) calc(var(--ui) * 0.7);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.88);
+  cursor: pointer;
+}
+
 .muted {
   font-size: calc(var(--ui) * 0.82);
   color: var(--ink-soft);

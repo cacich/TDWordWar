@@ -40,8 +40,8 @@ export interface MetaProgress {
   seenGenerals: string[]
   /** 每關的最佳波數 */
   best: Record<string, number>
-  /** 商城已購買的道具 key（見 data/shop.ts） */
-  items: string[]
+  /** 商城已購買的道具等級（key → 目前等級，0 或不存在＝未購買，見 data/shop.ts） */
+  items: Record<string, number>
 }
 
 export const DEFAULT_META: MetaProgress = {
@@ -54,7 +54,7 @@ export const DEFAULT_META: MetaProgress = {
   seenGlyphs: [],
   seenGenerals: [],
   best: {},
-  items: [],
+  items: {},
 }
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3
@@ -93,8 +93,8 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     hand: new Array(handSize).fill(null),
     handSize,
     food: level.startFood + meta.extraFood,
-    lives: level.lives + meta.extraLives,
-    maxLives: level.lives + meta.extraLives,
+    lives: level.lives + meta.extraLives + perks.extraLives,
+    maxLives: level.lives + meta.extraLives + perks.extraLives,
     wave: 1,
     maxWave: level.maxWave,
     phase: 'prep',
@@ -330,13 +330,15 @@ export function recalcUnits(state: GameState): void {
   // 2. 羈絆
   const bonds = computeBonds(state.units, state.bondCds)
   state.activeBonds = bonds.active
-  state.cdMul = bonds.cdMul
+  // 兵法傳承：局外道具再疊一層冷卻倍率，跟羈絆的 cdMul 相乘
+  state.cdMul = bonds.cdMul * state.perks.cdMul
 
   for (const u of state.units) {
     // 羈絆倍率之外，再乘上局外道具（號令旗／疾風令）的全場加成
     u.atk = u.baseAtk * bonds.atkMul * state.perks.atkMul
     u.aps = u.baseAps * bonds.apsMul * state.perks.apsMul
-    u.range = effectiveRange(state.board, u)
+    // 精工兵器：疊在全域射程倍率（RANGE_MUL）之上的額外加成
+    u.range = effectiveRange(state.board, u) * state.perks.rangeMul
   }
 
   // 3. 光環：套在羈絆之後，兩者相乘。
@@ -355,11 +357,11 @@ export function recalcUnits(state: GameState): void {
     }
   }
 
-  // 4. 技能冷卻上限受羈絆的 cdMul 影響
+  // 4. 技能冷卻上限受羈絆與兵法傳承的 cdMul 影響（state.cdMul 已經是兩者相乘後的值）
   for (const u of state.units) {
     const def = u.kind === 'general' ? GENERAL_BY_NAME[u.defKey] : undefined
     const hasImpl = def?.skill && SKILLS[u.defKey]
-    u.skillCdMax = hasImpl ? def!.skill!.cd * bonds.cdMul : 0
+    u.skillCdMax = hasImpl ? def!.skill!.cd * state.cdMul : 0
     if (u.skillCd > u.skillCdMax) u.skillCd = u.skillCdMax
   }
 

@@ -206,22 +206,31 @@ export const SKILLS: Record<string, SkillFn> = {
 `max`、`cost(level)` 與 `apply(meta)`。兵書畫面會自動長出那一列。
 若新增的欄位不在 `MetaProgress` 裡，要一併加欄位並在 `core/save.ts` 的 `loadMeta()` 補預設值。
 
-## 10f2. 加一個商城道具（被動效果）
+## 10f2. 加一個商城道具（可升級的被動效果）
 
-商城賣的是**整局有效的被動道具**（一次性購買），效果比兵書更會改變玩法。兩步：
+商城賣的是**整局有效的被動道具**，每種最高 `MAX_ITEM_LEVEL`（目前 3）級，買一級生效一級，
+效果比兵書更會改變玩法。`MetaProgress.items` 存的是 `Record<道具 key, 目前等級>`，不是
+一次性擁有的旗標。三步：
 
-1. `src/data/shop.ts`：在 `SHOP` 加一筆 `ShopItem`（key／name／desc／cost），
-   並在 `perksFrom()` 把它對應到一個 `Perks` 欄位（未購買時務必是中性值）。
-2. 讓 sim 讀那個 `Perks` 欄位。`Perks` 定義在 `sim/types.ts`，`createGame` 依 `meta.items`
-   算好寫進 `state.perks`。既有 hook 範例：
-   - 徵兵升階 → `sim/actions.ts` 的 `recruit()`
-   - 全場攻擊／攻速加成 → `sim/state.ts` 的 `recalcUnits()`
-   - 每波收入／回血 → `sim/step.ts` 的 `checkWaveEnd()`
+1. `src/data/shop.ts`：在 `SHOP` 加一筆 `ShopItem`——`key`／`name`／`desc`（不隨等級變的一句話總述）／
+   `cost(level)`（0-based，買到 `level+1` 級要多少聲望，通常直接用現成的 `stdCost(base)`）／
+   `detail(level)`（1-based，那一級的效果描述，逐級列在商城 UI）／
+   `apply(level, p)`（把該等級的數值寫進 `Perks` 物件的對應欄位）。
+2. `sim/types.ts` 的 `Perks` interface 加一個欄位，並在 `shop.ts` 的 `NEUTRAL_PERKS` 給中性值
+   （倍率 1、機率/間隔/加成 0）。
+3. 讓 sim 讀那個 `Perks` 欄位。既有 hook 範例：
+   - 徵兵升階機率 → `sim/actions.ts` 的 `recruit()`
+   - 全場攻擊／攻速／射程加成、羈絆冷卻倍率 → `sim/state.ts` 的 `recalcUnits()`
+   - 每波收入／回血、起始與上限生命 → `sim/step.ts` 的 `checkWaveEnd()` 與 `sim/state.ts` 的 `createGame()`
    - 週期性效果（流星火雨）→ `sim/step.ts` 的 `stepMeteor()`
+   - 攻擊倍率類（爆擊、範圍傷害、擊殺收入）→ `sim/combat.ts` 的 `dealDamage()` / `stepCombat()` / `damageEnemy()`
+   - 敵人相關（減速、漏怪防護）→ `sim/step.ts` 的 `moveEnemies()`
+   - 花費打折、抽字加權 → `sim/economy.ts` 的 `recruitCost()` / `rerollCost()` / `rollGlyph()`
 
-⚠ **未購買時 `perksFrom` 必須回中性值（倍率 1、機率/間隔 0）**，否則 `npm run sim`
-（用預設 meta、無道具）的難度基準會跑掉。新增 `Perks` 欄位不需動 `core/save.ts`——
-只有 `meta.items` 進存檔，效果都是從它現算的。
+⚠ **等級 0（未購買）時 `perksFrom` 必須回中性值**，否則 `npm run sim`
+（用預設 meta、無道具）的難度基準會跑掉。新增 `Perks` 欄位不需動 `core/save.ts` 的存檔格式——
+只有 `meta.items` 進存檔，效果都是從它現算的；但 `loadMeta()` 的 `items()` 轉換函式會依
+`SHOP_BY_KEY[key].max` 夾住等級上限，加新道具或調整 `max` 不用額外改存檔遷移邏輯。
 
 ## 10g. 改 PWA（圖示、名稱、離線快取）
 
@@ -250,6 +259,14 @@ __dev.give('張', '飛')                // 塞手牌
 __dev.put('張', 0, 1)                 // 直接放到 (col,row)，會判定組詞
 __dev.put('刀', 2, 1, 3)              // 3 級的刀
 ```
+
+不想開 devtools 的話，選單畫面的標題「字戰三國」在 2.5 秒內連點 7 下會打開一個
+「開發密技」面板（`ui/screens.ts` 的 `handleTitleTap()`／`renderDev()`），
+裡面是按鈕版的常用測試操作（+1000 聲望、+500 糧、生命全滿、清空棋盤字牌、
+清空敵人／跳下一波、全圖鑑解鎖、點字直接塞進手牌）。實際邏輯在 `core/devtools.ts`，
+是跟 `main.ts` 的 `__dev` console 同等級的測試後門——直接改 `state`／`meta`，
+不經過 `sim/actions.ts` 的驗證，所以新增密技按鈕時比照 `__dev` 的寫法即可，
+不必假裝是玩家操作。
 
 ```bash
 npm run sim 100      # 跑 100 局統計，比手動試玩快得多

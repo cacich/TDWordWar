@@ -118,17 +118,21 @@ function moveEnemies(state: GameState, dt: number): void {
     if (e.hp <= 0) continue
     if (e.stun > 0) continue // 定身中不前進
     const slowMul = e.slow > 0 ? SLOW_FACTOR : 1
-    e.dist += e.speed * slowMul * dt
+    // 沼澤泥沼：全域敵速倍率，中性值 1 時完全不影響原本速度
+    e.dist += e.speed * slowMul * state.perks.enemySpeedMul * dt
     if (e.dist >= goal) {
       e.hp = 0
       e.dist = goal
-      state.lives -= e.damage
       state.stats.leaks++
       emit(state, { kind: 'leak' })
-      if (state.lives <= 0) {
-        state.lives = 0
-        state.phase = 'lost'
-        emit(state, { kind: 'lost' })
+      // 回魂旗：機率不扣血命，敵人依然算漏過（stats.leaks 照計）
+      if (state.rng() >= state.perks.leakBlockChance) {
+        state.lives -= e.damage
+        if (state.lives <= 0) {
+          state.lives = 0
+          state.phase = 'lost'
+          emit(state, { kind: 'lost' })
+        }
       }
     }
   }

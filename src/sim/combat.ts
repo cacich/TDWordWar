@@ -150,11 +150,13 @@ export function damageEnemy(state: GameState, e: Enemy, dmg: number): void {
   e.hp -= dmg
   e.hitFlash = 0.12
   if (e.hp <= 0) {
-    state.food += e.bounty
+    // 狩獵好手：擊殺收入倍率，預設中性值 1 不影響原本整數收益
+    const bounty = Math.round(e.bounty * state.perks.bountyMul)
+    state.food += bounty
     state.stats.kills++
-    state.stats.foodEarned += e.bounty
+    state.stats.foodEarned += bounty
     const p = enemyPos(state.board, e)
-    emit(state, { kind: 'kill', x: p.x, y: p.y, bounty: e.bounty })
+    emit(state, { kind: 'kill', x: p.x, y: p.y, bounty })
     pushEffect(state.effects, {
       kind: 'text',
       fromX: p.x,
@@ -163,7 +165,7 @@ export function damageEnemy(state: GameState, e: Enemy, dmg: number): void {
       toY: 0,
       life: 0.7,
       maxLife: 0.7,
-      text: `+${e.bounty}`,
+      text: `+${bounty}`,
     })
   }
 }
@@ -177,8 +179,25 @@ export function dealDamage(
   applyOnHit = true,
 ): void {
   if (e.hp <= 0) return
-  const mul = airBonus(u, e) * counterMul(u.troop, e.troop) * (e.vuln > 0 ? VULN_MUL : 1)
+  let mul = airBonus(u, e) * counterMul(u.troop, e.troop) * (e.vuln > 0 ? VULN_MUL : 1)
+  // 奇兵秘計：機率爆擊，中性值 critChance=0 時 rng() < 0 恆假，完全不影響原本傷害
+  const crit = state.perks.critChance > 0 && state.rng() < state.perks.critChance
+  if (crit) mul *= state.perks.critMul
   damageEnemy(state, e, mitigate(raw * mul, e.def))
+  if (crit) {
+    const p = enemyPos(state.board, e)
+    pushEffect(state.effects, {
+      kind: 'text',
+      fromX: p.x,
+      fromY: p.y,
+      toX: 0,
+      toY: 0,
+      life: 0.6,
+      maxLife: 0.6,
+      text: '會心!',
+      color: '#d94f2a',
+    })
+  }
   if (applyOnHit && u.onHit) applyStatus(state, e, u.onHit, raw)
 }
 
@@ -278,22 +297,22 @@ export function stepCombat(state: GameState, dt: number): void {
       }
       attackEffect(0.24)
     } else if (u.shape === 'pierce') {
-      // 沿路徑貫穿：命中目標前後 1.3 段內、最多 3 名
+      // 沿路徑貫穿：命中目標前後 1.3 段內、最多 3 名。烽火連城：貫穿/範圍傷害額外加成
       let hits = 0
       for (const e of state.enemies) {
         if (e.hp <= 0 || !canHit(u, e)) continue
         if (Math.abs(e.dist - target.dist) > 1.3) continue
-        dealDamage(state, u, e, u.atk)
+        dealDamage(state, u, e, u.atk * state.perks.splashMul)
         if (++hits >= 3) break
       }
       attackEffect(0.28)
     } else {
-      // splash：目標周圍 1.3 格
+      // splash：目標周圍 1.3 格。烽火連城：範圍傷害額外加成
       for (const e of state.enemies) {
         if (e.hp <= 0 || !canHit(u, e)) continue
         const p = enemyPos(board, e)
         if (Math.hypot(p.x - to.x, p.y - to.y) > 1.3) continue
-        dealDamage(state, u, e, u.atk)
+        dealDamage(state, u, e, u.atk * state.perks.splashMul)
       }
       attackEffect(0.3)
       pushEffect(state.effects, {
