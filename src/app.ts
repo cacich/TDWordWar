@@ -15,6 +15,7 @@ import {
 import { startLoop, type LoopHandle } from './core/loop'
 import { saveMeta } from './core/save'
 import { LEVEL_ORDER } from './data/levels'
+import { setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from './data/loadout'
 import { buyUpgrade } from './data/upgrades'
 import { buyItem } from './data/shop'
 import { Input } from './input/pointer'
@@ -295,6 +296,28 @@ export class App implements HudHost, PointerHost, ScreensHost {
     saveMeta(this.meta)
     this.screens.renderShop()
     this.hud.toast(res.msg)
+  }
+
+  // ── 編隊（見 data/loadout.ts） ────────────────────────
+  setLoadoutActive(active: boolean): void {
+    setLoadoutActive(this.meta, active)
+    this.audio.play('ui')
+    saveMeta(this.meta)
+    this.screens.renderLoadout()
+  }
+  toggleLoadoutGlyph(char: string): void {
+    const res = toggleLoadoutGlyph(this.meta, char)
+    this.audio.play(res.ok ? 'ui' : 'deny')
+    if (res.ok) saveMeta(this.meta)
+    this.screens.renderLoadout()
+    if (res.msg) this.hud.toast(res.msg)
+  }
+  toggleLoadoutGeneral(name: string): void {
+    const res = toggleLoadoutGeneral(this.meta, name)
+    this.audio.play(res.ok ? 'ui' : 'deny')
+    if (res.ok) saveMeta(this.meta)
+    this.screens.renderLoadout()
+    if (res.msg) this.hud.toast(res.msg)
   }
 
   // ── 開發密技（僅供測試，見 core/devtools.ts） ────────

@@ -421,7 +421,8 @@ body {
   overflow-y: auto;
 }
 
-.codex-cell.wished {
+.codex-cell.wished,
+.codex-cell.selected {
   border-color: var(--gold);
   border-width: 2.5px;
   background: #fff4d6;

@@ -2,17 +2,17 @@
  * 全螢幕畫面：選關與圖鑑。
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
-import { GENERALS } from '../data/generals'
-import { GLYPHS, qualityName } from '../data/glyphs'
+import { GENERAL_BY_NAME, GENERALS } from '../data/generals'
+import { GLYPH_BY_CHAR, GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
 import { UPGRADES } from '../data/upgrades'
 import { SHOP, itemLevel } from '../data/shop'
 import { TIER_COLOR, TIER_LABEL } from '../render/theme'
 import { FX_COLOR } from '../render/fx'
-import type { MetaProgress } from '../sim/state'
+import { MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, type MetaProgress } from '../sim/state'
 import type { GlyphCategory } from '../sim/types'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | null
+export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
@@ -28,6 +28,10 @@ export interface ScreensHost {
   devClearEnemies(): void
   devUnlockCodex(): void
   devGiveGlyph(char: string): void
+  // ── 編隊（見 data/loadout.ts） ──
+  setLoadoutActive(active: boolean): void
+  toggleLoadoutGlyph(char: string): void
+  toggleLoadoutGeneral(name: string): void
 }
 
 const CATEGORY_TITLE: Record<GlyphCategory, string> = {
@@ -58,6 +62,8 @@ export class Screens {
   private shopRenown = el('shop-renown')
   private dev = el('screen-dev')
   private devBody = el('dev-body')
+  private loadout = el('screen-loadout')
+  private loadoutBody = el('loadout-body')
   private renownCount = el('renown-count')
   private levelList = el('level-list')
   private codexBody = el('codex-body')
@@ -78,6 +84,8 @@ export class Screens {
     el('btn-shop').addEventListener('click', () => this.host.show('shop'))
     el('shop-back').addEventListener('click', () => this.host.show('menu'))
     el('dev-back').addEventListener('click', () => this.host.show('menu'))
+    el('btn-loadout').addEventListener('click', () => this.host.show('loadout'))
+    el('loadout-back').addEventListener('click', () => this.host.show('menu'))
     el('menu-title').addEventListener('click', () => this.handleTitleTap())
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
@@ -102,11 +110,13 @@ export class Screens {
     this.forge.hidden = screen !== 'forge'
     this.shop.hidden = screen !== 'shop'
     this.dev.hidden = screen !== 'dev'
+    this.loadout.hidden = screen !== 'loadout'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
     if (screen === 'shop') this.renderShop()
     if (screen === 'dev') this.renderDev()
+    if (screen === 'loadout') this.renderLoadout()
   }
 
   /** 商城：花聲望買被動道具，每種最高 3 級，買一級生效一級 */
@@ -184,6 +194,73 @@ export class Screens {
       grid.appendChild(cell)
     }
     this.devBody.appendChild(grid)
+  }
+
+  /**
+   * 編隊：從已解鎖的字／武將裡挑選字池內容，取代原本每局隨機抽樣。
+   * 只列出「已解鎖」的項目可選；還沒解鎖過的字不受影響，會繼續出現讓玩家探索。
+   */
+  renderLoadout(): void {
+    const meta = this.host.getMeta()
+    this.loadoutBody.innerHTML = ''
+
+    const toggle = document.createElement('button')
+    toggle.className = `wide${meta.loadoutActive ? '' : ' alt'}`
+    toggle.textContent = meta.loadoutActive ? '編隊限制：已啟用' : '編隊限制：未啟用'
+    toggle.addEventListener('click', () => this.host.setLoadoutActive(!meta.loadoutActive))
+    this.loadoutBody.appendChild(toggle)
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '啟用後，字池只會出現下面選的字與武將，加上<b>還沒解鎖過</b>的字（讓你能繼續發現新內容）。<br>' +
+      '<span class="muted">已解鎖但沒被選進來的字／武將不會出現在字池裡；不必選滿也沒關係。</span>'
+    this.loadoutBody.appendChild(note)
+
+    this.loadoutBody.appendChild(section(`攜帶的字　${meta.loadoutGlyphs.length}/${MAX_LOADOUT_GLYPHS}`))
+    const glyphGrid = document.createElement('div')
+    glyphGrid.className = 'codex-grid'
+    for (const char of meta.seenGlyphs) {
+      const g = GLYPH_BY_CHAR[char]
+      if (!g) continue
+      const selected = meta.loadoutGlyphs.includes(char)
+      const cell = document.createElement('div')
+      cell.className = `codex-cell${selected ? ' selected' : ''}`
+      const color = g.fx && g.fx !== 'none' ? FX_COLOR[g.fx] : '#2b2b2b'
+      cell.innerHTML = `<div class="cx-char" style="color:${color}">${selected ? '★' : ''}${g.char}</div>
+        <div class="cx-name">${g.income ? `糧${g.income}` : g.atk > 0 ? `攻${g.atk}` : '輔助'}</div>`
+      cell.addEventListener('click', () => this.host.toggleLoadoutGlyph(char))
+      glyphGrid.appendChild(cell)
+    }
+    this.loadoutBody.appendChild(glyphGrid)
+    if (!meta.seenGlyphs.length) {
+      const empty = document.createElement('div')
+      empty.className = 'muted'
+      empty.textContent = '還沒解鎖任何字，先去玩一局吧。'
+      this.loadoutBody.appendChild(empty)
+    }
+
+    this.loadoutBody.appendChild(section(`攜帶的武將　${meta.loadoutGenerals.length}/${MAX_LOADOUT_GENERALS}`))
+    const genGrid = document.createElement('div')
+    genGrid.className = 'codex-grid'
+    for (const name of meta.seenGenerals) {
+      const g = GENERAL_BY_NAME[name]
+      if (!g) continue
+      const selected = meta.loadoutGenerals.includes(name)
+      const cell = document.createElement('div')
+      cell.className = `codex-cell${selected ? ' selected' : ''}`
+      cell.innerHTML = `<div class="cx-char" style="font-size:15px;color:${TIER_COLOR[g.tier]}">${selected ? '★' : ''}${g.name}</div>
+        <div class="cx-name">${g.recipe.join('＋')}</div>`
+      cell.addEventListener('click', () => this.host.toggleLoadoutGeneral(name))
+      genGrid.appendChild(cell)
+    }
+    this.loadoutBody.appendChild(genGrid)
+    if (!meta.seenGenerals.length) {
+      const empty = document.createElement('div')
+      empty.className = 'muted'
+      empty.textContent = '還沒組出任何武將，先去玩一局吧。'
+      this.loadoutBody.appendChild(empty)
+    }
   }
 
   /** 兵書：局外養成 */

@@ -232,6 +232,30 @@ export const SKILLS: Record<string, SkillFn> = {
 只有 `meta.items` 進存檔，效果都是從它現算的；但 `loadMeta()` 的 `items()` 轉換函式會依
 `SHOP_BY_KEY[key].max` 夾住等級上限，加新道具或調整 `max` 不用額外改存檔遷移邏輯。
 
+## 10f3. 編隊（手動挑選字池內容）
+
+編隊讓玩家從**已解鎖**（`meta.seenGlyphs` / `meta.seenGenerals`）的字與武將裡，
+手動指定要帶進去的內容，取代 `sim/pool.ts` 原本「依關卡隨機抽 support／named-recipe」的邏輯。
+啟用（`meta.loadoutActive`）後：
+
+- 字池 = 編隊選的字（`meta.loadoutGlyphs`，上限 `MAX_LOADOUT_GLYPHS`）
+  ＋編隊選的武將的配方字（`meta.loadoutGenerals`，上限 `MAX_LOADOUT_GENERALS`）
+  ＋**所有還沒解鎖過的字**（不受編隊限制，讓玩家能繼續探索新內容）
+- 已解鎖但沒被選進編隊的字／武將會被排除，包括兵器／兵種骨幹字——編隊沒有安全網，
+  玩家可能選出打不了怪的隊伍，這是刻意的（見 `sim/pool.ts` 的 `buildLoadoutPool()`）
+- 唯一的防呆：算出來的字集合若是空的（例如 0 字 0 武將又全部解鎖），退回骨幹字，
+  避免 `rollGlyph` 在空池上壞掉
+
+修改／擴充時的動線：
+
+1. 選字／選武將的上限與切換邏輯在 `data/loadout.ts`（`toggleLoadoutGlyph` / `toggleLoadoutGeneral` /
+   `setLoadoutActive`），跟 `data/shop.ts`／`data/upgrades.ts` 一樣只碰 `MetaProgress`，不碰 `GameState`。
+2. 實際套用字池的地方是 `sim/pool.ts` 的 `buildGlyphPool(rng, level, loadout?)`——
+   有傳 `loadout` 就完全走 `buildLoadoutPool()`，不會跟原本的隨機抽樣混合。
+   `sim/state.ts` 的 `createGame()` 依 `meta.loadoutActive` 決定要不要組出這個參數。
+3. UI 在 `ui/screens.ts` 的 `renderLoadout()`：只列出已解鎖的字／武將（未解鎖的不會出現在選單，
+   不需要額外的「未解鎖」灰階格），點擊呼叫 `ScreensHost` 的 `toggleLoadoutGlyph` / `toggleLoadoutGeneral`。
+
 ## 10g. 改 PWA（圖示、名稱、離線快取）
 
 | 想改什麼 | 動哪裡 |

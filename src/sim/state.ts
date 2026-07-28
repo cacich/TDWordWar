@@ -42,6 +42,16 @@ export interface MetaProgress {
   best: Record<string, number>
   /** 商城已購買的道具等級（key → 目前等級，0 或不存在＝未購買，見 data/shop.ts） */
   items: Record<string, number>
+  /**
+   * 編隊：啟用後，字池只會出現 loadoutGlyphs／loadoutGenerals 指定的內容，
+   * 加上所有「還沒解鎖過」的字（不受編隊限制，繼續留在池內讓玩家探索）。
+   * 已解鎖但沒被選進編隊的字／武將會被排除。見 data/loadout.ts、sim/pool.ts。
+   */
+  loadoutActive: boolean
+  /** 編隊選的字（最多 MAX_LOADOUT_GLYPHS 個，須是 seenGlyphs 裡的字） */
+  loadoutGlyphs: string[]
+  /** 編隊選的武將（最多 MAX_LOADOUT_GENERALS 個，須是 seenGenerals 裡的武將） */
+  loadoutGenerals: string[]
 }
 
 export const DEFAULT_META: MetaProgress = {
@@ -55,9 +65,14 @@ export const DEFAULT_META: MetaProgress = {
   seenGenerals: [],
   best: {},
   items: {},
+  loadoutActive: false,
+  loadoutGlyphs: [],
+  loadoutGenerals: [],
 }
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3
+export const MAX_LOADOUT_GLYPHS = 8
+export const MAX_LOADOUT_GENERALS = 4
 
 /** 每局結束獲得的聲望：波次是主要來源，擊殺是零頭 */
 export function renownFor(wave: number, kills: number, won: boolean): number {
@@ -72,7 +87,10 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
   const rng = mulberry32(seed)
   const map = level.map ?? generateMap(rng, level.gen!)
   const board = parseMap(map, level.key)
-  const pool = buildGlyphPool(rng, level)
+  const loadout = meta.loadoutActive
+    ? { glyphs: meta.loadoutGlyphs, generals: meta.loadoutGenerals, seenGlyphs: meta.seenGlyphs }
+    : undefined
+  const pool = buildGlyphPool(rng, level, loadout)
   const handSize = Math.min(meta.handSize, MAX_HAND_SIZE)
   const perks = perksFrom(meta.items)
 

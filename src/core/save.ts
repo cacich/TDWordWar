@@ -4,7 +4,7 @@
  * 若要做局內續玩，需改為存 { seed, rngCallCount } 並在載入時重播 —— 見 docs/llm-wiki/04-invariants.md
  */
 import { SHOP_BY_KEY } from '../data/shop'
-import { MAX_HAND_SIZE, MAX_WISH_SLOTS, type MetaProgress } from '../sim/state'
+import { MAX_HAND_SIZE, MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, MAX_WISH_SLOTS, type MetaProgress } from '../sim/state'
 
 /** 版本升級時保留舊 key，loadMeta 會依序往回找並補上新欄位的預設值 */
 const KEY = 'tdwordwar.meta.v3'
@@ -21,6 +21,9 @@ export const EMPTY_META: MetaProgress = {
   seenGenerals: [],
   best: {},
   items: {},
+  loadoutActive: false,
+  loadoutGlyphs: [],
+  loadoutGenerals: [],
 }
 
 export function loadMeta(): MetaProgress {
@@ -32,6 +35,8 @@ export function loadMeta(): MetaProgress {
     }
     if (!raw) return { ...EMPTY_META }
     const p = JSON.parse(raw) as Partial<MetaProgress>
+    const seenGlyphs = arr(p.seenGlyphs)
+    const seenGenerals = arr(p.seenGenerals)
     return {
       handSize: clamp(p.handSize ?? 5, 5, MAX_HAND_SIZE),
       extraFood: clamp(p.extraFood ?? 0, 0, 50),
@@ -39,10 +44,18 @@ export function loadMeta(): MetaProgress {
       wishSlots: clamp(p.wishSlots ?? 1, 1, MAX_WISH_SLOTS),
       renown: Math.max(0, Math.floor(p.renown ?? 0)),
       cleared: arr(p.cleared),
-      seenGlyphs: arr(p.seenGlyphs),
-      seenGenerals: arr(p.seenGenerals),
+      seenGlyphs,
+      seenGenerals,
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
       items: items(p.items),
+      loadoutActive: typeof p.loadoutActive === 'boolean' ? p.loadoutActive : false,
+      // 只保留仍然「已解鎖」的項目，並夾在上限內——避免存檔被手動改壞或道具表變動後選到不存在的東西
+      loadoutGlyphs: arr(p.loadoutGlyphs)
+        .filter((ch) => seenGlyphs.includes(ch))
+        .slice(0, MAX_LOADOUT_GLYPHS),
+      loadoutGenerals: arr(p.loadoutGenerals)
+        .filter((name) => seenGenerals.includes(name))
+        .slice(0, MAX_LOADOUT_GENERALS),
     }
   } catch {
     return { ...EMPTY_META }
