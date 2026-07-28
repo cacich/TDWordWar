@@ -205,8 +205,10 @@ export class Screens {
     this.loadoutBody.innerHTML = ''
 
     const toggle = document.createElement('button')
-    toggle.className = `wide${meta.loadoutActive ? '' : ' alt'}`
-    toggle.textContent = meta.loadoutActive ? '編隊限制：已啟用' : '編隊限制：未啟用'
+    toggle.className = `loadout-toggle${meta.loadoutActive ? ' active' : ''}`
+    toggle.innerHTML = `<span class="switch-track"><span class="switch-knob"></span></span>
+      <span class="switch-label">編隊限制</span>
+      <span class="switch-state">${meta.loadoutActive ? '已啟用' : '未啟用'}</span>`
     toggle.addEventListener('click', () => this.host.setLoadoutActive(!meta.loadoutActive))
     this.loadoutBody.appendChild(toggle)
 

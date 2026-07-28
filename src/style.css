@@ -722,18 +722,50 @@ body {
 
 .screen-foot .wide {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--ui) * 0.12);
   border: 2px solid var(--ink);
-  background: #8a5a3b;
   color: #fff8e8;
   border-radius: calc(var(--ui) * 0.7);
-  padding: calc(var(--ui) * 0.62);
+  padding: calc(var(--ui) * 0.48) calc(var(--ui) * 0.3);
   font-family: var(--font);
-  font-size: calc(var(--ui) * 1.15);
-  letter-spacing: calc(var(--ui) * 0.28);
   cursor: pointer;
+  transition: transform 0.1s;
 }
 
-.screen-foot .wide.alt {
+.screen-foot .wide:active {
+  transform: scale(0.96);
+}
+
+.screen-foot .wide .nav-icon {
+  font-size: calc(var(--ui) * 1.35);
+  line-height: 1;
+  opacity: 0.95;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.screen-foot .wide .nav-label {
+  font-size: calc(var(--ui) * 0.86);
+  letter-spacing: calc(var(--ui) * 0.16);
+}
+
+/* 四個入口各自的色調，一眼就能分辨 */
+.screen-foot .nav-book {
+  background: #8a5a3b;
+}
+
+.screen-foot .nav-strategy {
+  background: #3d5a73;
+}
+
+.screen-foot .nav-shop {
+  background: #a8791e;
+}
+
+.screen-foot .nav-squad {
   background: #4a6a4a;
 }
 
@@ -778,6 +810,71 @@ body {
   background: #cfc4b0;
   color: #8d8474;
   cursor: not-allowed;
+}
+
+/* ── 編隊：啟用開關 ────────────────────────── */
+.loadout-toggle {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  width: 100%;
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.5) calc(var(--ui) * 0.7);
+  margin-bottom: calc(var(--ui) * 0.55);
+  font-family: var(--font);
+  cursor: pointer;
+  text-align: left;
+}
+
+.switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(var(--ui) * 2.4);
+  height: calc(var(--ui) * 1.25);
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #cfc4b0;
+  transition: background 0.15s;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(var(--ui) * 1.05);
+  height: calc(var(--ui) * 1.05);
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: #fff8e8;
+  transition: left 0.15s;
+}
+
+.loadout-toggle.active .switch-track {
+  background: #4a6a4a;
+}
+
+.loadout-toggle.active .switch-knob {
+  left: calc(100% - var(--ui) * 1.05 - 4px);
+}
+
+.switch-label {
+  font-size: calc(var(--ui) * 1.0);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.14);
+  color: var(--ink);
+}
+
+.switch-state {
+  margin-left: auto;
+  font-size: calc(var(--ui) * 0.86);
+  color: var(--ink-soft);
+}
+
+.loadout-toggle.active .switch-state {
+  color: #2f7a3c;
+  font-weight: 700;
 }
 
 /* ── 開發密技面板 ──────────────────────────── */
