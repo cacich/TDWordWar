@@ -455,6 +455,22 @@ body {
   font-size: calc(var(--ui) * 1.85);
   font-weight: 700;
   cursor: grab;
+  /*
+   * ★ 手機拖曳的關鍵。
+   * body 是 touch-action: manipulation，卡片會繼承；那會讓瀏覽器把「從卡片開始的
+   * 觸控拖曳」判定成捲動手勢，直接發 pointercancel 把拖曳殺掉 —— 症狀就是
+   * 手機上完全沒辦法把字拖到棋盤上。這裡必須改成 none，把手勢的主導權拿回來。
+   */
+  touch-action: none;
+  /* iOS 長按會跳出「拷貝／分享」callout，會打斷拖曳 */
+  -webkit-touch-callout: none;
+}
+
+/* 點選（而非拖曳）手牌後的待放置狀態 */
+.card.armed {
+  border-color: var(--gold);
+  border-width: 3px;
+  box-shadow: 0 0 0 3px rgba(217, 165, 32, 0.35);
 }
 
 .card.empty {

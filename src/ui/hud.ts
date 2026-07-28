@@ -27,6 +27,8 @@ export interface HudHost {
   toggleWish(char: string): void
   isMuted(): boolean
   toggleMute(): void
+  /** 目前處於「點選待放置」的手牌索引（手機友善的放置方式） */
+  getArmedHand(): number | null
   startWave(): void
   togglePause(): void
   cycleSpeed(): void
@@ -130,6 +132,14 @@ export class Hud {
           this.host.setMode('normal')
           return
         }
+        // 觸控時把指標鎖在這張卡上，之後的 move / up 才一定送得到我們手上
+        // （手指離開卡片範圍、或卡片內容被重繪時都不會斷掉）
+        try {
+          card.setPointerCapture(ev.pointerId)
+        } catch {
+          /* 某些瀏覽器在滑鼠情境下會拒絕，忽略即可 */
+        }
+        ev.preventDefault()
         this.host.beginHandDrag(i, ev)
       })
       this.handEl.appendChild(card)
@@ -236,6 +246,7 @@ export class Hud {
           (cat ? `<span class="cat">${CATEGORY_LABEL[cat]}</span>` : '')
       }
       card.classList.toggle('mergeable', (pairCount.get(`${h.char}:${h.level}`) ?? 0) >= 2)
+      card.classList.toggle('armed', this.host.getArmedHand() === i)
     }
 
     // 提示

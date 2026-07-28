@@ -255,6 +255,9 @@ export class App implements HudHost, PointerHost, ScreensHost {
   }
 
   // ── 音效開關 ────────────────────────────────────────
+  getArmedHand(): number | null {
+    return this.input.getArmedHand()
+  }
   isMuted(): boolean {
     return this.audio.muted
   }

@@ -30,13 +30,28 @@ export class Input {
   private downX = 0
   private downY = 0
   private pointerId: number | null = null
+  /**
+   * 「點選待放置」的手牌索引。
+   * 手機上拖曳容易被系統手勢搶走，所以另外提供一條路：點一下手牌 → 點一下空地。
+   * 這也比在小螢幕上精準拖曳輕鬆。
+   */
+  private armedHand: number | null = null
 
   constructor(private host: PointerHost) {
     const canvas = host.renderer.canvas
     canvas.addEventListener('pointerdown', (e) => this.onCanvasDown(e))
     window.addEventListener('pointermove', (e) => this.onMove(e))
     window.addEventListener('pointerup', (e) => this.onUp(e))
-    window.addEventListener('pointercancel', () => this.cancel())
+    window.addEventListener('pointercancel', (e) => this.onCancel(e))
+  }
+
+  /** 給 HUD 標示哪張卡處於待放置狀態 */
+  getArmedHand(): number | null {
+    return this.armedHand
+  }
+
+  private disarm(): void {
+    this.armedHand = null
   }
 
   private get drag() {
@@ -55,7 +70,8 @@ export class Input {
     if (!card) return
     const p = this.localPoint(e)
     this.pointerId = e.pointerId
-    this.moved = true // 手牌拖曳一開始就視為移動中
+    // 先當成「還沒移動」：放手時若沒移動過就轉成點選待放置（手機友善）
+    this.moved = false
     this.downX = p.x
     this.downY = p.y
     Object.assign(this.drag, {
@@ -79,6 +95,20 @@ export class Input {
     const cell = r.cellFromPoint(state, p.x, p.y)
     if (cell < 0) return
     const g = glyphAt(state, cell)
+
+    // 有卡片處於待放置狀態 → 這一下就是「放在這裡」
+    if (this.armedHand !== null && this.host.getMode() === 'normal') {
+      const index = this.armedHand
+      const res = placeFromHand(state, index, cell)
+      if (res.msg) this.host.toast(res.msg)
+      if (res.combined?.length) this.host.onCombined(res.combined)
+      if (res.ok) {
+        this.disarm()
+        this.host.select(cell)
+      }
+      // 放置失敗（例如點到路上）就保持待放置，讓玩家再點一次別的格子
+      return
+    }
 
     if (this.host.getMode() === 'shovel') {
       if (!g) {
@@ -138,6 +168,19 @@ export class Input {
       return
     }
 
+    // 手牌只是點一下（沒拖）→ 轉成待放置，接著點空地就會放下去
+    if (src?.kind === 'hand' && !this.moved) {
+      const card = state.hand[src.index]
+      if (this.armedHand === src.index) {
+        this.disarm()
+      } else if (card) {
+        this.armedHand = src.index
+        this.host.toast(`已選「${card.char}」，點一下空地放置`)
+      }
+      this.cancel()
+      return
+    }
+
     // 手牌拖到另一張手牌上 → 同字同階疊合升階
     if (src?.kind === 'hand' && cell < 0) {
       const overIndex = handIndexAtPoint(e.clientX, e.clientY)
@@ -158,6 +201,23 @@ export class Input {
       if (res.ok) this.host.select(cell)
     } else if (src?.kind === 'hand') {
       this.host.toast('請放在棋盤的空地上')
+    }
+    this.cancel()
+  }
+
+  /**
+   * 系統把手勢搶走時（例如某些瀏覽器仍判定為捲動）會收到 pointercancel。
+   * 這時不要讓操作直接消失：來源是手牌就轉成待放置，玩家還能用點選完成放置。
+   */
+  private onCancel(e: PointerEvent): void {
+    if (!this.drag.active || (this.pointerId !== null && e.pointerId !== this.pointerId)) return
+    const src = this.drag.source
+    if (src?.kind === 'hand') {
+      const card = this.host.getState().hand[src.index]
+      if (card) {
+        this.armedHand = src.index
+        this.host.toast(`已選「${card.char}」，點一下空地放置`)
+      }
     }
     this.cancel()
   }

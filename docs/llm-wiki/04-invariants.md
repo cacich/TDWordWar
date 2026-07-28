@@ -71,6 +71,25 @@ CSS 裡任何元件自己的 `display: grid/flex` 會蓋掉 HTML 的 `hidden` �
 `pwaPlugin()` 的 version 是對「檔名清單 + SW 原始碼模板」一起做 hash。
 如果只 hash 檔名清單，改了 SW 邏輯但資源 hash 沒變時快取名不會變 → 舊的壞快取會一直留著。
 
+### 可拖曳的元素一定要 `touch-action: none`
+`html, body` 設的是 `touch-action: manipulation`，會被子元素繼承。手牌卡片繼承到它之後，
+手機上「從卡片開始的觸控拖曳」會被瀏覽器判定成捲動手勢，直接發 `pointercancel`
+把拖曳殺掉 —— 症狀是**手機完全無法把字拖到棋盤上，但棋盤上已放的字反而拖得動**
+（因為 canvas 本來就有 `touch-action: none`）。
+
+所以 `.card` 明確設了 `touch-action: none` 與 `-webkit-touch-callout: none`（後者防 iOS 長按跳選單）。
+**以後新增任何可拖曳的 DOM 元素都要記得加。**
+
+另外兩層防護：
+- `pointerdown` 時 `setPointerCapture()`，手指移出卡片範圍或卡片內容被重繪都不會斷
+- 收到 `pointercancel` 時不讓操作消失，而是退化成「點選待放置」（`Input.armedHand`）
+
+### 桌機測不到觸控問題
+這個 bug 在滑鼠上完全正常，是使用者在手機上才發現的。要在開發機驗證觸控路徑，
+可以用合成事件（`new PointerEvent('pointerdown', { pointerType: 'touch', pointerId, ... })`）
+跑過 pointerdown → pointermove → pointerup 與 pointercancel 兩條路徑。
+但注意合成事件**不會重現瀏覽器自己的手勢搶奪行為**，所以 `touch-action` 這類問題還是要靠實機。
+
 ### 音效必須節流，且只能由事件佇列觸發
 攻擊音在後期每秒可能被觸發 20 次以上。`core/audio.ts` 的 `THROTTLE` 表就是為此存在，
 新增高頻音效時一定要加進去。另外 `sim/` 不可直接播音效——一律 `emit()` 事件，由 app 層 drain。
