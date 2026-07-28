@@ -1,0 +1,56 @@
+# 推到 main 就自動打包並發佈到 GitHub Pages。
+#
+# 用這個方式而不是把 dist/ commit 進 repo，理由：
+#   1. dist/ 是產物，進版控只會讓每次 diff 都很吵
+#   2. Pages 走 HTTPS，PWA 才裝得起來（Service Worker 的硬性要求）
+#   3. 順便在 CI 跑 typecheck 與測試，壞了就不會發佈上去
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 也可以在 Actions 頁面手動觸發
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只跑一個發佈，後推的取消前一個
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 刻意用 22（npm 10）：npm 11 對 install script 有額外的核可機制，
+          # esbuild 的 postinstall 會被擋掉導致 build 失敗。
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 測試沒過就不要發佈
+      - run: npm test
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,7 @@
+# 統一行尾：repo 內一律存 LF，Windows 工作目錄可自行轉 CRLF。
+# 沒有這個檔案時，不同機器的 core.autocrlf 設定不同，會讓整個專案看起來「全部被改過」。
+* text=auto eol=lf
+
+# 二進位檔不要做任何轉換
+*.png binary
+*.ico binary

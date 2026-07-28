@@ -1,0 +1,833 @@
+/**
+ * 所有 UI 尺寸都以 --ui 為基準單位（由 app.ts 依 #app 實際大小算出）。
+ * 規則：不要在這個檔案寫死 px 字級，一律用 calc(var(--ui) * k)，
+ * 否則視窗一變大／變小就會出現「棋盤縮放了但文字沒縮放」的比例失衡。
+ */
+:root {
+  --ui: 14px;
+  --paper: #f2e9d6;
+  --paper-2: #e8dcc2;
+  --ink: #2b2b2b;
+  --ink-soft: #6b6257;
+  --gold: #d9a520;
+  --red: #c8402f;
+  --font: "Noto Serif TC", "Songti TC", "PMingLiU", "Microsoft JhengHei", serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 必須壓過各元件自己的 display，否則 hidden 屬性無效 */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #ddd2b8;
+  font-family: var(--font);
+  font-size: var(--ui);
+  color: var(--ink);
+  user-select: none;
+  touch-action: manipulation;
+}
+
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--paper);
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.18);
+}
+
+/* ── 頂部狀態列 ────────────────────────────── */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.45);
+  /* 加上 safe-area：以 PWA 安裝後在有瀏海的機型上執行時，狀態列不會壓到內容 */
+  padding: calc(var(--ui) * 0.42 + env(safe-area-inset-top)) calc(var(--ui) * 0.7)
+    calc(var(--ui) * 0.42);
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper-2);
+  flex: 0 0 auto;
+}
+
+#level-name {
+  flex: 1 1 auto;
+  /* 窄視窗時必須能被壓縮並省略，否則關卡名會折成兩行把狀態列撐高 */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  font-size: calc(var(--ui) * 1.42);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.2);
+}
+
+/* 極窄視窗：關卡名是遊戲中最不需要的資訊（選單就看得到），優先讓出空間 */
+#app[data-compact='true'] #level-name {
+  display: none;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.28);
+  font-weight: 700;
+  font-size: calc(var(--ui) * 1.06);
+}
+
+.pill {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--ui) * 1.55);
+  height: calc(var(--ui) * 1.55);
+  border-radius: 50%;
+  background: #fffdf4;
+  border: 1.5px solid var(--ink);
+  font-size: calc(var(--ui) * 0.84);
+}
+
+.lives {
+  display: flex;
+  gap: 1px;
+  font-size: var(--ui);
+  color: var(--red);
+}
+
+#wave-info {
+  font-size: calc(var(--ui) * 0.9);
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  border: 1.5px solid var(--ink);
+  background: #fffdf4;
+  border-radius: calc(var(--ui) * 0.42);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.9);
+  padding: calc(var(--ui) * 0.2) calc(var(--ui) * 0.48);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+/* ── 棋盤區 ────────────────────────────────── */
+#stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.bubble {
+  position: absolute;
+  top: calc(var(--ui) * 0.5);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 92%;
+  background: #fffdf4;
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 1);
+  padding: calc(var(--ui) * 0.25) calc(var(--ui) * 0.85);
+  font-size: calc(var(--ui) * 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.prep {
+  position: absolute;
+  bottom: calc(var(--ui) * 2.4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  background: rgba(255, 253, 244, 0.94);
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 1.1);
+  padding: calc(var(--ui) * 0.25) calc(var(--ui) * 0.42) calc(var(--ui) * 0.25) calc(var(--ui) * 0.85);
+  font-size: calc(var(--ui) * 0.9);
+}
+
+.prep button {
+  border: 1.5px solid var(--ink);
+  background: var(--gold);
+  color: #fff;
+  border-radius: calc(var(--ui) * 0.85);
+  padding: calc(var(--ui) * 0.2) calc(var(--ui) * 0.7);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.9);
+  cursor: pointer;
+}
+
+.toast {
+  position: absolute;
+  top: calc(var(--ui) * 3);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 94%;
+  background: rgba(43, 43, 43, 0.9);
+  color: #fff8e8;
+  border-radius: calc(var(--ui) * 0.85);
+  padding: calc(var(--ui) * 0.32) calc(var(--ui) * 1);
+  font-size: calc(var(--ui) * 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: calc(var(--ui) * 0.7);
+  text-align: center;
+  background: rgba(242, 233, 214, 0.92);
+}
+
+#banner-title {
+  font-size: calc(var(--ui) * 2.4);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.42);
+}
+
+#banner-sub {
+  font-size: var(--ui);
+  color: var(--ink-soft);
+}
+
+.banner-actions {
+  display: flex;
+  gap: calc(var(--ui) * 0.7);
+  justify-content: center;
+}
+
+.banner button {
+  border: 2px solid var(--ink);
+  background: var(--gold);
+  color: #fff;
+  border-radius: calc(var(--ui) * 1.3);
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 1.7);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 1.15);
+  cursor: pointer;
+}
+
+.banner button.ghost {
+  background: #fffdf4;
+  color: var(--ink);
+}
+
+/* ── 羈絆條（棋盤浮層） ────────────────────── */
+.bonds {
+  position: absolute;
+  left: calc(var(--ui) * 0.42);
+  bottom: calc(var(--ui) * 0.42);
+  display: flex;
+  gap: calc(var(--ui) * 0.42);
+  max-width: calc(100% - var(--ui) * 0.84);
+  overflow-x: auto;
+  pointer-events: none;
+}
+
+.bond-chip {
+  border: 1.5px solid var(--red);
+  color: var(--red);
+  border-radius: calc(var(--ui) * 0.7);
+  padding: calc(var(--ui) * 0.14) calc(var(--ui) * 0.56);
+  font-size: calc(var(--ui) * 0.84);
+  white-space: nowrap;
+  background: #fff6ef;
+}
+
+.bond-chip .cd {
+  margin-left: calc(var(--ui) * 0.28);
+  font-size: calc(var(--ui) * 0.72);
+  opacity: 0.75;
+}
+
+.bond-chip.ready {
+  border-color: var(--gold);
+  color: #8a5a00;
+  background: #fff4d6;
+}
+
+/* ── 資訊面板（棋盤浮層） ──────────────────── */
+#infopanel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top: 2px solid var(--ink);
+  background: rgba(255, 253, 244, 0.97);
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.7);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  max-height: 68%;
+  overflow-y: auto;
+}
+
+.info-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  font-size: calc(var(--ui) * 1.2);
+  font-weight: 700;
+}
+
+.info-head #info-name {
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.tier {
+  font-size: calc(var(--ui) * 0.78);
+  border: 1.5px solid currentColor;
+  border-radius: calc(var(--ui) * 0.56);
+  padding: 1px calc(var(--ui) * 0.42);
+  white-space: nowrap;
+}
+
+.info-head .icon-btn {
+  margin-left: auto;
+}
+
+.info-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--ui) * 0.28) calc(var(--ui) * 0.85);
+  font-size: calc(var(--ui) * 0.88);
+  color: var(--ink-soft);
+  margin-top: calc(var(--ui) * 0.28);
+}
+
+.info-desc {
+  font-size: calc(var(--ui) * 0.88);
+  margin-top: calc(var(--ui) * 0.28);
+  line-height: 1.55;
+}
+
+.info-desc .onhit {
+  color: #b05a20;
+}
+
+.info-form {
+  border-top: 1px dashed #c9bfa8;
+  margin-top: calc(var(--ui) * 0.42);
+  padding-top: calc(var(--ui) * 0.35);
+}
+
+.info-form .form-name {
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.info-actions {
+  display: flex;
+  gap: calc(var(--ui) * 0.55);
+  margin-top: calc(var(--ui) * 0.42);
+}
+
+.info-actions button {
+  flex: 1;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-2);
+  border-radius: calc(var(--ui) * 0.56);
+  padding: calc(var(--ui) * 0.35);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.9);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+#info-sell {
+  background: #f4d9d4;
+  color: #a3271a;
+}
+
+/* ── 底部：手牌與操作 ──────────────────────── */
+#bottom {
+  flex: 0 0 auto;
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.7) calc(var(--ui) * 0.7 + env(safe-area-inset-bottom));
+  border-top: 2px solid var(--ink);
+  background: var(--paper-2);
+}
+
+/* ── 心願單 ────────────────────────────────── */
+.wish-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.42);
+  width: 100%;
+  margin-bottom: calc(var(--ui) * 0.42);
+  border: 1.5px dashed var(--ink-soft);
+  border-radius: calc(var(--ui) * 0.56);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.25) calc(var(--ui) * 0.56);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.84);
+  color: var(--ink-soft);
+  cursor: pointer;
+  overflow-x: auto;
+}
+
+.wish-bar.has-wish {
+  border-style: solid;
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.wish-bar .wish-chip {
+  border: 1.5px solid var(--gold);
+  background: #fff4d6;
+  color: #8a5a00;
+  border-radius: calc(var(--ui) * 0.5);
+  padding: 0 calc(var(--ui) * 0.42);
+  font-size: calc(var(--ui) * 1.05);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#wishpanel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top: 2px solid var(--ink);
+  background: rgba(255, 253, 244, 0.97);
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.7);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  max-height: 72%;
+  overflow-y: auto;
+}
+
+.codex-cell.wished {
+  border-color: var(--gold);
+  border-width: 2.5px;
+  background: #fff4d6;
+}
+
+.hand {
+  display: grid;
+  grid-template-columns: repeat(var(--slots, 5), 1fr);
+  gap: calc(var(--ui) * 0.42);
+}
+
+/* 心願中的字，手牌上標一顆星 */
+.card .wish-star {
+  position: absolute;
+  top: 0;
+  left: calc(var(--ui) * 0.12);
+  font-size: calc(var(--ui) * 1.05);
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 0 2px #fff, 0 0 3px #fff;
+}
+
+.card {
+  position: relative;
+  aspect-ratio: 1;
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.56);
+  background: #fffdf4;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--ui) * 1.85);
+  font-weight: 700;
+  cursor: grab;
+}
+
+.card.empty {
+  background: repeating-linear-gradient(45deg, #efe6d0, #efe6d0 4px, #e7dcc4 4px, #e7dcc4 8px);
+  border-style: dashed;
+  cursor: default;
+}
+
+.card.dragging {
+  opacity: 0.35;
+}
+
+/* 品質階級：邊框顏色與角標同步，疊合成果一眼可辨 */
+.card[data-q='2'] { border-color: #3f8f4f; border-width: 2.5px; }
+.card[data-q='3'] { border-color: #3b6fd4; border-width: 2.5px; }
+.card[data-q='4'] { border-color: #8a4fd4; border-width: 2.5px; }
+.card[data-q='5'] { border-color: #d9a520; border-width: 3px; }
+
+.card .lv {
+  position: absolute;
+  top: calc(var(--ui) * -0.28);
+  right: calc(var(--ui) * -0.28);
+  min-width: calc(var(--ui) * 1.15);
+  height: calc(var(--ui) * 1.15);
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: calc(var(--ui) * 0.7);
+  display: grid;
+  place-items: center;
+}
+
+.card[data-q='2'] .lv { background: #3f8f4f; }
+.card[data-q='3'] .lv { background: #3b6fd4; }
+.card[data-q='4'] .lv { background: #8a4fd4; }
+.card[data-q='5'] .lv { background: #d9a520; }
+
+.card.mergeable {
+  box-shadow: 0 0 0 3px rgba(60, 120, 220, 0.45);
+}
+
+.card .cat {
+  position: absolute;
+  bottom: 1px;
+  left: calc(var(--ui) * 0.2);
+  font-size: calc(var(--ui) * 0.62);
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+#controls {
+  display: grid;
+  grid-template-columns: calc(var(--ui) * 3.9) calc(var(--ui) * 3.9) 1fr calc(var(--ui) * 3.9);
+  gap: calc(var(--ui) * 0.42);
+  margin-top: calc(var(--ui) * 0.55);
+  align-items: stretch;
+}
+
+#controls button {
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  font-family: var(--font);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.tool {
+  background: #fffdf4;
+  font-size: calc(var(--ui) * 0.9);
+  padding: calc(var(--ui) * 0.42) 2px;
+}
+
+.tool small {
+  font-size: calc(var(--ui) * 0.7);
+  color: var(--ink-soft);
+}
+
+.tool.active {
+  background: var(--gold);
+  color: #fff;
+}
+
+.tool.active small {
+  color: #fff8e8;
+}
+
+.recruit {
+  background: #8a5a3b;
+  color: #fff8e8;
+  font-size: calc(var(--ui) * 1.42);
+  letter-spacing: calc(var(--ui) * 0.28);
+  padding: calc(var(--ui) * 0.55);
+}
+
+.recruit small {
+  font-size: calc(var(--ui) * 0.84);
+  letter-spacing: 0;
+  opacity: 0.9;
+}
+
+.recruit:disabled {
+  background: #b6a897;
+  color: #efe6d6;
+}
+
+/* ── 全螢幕畫面：選單與圖鑑 ────────────────── */
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.screen-head {
+  padding: calc(var(--ui) * 1) calc(var(--ui) * 1) calc(var(--ui) * 0.42);
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.screen-head.row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.7);
+  text-align: left;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: calc(var(--ui) * 0.7);
+}
+
+.screen-head h1 {
+  margin: 0;
+  font-size: calc(var(--ui) * 2.4);
+  letter-spacing: calc(var(--ui) * 0.56);
+}
+
+.screen-head h2 {
+  margin: 0;
+  font-size: calc(var(--ui) * 1.42);
+  letter-spacing: calc(var(--ui) * 0.21);
+}
+
+.tagline {
+  margin: calc(var(--ui) * 0.28) 0 0;
+  font-size: calc(var(--ui) * 0.9);
+  color: var(--ink-soft);
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.tabs {
+  margin-left: auto;
+  display: flex;
+  gap: calc(var(--ui) * 0.42);
+}
+
+.tab {
+  border: 1.5px solid var(--ink);
+  background: #fffdf4;
+  border-radius: calc(var(--ui) * 0.56);
+  padding: calc(var(--ui) * 0.28) calc(var(--ui) * 0.85);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.9);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.tab.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.level-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--ui) * 0.55);
+}
+
+.level-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.62) calc(var(--ui) * 0.85);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font);
+  color: var(--ink);
+}
+
+.level-card .lv-name {
+  font-size: calc(var(--ui) * 1.28);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.21);
+}
+
+.level-card .lv-sub {
+  font-size: calc(var(--ui) * 0.82);
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.level-card .lv-meta {
+  font-size: calc(var(--ui) * 0.78);
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.level-card .lv-cleared {
+  color: #2f7a3c;
+  font-weight: 700;
+}
+
+.level-card.locked {
+  opacity: 0.5;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.level-card.random {
+  background: linear-gradient(105deg, #fffdf4 60%, #f3ead2);
+}
+
+.screen-foot {
+  flex: 0 0 auto;
+  border-top: 2px solid var(--ink);
+  padding: calc(var(--ui) * 0.7) calc(var(--ui) * 0.85) calc(var(--ui) * 0.85 + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.7);
+}
+
+.screen-foot.thin {
+  border-top: none;
+  padding-top: 0;
+  justify-content: space-between;
+}
+
+.screen-foot .wide {
+  flex: 1;
+  border: 2px solid var(--ink);
+  background: #8a5a3b;
+  color: #fff8e8;
+  border-radius: calc(var(--ui) * 0.7);
+  padding: calc(var(--ui) * 0.62);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 1.15);
+  letter-spacing: calc(var(--ui) * 0.28);
+  cursor: pointer;
+}
+
+.screen-foot .wide.alt {
+  background: #4a6a4a;
+}
+
+/* ── 兵書（局外養成） ──────────────────────── */
+.forge-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.7);
+  margin-bottom: calc(var(--ui) * 0.55);
+}
+
+.forge-row .fg-name {
+  font-size: calc(var(--ui) * 1.15);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.forge-row .fg-desc {
+  font-size: calc(var(--ui) * 0.82);
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.forge-row button {
+  border: 1.5px solid var(--ink);
+  background: var(--gold);
+  color: #fff;
+  border-radius: calc(var(--ui) * 0.56);
+  padding: calc(var(--ui) * 0.35) calc(var(--ui) * 0.7);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.9);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.forge-row button:disabled {
+  background: #cfc4b0;
+  color: #8d8474;
+  cursor: not-allowed;
+}
+
+.muted {
+  font-size: calc(var(--ui) * 0.82);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.codex-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: calc(var(--ui) * 0.7) calc(var(--ui) * 0.85) calc(var(--ui) * 0.85 + env(safe-area-inset-bottom));
+}
+
+.codex-section {
+  font-size: calc(var(--ui) * 0.84);
+  color: var(--ink-soft);
+  margin: calc(var(--ui) * 0.7) 0 calc(var(--ui) * 0.42);
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.codex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--ui) * 4.4), 1fr));
+  gap: calc(var(--ui) * 0.42);
+}
+
+.codex-cell {
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.56);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.35) 2px calc(var(--ui) * 0.28);
+  text-align: center;
+  cursor: pointer;
+}
+
+.codex-cell .cx-char {
+  font-size: calc(var(--ui) * 1.55);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.codex-cell .cx-name {
+  font-size: calc(var(--ui) * 0.7);
+  color: var(--ink-soft);
+}
+
+.codex-cell.unseen {
+  background: repeating-linear-gradient(45deg, #efe6d0, #efe6d0 4px, #e7dcc4 4px, #e7dcc4 8px);
+  border-style: dashed;
+  color: #9a8e78;
+}
+
+.codex-cell.unseen .cx-char {
+  color: #9a8e78;
+}
+
+.codex-detail {
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #fffdf4;
+  padding: calc(var(--ui) * 0.55) calc(var(--ui) * 0.7);
+  margin-top: calc(var(--ui) * 0.7);
+  font-size: calc(var(--ui) * 0.88);
+  line-height: 1.55;
+}
+
+.codex-detail b {
+  letter-spacing: calc(var(--ui) * 0.14);
+}

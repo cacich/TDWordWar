@@ -1,0 +1,36 @@
+{
+  "name": "字戰三國",
+  "short_name": "字戰",
+  "description": "文字塔防：一字一兵，成詞成將。抽字、放字、組字成將，擋住一波波來襲的賊寇。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "id": "tdwordwar",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f2e9d6",
+  "theme_color": "#e8dcc2",
+  "categories": ["games", "strategy"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

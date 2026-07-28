@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <title>字戰三國 — 一字一兵，成詞成將</title>
+    <meta name="description" content="文字塔防：一字一兵，成詞成將。抽字、放字、組字成將，擋住一波波來襲的賊寇。" />
+
+    <!-- PWA：可安裝到手機主畫面與桌面，離線也能玩 -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#e8dcc2" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png" />
+    <!-- iOS 不吃 SVG 的 apple-touch-icon，必須給 PNG -->
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="字戰三國" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="topbar">
+        <button id="btn-menu" class="icon-btn" title="選單">☰</button>
+        <button id="btn-pause" class="icon-btn" title="暫停">❚❚</button>
+        <div class="stat" title="糧"><span class="pill">糧</span><span id="stat-food">0</span></div>
+        <div id="level-name">巨鹿</div>
+        <div id="lives" class="lives"></div>
+        <div id="wave-info">第 1 波</div>
+        <button id="btn-mute" class="icon-btn" title="音效">♪</button>
+        <button id="btn-speed" class="icon-btn" title="速度">1×</button>
+      </header>
+
+      <main id="stage">
+        <canvas id="game"></canvas>
+        <div id="hint" class="bubble" hidden></div>
+        <div id="prep" class="prep" hidden>
+          <span id="prep-text">佈陣中 12s</span>
+          <button id="btn-start">提前開戰</button>
+        </div>
+        <div id="toast" class="toast" hidden></div>
+        <div id="banner" class="banner" hidden>
+          <div id="banner-title"></div>
+          <div id="banner-sub"></div>
+          <div class="banner-actions">
+            <button id="btn-restart">再來一局</button>
+            <button id="btn-tomenu" class="ghost">回選單</button>
+          </div>
+        </div>
+
+        <!-- 羈絆條與資訊面板都是棋盤上的浮層，不占版面 → 開關時棋盤不會被壓縮 -->
+        <div id="bonds" class="bonds"></div>
+
+        <!-- 心願單挑選：列出本局字池，點一下切換 -->
+        <section id="wishpanel" hidden>
+          <div class="info-head">
+            <span>心願單</span>
+            <span id="wish-slots" class="tier"></span>
+            <button id="wish-close" class="icon-btn">✕</button>
+          </div>
+          <div class="info-desc">
+            心願的字抽到機率大幅提高。只能選本局字池裡的字。
+          </div>
+          <div id="wish-grid" class="codex-grid"></div>
+        </section>
+
+        <section id="infopanel" hidden>
+          <div class="info-head">
+            <span id="info-name"></span>
+            <span id="info-tier" class="tier"></span>
+            <button id="info-close" class="icon-btn">✕</button>
+          </div>
+          <div id="info-stats" class="info-stats"></div>
+          <div id="info-desc" class="info-desc"></div>
+          <div id="info-actions" class="info-actions">
+            <button id="info-target">索敵：最前</button>
+            <button id="info-sell">鏟除</button>
+          </div>
+        </section>
+      </main>
+
+      <footer id="bottom">
+        <button id="wish-bar" class="wish-bar"></button>
+        <div id="hand" class="hand"></div>
+        <div id="controls">
+          <button id="btn-smelt" class="tool">熔爐<small id="smelt-left"></small></button>
+          <button id="btn-reroll" class="tool">重抽<small>糧 <span id="reroll-cost">0</span></small></button>
+          <button id="btn-recruit" class="recruit">征兵<small>糧 <span id="recruit-cost">0</span></small></button>
+          <button id="btn-shovel" class="tool">鏟子</button>
+        </div>
+      </footer>
+
+      <!-- ── 選單：選關 ────────────────────────────── -->
+      <section id="screen-menu" class="screen" hidden>
+        <div class="screen-head">
+          <h1>字戰三國</h1>
+          <p class="tagline">一字一兵，成詞成將</p>
+        </div>
+        <div id="level-list" class="level-list"></div>
+        <div class="screen-foot">
+          <button id="btn-codex" class="wide">圖　鑑</button>
+          <button id="btn-forge" class="wide alt">兵　書</button>
+        </div>
+        <div class="screen-foot thin">
+          <span id="codex-count" class="muted"></span>
+          <span id="renown-count" class="muted"></span>
+        </div>
+      </section>
+
+      <!-- ── 兵書：局外養成 ────────────────────────── -->
+      <section id="screen-forge" class="screen" hidden>
+        <div class="screen-head row">
+          <button id="forge-back" class="icon-btn">←</button>
+          <h2>兵書</h2>
+          <span id="forge-renown" class="muted"></span>
+        </div>
+        <div id="forge-body" class="codex-body"></div>
+      </section>
+
+      <!-- ── 圖鑑 ──────────────────────────────────── -->
+      <section id="screen-codex" class="screen" hidden>
+        <div class="screen-head row">
+          <button id="codex-back" class="icon-btn">←</button>
+          <h2>圖鑑</h2>
+          <div class="tabs">
+            <button id="tab-glyph" class="tab active">字</button>
+            <button id="tab-general" class="tab">武將</button>
+          </div>
+        </div>
+        <div id="codex-body" class="codex-body"></div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

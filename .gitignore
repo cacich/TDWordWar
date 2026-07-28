@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.vite/
+*.local
+.DS_Store
+
+# 個人編輯器設定，不要進版控
+.obsidian/
+.idea/
+.vscode/

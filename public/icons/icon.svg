@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <title>字戰三國</title>
+  <!--
+    可縮放圖示。刻意設計成 maskable-safe：
+    所有內容都在中心 80% 的安全區內（墨圈半徑 31.5%），
+    所以 Android 的自適應遮罩或 iOS 的圓角裁切都不會切到印章。
+  -->
+  <rect width="192" height="192" fill="#f2e9d6"/>
+  <circle cx="96" cy="96" r="60.5" fill="none" stroke="#2b2b2b" stroke-width="4.2"/>
+  <text x="96" y="96" fill="#d9a520" font-size="77" font-weight="700"
+        text-anchor="middle" dominant-baseline="central"
+        font-family="'Noto Serif TC','Songti TC','PMingLiU','Microsoft JhengHei',serif">字</text>
+</svg>

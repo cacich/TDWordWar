@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>字戰三國 — 產生 PWA 圖示</title>
+    <style>
+      body {
+        font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+        background: #f2e9d6;
+        color: #2b2b2b;
+        margin: 0;
+        padding: 24px;
+      }
+      h1 { font-size: 22px; letter-spacing: 4px; margin: 0 0 4px; }
+      p { font-size: 14px; line-height: 1.7; color: #6b6257; margin: 0 0 16px; }
+      .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+      figure { margin: 0; text-align: center; }
+      canvas { border: 1px solid #c9bfa8; background: #fff; image-rendering: pixelated; }
+      figcaption { font-size: 12px; margin-top: 6px; color: #6b6257; }
+      button {
+        display: block;
+        margin: 8px auto 0;
+        border: 1.5px solid #2b2b2b;
+        background: #d9a520;
+        color: #fff;
+        border-radius: 8px;
+        padding: 5px 12px;
+        font-family: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      code { background: #e8dcc2; padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>產生 PWA 圖示</h1>
+    <p>
+      直接用瀏覽器開這個檔案（不需要跑伺服器），按下按鈕下載 PNG，
+      再把檔案放進 <code>public/icons/</code>，然後在
+      <code>public/manifest.webmanifest</code> 補上對應的 icons 項目。<br />
+      圖示刻意設計成 <b>maskable-safe</b>：所有內容都在中心 80% 的安全區內，
+      Android 的自適應遮罩與 iOS 的圓角裁切都不會切到印章。
+    </p>
+    <div class="row" id="row"></div>
+
+    <script>
+      const PAPER = '#f2e9d6'
+      const INK = '#2b2b2b'
+      const GOLD = '#d9a520'
+      const FONT = '"Noto Serif TC","Songti TC","PMingLiU","Microsoft JhengHei",serif'
+
+      /** 與 public/icons/icon.svg 同一個設計，只是改成 canvas 畫 */
+      function draw(size) {
+        const c = document.createElement('canvas')
+        c.width = c.height = size
+        const ctx = c.getContext('2d')
+        ctx.fillStyle = PAPER
+        ctx.fillRect(0, 0, size, size)
+        ctx.strokeStyle = INK
+        ctx.lineWidth = size * 0.022
+        ctx.beginPath()
+        ctx.arc(size / 2, size / 2, size * 0.315, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = GOLD
+        ctx.font = `700 ${Math.round(size * 0.4)}px ${FONT}`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('字', size / 2, size / 2 + size * 0.025)
+        return c
+      }
+
+      for (const size of [192, 512]) {
+        const canvas = draw(size)
+        const shown = document.createElement('canvas')
+        shown.width = shown.height = 128
+        shown.getContext('2d').drawImage(canvas, 0, 0, 128, 128)
+
+        const fig = document.createElement('figure')
+        const cap = document.createElement('figcaption')
+        cap.textContent = `${size}×${size}`
+        const btn = document.createElement('button')
+        btn.textContent = `下載 icon-${size}.png`
+        btn.onclick = () => {
+          const a = document.createElement('a')
+          a.href = canvas.toDataURL('image/png')
+          a.download = `icon-${size}.png`
+          a.click()
+        }
+        fig.append(shown, cap, btn)
+        document.getElementById('row').append(fig)
+      }
+    </script>
+  </body>
+</html>
