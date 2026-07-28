@@ -2,6 +2,7 @@
  * 全螢幕畫面：選關與圖鑑。
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
+import { BONDS } from '../data/bonds'
 import { GENERAL_BY_NAME, GENERALS } from '../data/generals'
 import { GLYPH_BY_CHAR, GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
@@ -9,8 +10,9 @@ import { UPGRADES } from '../data/upgrades'
 import { SHOP, itemLevel } from '../data/shop'
 import { TIER_COLOR, TIER_LABEL } from '../render/theme'
 import { FX_COLOR } from '../render/fx'
+import { COMBOS } from '../sim/skills'
 import { MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, type MetaProgress } from '../sim/state'
-import type { GlyphCategory } from '../sim/types'
+import type { BondDef, GlyphCategory } from '../sim/types'
 
 export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | null
 
@@ -408,7 +410,32 @@ export class Screens {
     if (!g) return
     this.appendDetail(`<b>${g.name}</b>　<span style="color:${TIER_COLOR[g.tier]}">${TIER_LABEL[g.tier]}</span>
       配方 ${g.recipe.join('＋')}<br>${g.desc}
-      ${g.skill ? `<br><b>〈${g.skill.name}〉</b>${g.skill.desc}（冷卻 ${g.skill.cd}s）` : ''}`)
+      ${g.skill ? `<br><b>〈${g.skill.name}〉</b>${g.skill.desc}（冷卻 ${g.skill.cd}s）` : ''}
+      ${this.bondsHtml(g)}`)
+  }
+
+  /** 這名武將能參與哪些羈絆——名單裡的其他武將、或需要的 tag 門檻，以及效果與組合技 */
+  private bondsHtml(g: (typeof GENERALS)[number]): string {
+    const bonds = BONDS.filter(
+      (b) => b.requireGenerals?.includes(g.name) || (b.requireTag && g.tags.includes(b.requireTag.tag)),
+    )
+    if (!bonds.length) return ''
+    const rows = bonds.map((b) => this.bondRowHtml(b, g.name))
+    return `<div class="bond-list"><span class="muted">可組成的羈絆：</span>${rows.join('')}</div>`
+  }
+
+  private bondRowHtml(b: BondDef, selfName: string): string {
+    const requirement = b.requireGenerals
+      ? `與 ${b.requireGenerals.filter((n) => n !== selfName).join('、')} 同時在場`
+      : `場上 ${b.requireTag!.count} 名以上帶有「${b.requireTag!.tag}」標籤的武將`
+    const effects: string[] = []
+    if (b.atkMul) effects.push(`攻擊 ${pctLabel(b.atkMul)}`)
+    if (b.apsMul) effects.push(`攻速 ${pctLabel(b.apsMul)}`)
+    if (b.cdMul) effects.push(`技能冷卻 ${pctLabel(b.cdMul)}`)
+    const combo = b.comboSkill
+      ? `　組合技〈${b.comboSkill.name}〉${b.comboSkill.desc}${COMBOS[b.name] ? '' : '（尚未實作）'}`
+      : ''
+    return `<div class="bond-row"><b>${b.name}</b>　${requirement}：${effects.join('、')}${combo}</div>`
   }
 
   private appendDetail(html: string): void {
@@ -427,4 +454,10 @@ function section(title: string): HTMLElement {
   h.className = 'codex-section'
   h.textContent = title
   return h
+}
+
+/** 倍率轉百分比標示：1.3 → "+30%"，0.7 → "−30%" */
+function pctLabel(mul: number): string {
+  const pct = Math.round((mul - 1) * 100)
+  return `${pct >= 0 ? '+' : '−'}${Math.abs(pct)}%`
 }

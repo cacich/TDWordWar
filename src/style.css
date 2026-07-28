@@ -964,3 +964,17 @@ body {
 .codex-detail b {
   letter-spacing: calc(var(--ui) * 0.14);
 }
+
+.bond-list {
+  margin-top: calc(var(--ui) * 0.5);
+}
+
+.bond-row {
+  margin-top: calc(var(--ui) * 0.28);
+  padding: calc(var(--ui) * 0.3) calc(var(--ui) * 0.42);
+  border-left: 3px solid var(--gold);
+  background: #fbf3df;
+  border-radius: calc(var(--ui) * 0.28);
+  font-size: calc(var(--ui) * 0.82);
+  line-height: 1.5;
+}
