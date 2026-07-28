@@ -17,6 +17,11 @@ export const VULN_MUL = 1.3
 export const COUNTER_BONUS = 1.25
 export const COUNTER_PENALTY = 0.75
 
+/** 全域射程倍率：所有會攻擊的單位射程一律 ×2（字牌與武將皆是） */
+export const RANGE_MUL = 2
+/** 武將的額外射程加成，疊在 RANGE_MUL 之上——武將需要比單字更大的覆蓋範圍 */
+export const GENERAL_RANGE_BONUS = 1.25
+
 export function mitigate(atk: number, def: number): number {
   return Math.max(1, atk * (1 - def / (def + DEF_K)))
 }
@@ -50,6 +55,29 @@ export function unitCenter(board: Board, u: Unit): { x: number; y: number } {
   return { x: x / u.cells.length, y: y / u.cells.length }
 }
 
+/**
+ * 實效射程。除了全域倍率與武將加成外，還補償「多格單位中心外移」的問題：
+ * 直立／橫向合成的武將，其中心是所有格的平均，會比單格字牌更遠離路徑，
+ * 使得（尤其是直立）武將的射程看起來變短、甚至打不到。這裡把「中心到最遠成員格」
+ * 的距離加回射程，等同於從最靠近敵人的那一格量起，直立與橫向就一致了。
+ * 光環／經濟字（baseRange 0）維持 0，不會攻擊。
+ */
+export function effectiveRange(board: Board, u: Unit): number {
+  if (u.baseRange <= 0) return 0
+  let r = u.baseRange * RANGE_MUL
+  if (u.kind === 'general') r *= GENERAL_RANGE_BONUS
+  if (u.cells.length > 1) {
+    const c = unitCenter(board, u)
+    let maxOff = 0
+    for (const cell of u.cells) {
+      const p = cellCenter(board, cell)
+      maxOff = Math.max(maxOff, Math.hypot(p.x - c.x, p.y - c.y))
+    }
+    r += maxOff
+  }
+  return r
+}
+
 /** 敵人在路徑上的座標（格為單位） */
 export function enemyPos(board: Board, e: Enemy): { x: number; y: number } {
   const path = board.path
@@ -64,7 +92,9 @@ export function enemyPos(board: Board, e: Enemy): { x: number; y: number } {
 
 export function canHit(u: Unit, e: Enemy): boolean {
   if (!e.flying) return true
-  return u.range >= ANTI_AIR_RANGE
+  // 對空資格看「本身射程等級」（baseRange），不受全域射程倍率影響——
+  // 否則射程一放大，近戰單位也會變成能打飛行，破壞弓系對空的設計。
+  return u.baseRange >= ANTI_AIR_RANGE
 }
 
 /** 弓系對飛行單位 1.5 倍 */

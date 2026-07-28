@@ -11,7 +11,7 @@ import { GLYPH_BY_CHAR, MAX_GLYPH_LEVEL, glyphDef, levelMul } from '../data/glyp
 import { LEVELS } from '../data/levels'
 import { parseMap } from './board'
 import { computeBonds } from './bonds'
-import { troopFromTags, unitCenter } from './combat'
+import { effectiveRange, troopFromTags, unitCenter } from './combat'
 import { possibleRecipes } from './combine'
 import { generateMap } from './mapgen'
 import { buildGlyphPool } from './pool'
@@ -328,7 +328,7 @@ export function recalcUnits(state: GameState): void {
   for (const u of state.units) {
     u.atk = u.baseAtk * bonds.atkMul
     u.aps = u.baseAps * bonds.apsMul
-    u.range = u.baseRange
+    u.range = effectiveRange(state.board, u)
   }
 
   // 3. 光環：套在羈絆之後，兩者相乘。

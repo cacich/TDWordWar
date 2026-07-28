@@ -8,8 +8,9 @@ export const BASE_HP = 20
 /**
  * 每波血量成長率。這是全專案最敏感的難度旋鈕。
  * 1.18 → 1.19（M3 技能與光環）→ 1.21（M4b 武將可持續疊字，玩家後期戰力變成指數成長）
+ * → 1.25（射程全域 ×2 後塔覆蓋更長路徑、難度下滑，用血量成長拉回 12～20 區間）
  */
-export const HP_GROWTH = 1.21
+export const HP_GROWTH = 1.25
 export const PREP_SECONDS = 12
 
 export function enemyBaseHp(wave: number): number {

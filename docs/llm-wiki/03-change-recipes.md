@@ -86,6 +86,7 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 | 前期太窮 | `sim/economy.ts` 的 `recruitCost()` 常數 8、`waveIncome()` |
 | 抽不到好字 | `sim/economy.ts` 的 `RARITY_TABLE`（每列總和要 100） |
 | 佈陣時間 | `sim/waves.ts` 的 `PREP_SECONDS` |
+| 塔打得到的範圍 | `sim/combat.ts` 的 `RANGE_MUL`（全域射程倍率，越大越簡單）／`GENERAL_RANGE_BONUS`（武將額外） |
 
 改完跑 `npm run sim`：傻 AI 的陣亡中位數應落在 12～20 波。
 

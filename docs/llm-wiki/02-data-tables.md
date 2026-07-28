@@ -15,7 +15,7 @@
 |---|---|
 | `category` | `weapon` 兵器 / `troop` 兵種 / `surname` 姓氏 / `given` 名字 / `strategy` 謀略 / `economy` 經濟 |
 | `rarity` | 1～4，同時是抽卡權重分級（見下方權重表） |
-| `range` | 單位是**格**。`< 2.0`（`ANTI_AIR_RANGE`）打不到飛行單位 |
+| `range` | 單位是**格**，這裡填的是**基礎值**。實效射程 = `baseRange × RANGE_MUL`（全域 ×2，見 `sim/combat.ts`），武將再 ×`GENERAL_RANGE_BONUS`（1.25）並補償多格中心外移。**對空資格（`< 2.0` `ANTI_AIR_RANGE`）看的是 baseRange，不受放大影響** |
 | `shape` | `single` 單體 / `pierce` 沿路徑貫穿最多 3 名 / `splash` 目標周圍 1.3 格 |
 | `tags` | 給羈絆、兵種相剋（`騎`/`弓`/`步`）與對空加成（`弓`）用 |
 | `onHit` | 命中附加控場，見下表 |
@@ -108,7 +108,7 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
 
 ```ts
 BASE_HP = 20         // 第 0 波基準
-HP_GROWTH = 1.18     // 每波 ×1.18
+HP_GROWTH = 1.25     // 每波 ×1.25（射程全域 ×2 後上調，把難度拉回 12～20）
 enemyCount(w) = 6 + floor(w × 1.4)
 PREP_SECONDS = 12    // 佈陣時間
 isBossWave(w) = w % 5 === 0
