@@ -72,7 +72,9 @@ export const DEFAULT_META: MetaProgress = {
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3
 export const MAX_LOADOUT_GLYPHS = 8
-export const MAX_LOADOUT_GENERALS = 4
+// 5 是 BONDS 裡最大的 requireGenerals 數量（五虎上將），編隊上限跟著看齊，
+// 才能讓玩家一次把某個羈絆需要的全部武將都排進編隊
+export const MAX_LOADOUT_GENERALS = 5
 
 /** 每局結束獲得的聲望：波次是主要來源，擊殺是零頭 */
 export function renownFor(wave: number, kills: number, won: boolean): number {
