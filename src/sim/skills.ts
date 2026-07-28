@@ -232,15 +232,23 @@ export const SKILLS: Record<string, SkillFn> = {
   火計: burst(1.8, 1.0, { burn: { mul: 0.9, dur: 4 } }),
   毒計: crowd({ burn: { mul: 1.1, dur: 5 }, slowDur: 2 }, 1.2),
   雷陣: burst(2.0, 0.8, { stunDur: 0.8, chain: 2 }),
+  風令: burst(1.2, 1.0, { knock: 1.0 }),
   周瑜: global(1.2, { burn: { mul: 1.0, dur: 5 } }),
   龐統: global(0.5, { slowDur: 3, vulnDur: 5 }),
   諸葛亮: global(1.4, { slowDur: 3, stunDur: 0.8 }),
+  姜維: global(1.0, { slowDur: 2, stunDur: 0.5 }),
+  郭嘉: crowd({ vulnDur: 5, slowDur: 2 }, 1.4, 0.3),
+  荀彧: gainFood(10),
+  陳宮: crowd({ slowDur: 2.5 }, 1.0, 0.4),
 
   // 副將與名將
   黃蓋: burst(2.6, 0.5, { burn: { mul: 0.6, dur: 3 } }),
   馬岱: lineStrike(1.6, 1.5),
   馬超: charge(2.0, { knock: 1 }, 6),
   關興: lineStrike(2.6, 2.5),
+  周泰: crowd({ stunDur: 1.0 }, 0.8, 0.6),
+  甘寧: charge(2.2, { vulnDur: 3 }, 8),
+  呂蒙: crowd({ vulnDur: 4, slowDur: 2 }, 1.0),
 
   // 傳說
   張飛: crowd({ stunDur: 1.5, vulnDur: 4 }, 1.2, 1.0),
@@ -252,6 +260,9 @@ export const SKILLS: Record<string, SkillFn> = {
   張遼: charge(2.0, { stunDur: 1.0 }, 6),
   曹操: burstAndFood(1.6, 0.8, 8),
   孫權: gainFood(14),
+  陸遜: burst(1.6, 1.0, { burn: { mul: 1.0, dur: 5 } }),
+  徐晃: lineStrike(3.0, 3),
+  魏延: charge(2.6, { vulnDur: 2 }, 8),
 }
 
 /**
@@ -348,6 +359,18 @@ export const COMBOS: Record<string, ComboFn> = {
       applyStatus(state, e, { burn: { mul: 1, dur: 5 } }, total * 0.6)
     }
     comboBanner(state, members, '火燒赤壁', '#c85a28')
+    return true
+  },
+
+  呂布陳宮: (state, members) => {
+    const list = aliveEnemies(state)
+    if (!list.length) return false
+    const target = list.reduce((a, b) => (b.hp > a.hp ? b : a))
+    flatDamage(state, target, sumAtk(members) * 2.5)
+    applyStatus(state, target, { vulnDur: 5 }, 0)
+    const p = enemyPos(state.board, target)
+    ring(state, p.x, p.y, 1.2, '#8a4fd4', 0.5)
+    comboBanner(state, members, '轅門射戟', '#8a4fd4')
     return true
   },
 }

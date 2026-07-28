@@ -59,4 +59,36 @@ export const BONDS: BondDef[] = [
     atkMul: 1.2,
     cdMul: 0.85,
   },
+  {
+    name: '江東猛虎',
+    desc: '場上 4 名以上「吳」武將：全體攻擊 +20%',
+    requireTag: { tag: '吳', count: 4 },
+    atkMul: 1.2,
+  },
+  {
+    name: '魏武謀主',
+    desc: '曹操、郭嘉、荀彧同時在場：所有主動技冷卻 −25%',
+    requireGenerals: ['曹操', '郭嘉', '荀彧'],
+    cdMul: 0.75,
+  },
+  {
+    name: '呂布陳宮',
+    desc: '呂布、陳宮同時在場：全體攻擊 +20%',
+    requireGenerals: ['呂布', '陳宮'],
+    atkMul: 1.2,
+    comboSkill: { name: '轅門射戟', cd: 30, desc: '精準狙擊血量最高的敵人，造成重傷並使其易傷。' },
+  },
+  {
+    name: '武侯托孤',
+    desc: '諸葛亮、姜維同時在場：所有主動技冷卻 −25%',
+    requireGenerals: ['諸葛亮', '姜維'],
+    cdMul: 0.75,
+  },
+  {
+    name: '蜀漢棟樑',
+    desc: '場上 6 名以上「蜀」武將：全體攻擊 +15%、攻速 +10%',
+    requireTag: { tag: '蜀', count: 6 },
+    atkMul: 1.15,
+    apsMul: 1.1,
+  },
 ]
