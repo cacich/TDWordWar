@@ -171,6 +171,82 @@ describe('武將可持續強化與改組（M4b）', () => {
   })
 })
 
+describe('移動：無法疊合時交換位置', () => {
+  it('把字牌拖到已有「不同字」的格子 → 兩者交換位置，移動一定成立', () => {
+    const s = createGame()
+    const a = cellIndex(s.board, 0, 1)
+    const b = cellIndex(s.board, 1, 1)
+    hand(s, 0, '刀')
+    hand(s, 1, '弓')
+    placeFromHand(s, 0, a)
+    placeFromHand(s, 1, b)
+    const dao = glyphAt(s, a)!
+
+    const res = moveGlyph(s, dao.id, b)
+    expect(res.ok).toBe(true)
+    expect(glyphAt(s, b)!.chars[0]).toBe('刀')
+    expect(glyphAt(s, a)!.chars[0]).toBe('弓')
+    expect(s.units.filter((u) => u.kind === 'glyph')).toHaveLength(2)
+  })
+
+  it('同字但品質不同也交換（不會疊合），格子仍各有一枚', () => {
+    const s = createGame()
+    const a = cellIndex(s.board, 0, 1)
+    const b = cellIndex(s.board, 1, 1)
+    hand(s, 0, '刀', 1)
+    hand(s, 1, '刀', 2)
+    placeFromHand(s, 0, a)
+    placeFromHand(s, 1, b)
+    const lv1 = glyphAt(s, a)!
+
+    moveGlyph(s, lv1.id, b)
+    expect(glyphAt(s, b)!.level).toBe(1)
+    expect(glyphAt(s, a)!.level).toBe(2)
+  })
+
+  it('交換位置會在兩端重新判定組詞（可因此成將）', () => {
+    const s = createGame()
+    const zhang = cellIndex(s.board, 0, 1)
+    const feiL = cellIndex(s.board, 1, 1) // 張右邊，正確位置
+    const other = cellIndex(s.board, 3, 1)
+    hand(s, 0, '張')
+    hand(s, 1, '刀') // 先擋在張的右邊
+    hand(s, 2, '飛')
+    placeFromHand(s, 0, zhang)
+    placeFromHand(s, 1, feiL)
+    placeFromHand(s, 2, other)
+    expect(s.units.some((u) => u.kind === 'general')).toBe(false)
+
+    // 把「飛」拖到被「刀」占住的張右邊 → 交換：飛到張右邊、刀到遠處 → 成張飛
+    const fei = glyphAt(s, other)!
+    const res = moveGlyph(s, fei.id, feiL)
+    expect(res.combined).toContain('張飛')
+  })
+})
+
+describe('場上提示（hintCells）', () => {
+  it('手牌有同字同階 → 場上該字牌標記為可升級', () => {
+    const s = createGame()
+    const cell = cellIndex(s.board, 0, 1)
+    hand(s, 0, '刀')
+    hand(s, 1, '刀') // 留在手上
+    placeFromHand(s, 0, cell)
+    const hit = s.hintCells.find((h) => h.cell === cell)
+    expect(hit?.kind).toBe('upgrade')
+  })
+
+  it('手牌有配方缺的字 → 場上成員字牌標記為可湊將', () => {
+    const s = createGame()
+    const cell = cellIndex(s.board, 0, 1)
+    hand(s, 0, '張')
+    hand(s, 1, '飛') // 留在手上，理論上可組張飛
+    placeFromHand(s, 0, cell)
+    expect(s.hints).toContain('張飛')
+    const hit = s.hintCells.find((h) => h.cell === cell)
+    expect(hit?.kind).toBe('combine')
+  })
+})
+
 describe('經濟', () => {
   it('征兵扣糧並填滿手牌', () => {
     const s = createGame()

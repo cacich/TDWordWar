@@ -2,12 +2,13 @@
  * 主繪製。輸入為 GameState + ViewState，不修改任何遊戲狀態。
  * 座標系統：sim 用「格」為單位，此檔負責換算成畫布 px。
  */
+import { TIER_ORDER } from '../data/generals'
 import { cellCol, cellRow, cellIndex } from '../sim/board'
 import { enemyPos, unitCenter } from '../sim/combat'
-import type { GameState, Unit } from '../sim/types'
+import type { GameState, Tier, Unit } from '../sim/types'
 import { FX_COLOR, drawAttack, splashColor } from './fx'
 import { Particles } from './particles'
-import { FONT_STACK, STATUS_COLOR, THEME, TIER_COLOR, glyphFont, qualityColor, roundRect } from './theme'
+import { FONT_STACK, HINT_COLOR, STATUS_COLOR, THEME, TIER_COLOR, TIER_TINT, glyphFont, qualityColor, roundRect } from './theme'
 
 export interface DragState {
   active: boolean
@@ -20,6 +21,8 @@ export interface DragState {
   targetCell: number
   targetValid: boolean
   targetMerge: boolean
+  /** 落點已有無法疊合的字牌，放下去會與它交換位置 */
+  targetSwap: boolean
 }
 
 export interface ViewState {
@@ -44,6 +47,7 @@ export function emptyDrag(): DragState {
     targetCell: -1,
     targetValid: false,
     targetMerge: false,
+    targetSwap: false,
   }
 }
 
@@ -52,6 +56,10 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D
   view: ViewState
   readonly particles = new Particles()
+  /** 每幀重建的衍生查表：字牌格 → 所屬武將的最高階級（決定成員字牌底色） */
+  private memberTier = new Map<number, Tier>()
+  /** 每幀重建的衍生查表：字牌格 → 提示種類（來自 state.hintCells） */
+  private hintKind = new Map<number, 'upgrade' | 'combine'>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -174,7 +182,13 @@ export class Renderer {
     const { cell } = this.view
     const x = this.gx(cellCol(state.board, d.targetCell))
     const y = this.gy(cellRow(state.board, d.targetCell))
-    ctx.fillStyle = !d.targetValid ? THEME.hintRed : d.targetMerge ? THEME.hintMerge : THEME.hintGreen
+    ctx.fillStyle = !d.targetValid
+      ? THEME.hintRed
+      : d.targetMerge
+        ? THEME.hintMerge
+        : d.targetSwap
+          ? THEME.hintSwap
+          : THEME.hintGreen
     ctx.fillRect(x, y, cell, cell)
   }
 
@@ -201,8 +215,31 @@ export class Renderer {
     }
   }
 
-  /** 先畫字牌，再把武將框疊上去（字牌組成武將後依然存在） */
+  /**
+   * 三趟畫法，讓「武將是一整塊」比舊版的細框更明顯，同時保留字牌各自可升級／可拆分：
+   *   1. 武將底板（鋪在最底，把多格連成一塊）
+   *   2. 字牌（成員字牌套用武將底色，看起來像同一單位的一部分）
+   *   3. 武將外框、開火閃光、技能冷卻條（疊在最上）
+   */
   private drawUnits(state: GameState): void {
+    // 先建立衍生查表：每個字牌格屬於哪個階級的武將、有沒有場上動作提示
+    this.memberTier.clear()
+    for (const u of state.units) {
+      if (u.kind !== 'general') continue
+      for (const c of u.cells) {
+        const prev = this.memberTier.get(c)
+        if (prev === undefined || TIER_ORDER[u.tier] > TIER_ORDER[prev]) this.memberTier.set(c, u.tier)
+      }
+    }
+    this.hintKind.clear()
+    for (const h of state.hintCells) {
+      // 一格同時可升級與可湊將時，升級優先（更直接可做）
+      if (this.hintKind.get(h.cell) !== 'upgrade') this.hintKind.set(h.cell, h.kind)
+    }
+
+    for (const u of state.units) {
+      if (u.kind === 'general') this.drawFormBody(state, u)
+    }
     for (const u of state.units) {
       if (u.kind === 'glyph') this.drawGlyphUnit(state, u)
     }
@@ -218,33 +255,72 @@ export class Renderer {
     const y = this.gy(cellRow(state.board, u.cells[0]))
     const pad = Math.max(1, cell * 0.06)
     const qc = qualityColor(u.level)
+    const member = u.formIds.length > 0
+    const tier = member ? this.memberTier.get(u.cells[0]) : undefined
 
-    ctx.fillStyle = '#fffdf6'
+    // 成員字牌鋪武將底色（與武將底板連成一塊）；單獨字牌維持素白卡
+    ctx.fillStyle = tier ? TIER_TINT[tier] : '#fffdf6'
     roundRect(ctx, x + pad, y + pad, cell - pad * 2, cell - pad * 2, cell * 0.12)
     ctx.fill()
-    // 品質越高框越粗越亮，讓疊合的成果一眼看得出來
-    ctx.strokeStyle = u.level > 1 ? qc : THEME.ink
-    ctx.lineWidth = u.level > 1 ? 2.2 : 1.4
-    ctx.stroke()
-    // 剛開火 → 用該單位的特效色閃一下外框，讓玩家對得上是誰打的
-    if (u.atkFlash > 0) this.drawAtkFlash(x, y, cell, cell, pad, u)
+    // 單獨字牌自己描邊（品質越高越粗越亮）；成員字牌不描邊，才不會在兩字之間留分隔線——外框由武將負責
+    if (!member) {
+      ctx.strokeStyle = u.level > 1 ? qc : THEME.ink
+      ctx.lineWidth = u.level > 1 ? 2.2 : 1.4
+      ctx.stroke()
+      // 剛開火 → 用該單位的特效色閃一下外框，讓玩家對得上是誰打的（成員的開火閃光由武將框代表）
+      if (u.atkFlash > 0) this.drawAtkFlash(x, y, cell, cell, pad, u)
+    }
 
-    ctx.fillStyle = u.level > 2 ? qc : THEME.ink
+    ctx.fillStyle = tier ? (tier === 'common' ? THEME.ink : TIER_COLOR[tier]) : u.level > 2 ? qc : THEME.ink
     ctx.font = glyphFont(cell * 0.6)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(u.chars[0], x + cell / 2, y + cell / 2 + 1)
 
-    if (u.aura && u.formIds.length === 0) this.drawAuraRing(state, u)
+    if (u.aura && !member) this.drawAuraRing(state, u)
     if (u.level > 1) this.drawLevelBadge(x + cell - pad, y + pad, u.level, qc)
-    if (u.atkFlash > 0 && u.formIds.length === 0) this.drawAtkFlash(x, y, cell, cell, pad, u)
+    // 場上動作提示：可疊合升級（綠）／可湊將（金）的字牌畫脈動光暈，單位一多也能一眼分辨
+    const hint = this.hintKind.get(u.cells[0])
+    if (hint) this.drawHintHalo(x + pad, y + pad, cell - pad * 2, cell - pad * 2, HINT_COLOR[hint])
     if (this.view.selectedCell === u.cells[0]) {
       this.drawSelection(x + pad, y + pad, cell - pad * 2, cell - pad * 2)
     }
   }
 
+  /** 武將底板：鋪在字牌下方的一整塊淡色，把多格連成一個單位（配合成員字牌同底色） */
+  private drawFormBody(state: GameState, u: Unit): void {
+    const ctx = this.ctx
+    const { cell } = this.view
+    const cols = u.cells.map((c) => cellCol(state.board, c))
+    const rows = u.cells.map((c) => cellRow(state.board, c))
+    const vertical = new Set(cols).size === 1 && u.cells.length > 1
+    const inset = cell * (vertical ? 0.16 : 0.02)
+    const x = this.gx(Math.min(...cols)) + inset
+    const y = this.gy(Math.min(...rows)) + inset
+    const w = (Math.max(...cols) - Math.min(...cols) + 1) * cell - inset * 2
+    const h = (Math.max(...rows) - Math.min(...rows) + 1) * cell - inset * 2
+    ctx.fillStyle = TIER_TINT[u.tier]
+    roundRect(ctx, x, y, w, h, cell * 0.14)
+    ctx.fill()
+  }
+
+  /** 場上動作提示光暈：脈動描邊 + 柔光，畫在可疊合／可湊將的字牌外緣 */
+  private drawHintHalo(x: number, y: number, w: number, h: number, color: string): void {
+    const ctx = this.ctx
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 320)
+    ctx.save()
+    ctx.globalAlpha = 0.35 + pulse * 0.4
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2 + pulse * 1.4
+    ctx.shadowColor = color
+    ctx.shadowBlur = this.view.cell * (0.18 + pulse * 0.12)
+    roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, this.view.cell * 0.14)
+    ctx.stroke()
+    ctx.restore()
+  }
+
   /**
-   * 武將框：疊在字牌上方的一層。
+   * 武將外框：疊在字牌上方，與底板一起把成員框成一整塊。
    * 一個字可能同時屬於橫向與縱向兩個武將，所以框要用不同內縮量錯開才看得出有兩個。
    */
   private drawFormFrame(state: GameState, u: Unit): void {
@@ -266,7 +342,7 @@ export class Renderer {
       ctx.shadowBlur = cell * 0.6
     }
     ctx.strokeStyle = color
-    ctx.lineWidth = u.tier === 'common' ? 2.2 : 3
+    ctx.lineWidth = u.tier === 'common' ? 2.8 : 3.6
     roundRect(ctx, x, y, w, h, cell * 0.14)
     ctx.stroke()
     ctx.restore()

@@ -7,7 +7,7 @@
  */
 import { mulberry32 } from '../core/rng'
 import { GENERAL_BY_NAME } from '../data/generals'
-import { GLYPH_BY_CHAR, glyphDef, levelMul } from '../data/glyphs'
+import { GLYPH_BY_CHAR, MAX_GLYPH_LEVEL, glyphDef, levelMul } from '../data/glyphs'
 import { LEVELS } from '../data/levels'
 import { parseMap } from './board'
 import { computeBonds } from './bonds'
@@ -107,6 +107,7 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     time: 0,
     stats: { kills: 0, foodEarned: 0, leaks: 0 },
     hints: [],
+    hintCells: [],
   }
 }
 
@@ -354,8 +355,46 @@ export function recalcUnits(state: GameState): void {
     if (u.skillCd > u.skillCdMax) u.skillCd = u.skillCdMax
   }
 
-  const handChars = state.hand.filter((h) => h !== null).map((h) => h!.char)
+  const handCards = state.hand.filter((h) => h !== null) as { char: string; level: number }[]
+  const handChars = handCards.map((h) => h.char)
   state.hints = possibleRecipes(state.units, handChars)
+  state.hintCells = computeHintCells(state, handCards)
+}
+
+/**
+ * 標記棋盤上「現在就有動作可做」的字牌，讓玩家在單位很多時一眼看出哪些能疊合／能湊將。
+ * 純衍生值，不影響機制；判定寬鬆（升級只看有無同字同階夥伴，組詞沿用 possibleRecipes 的名單）。
+ */
+function computeHintCells(state: GameState, handCards: { char: string; level: number }[]): { cell: number; kind: 'upgrade' | 'combine' }[] {
+  const glyphs = state.units.filter((u) => u.kind === 'glyph')
+
+  // 升級：同字同階（且未滿階）的夥伴數，手牌與場上都算
+  const stackCount = new Map<string, number>()
+  const bump = (char: string, level: number) => {
+    const key = `${char}:${level}`
+    stackCount.set(key, (stackCount.get(key) ?? 0) + 1)
+  }
+  for (const h of handCards) bump(h.char, h.level)
+  for (const g of glyphs) bump(g.chars[0], g.level)
+
+  // 組詞：state.hints 是「用得到手牌就能湊」的配方名，取其配方字集合
+  const recipeChars = new Set<string>()
+  for (const name of state.hints) {
+    const def = GENERAL_BY_NAME[name]
+    if (def) for (const ch of def.recipe) recipeChars.add(ch)
+  }
+
+  const out: { cell: number; kind: 'upgrade' | 'combine' }[] = []
+  for (const g of glyphs) {
+    const canUpgrade =
+      g.level < MAX_GLYPH_LEVEL && (stackCount.get(`${g.chars[0]}:${g.level}`) ?? 0) >= 2
+    if (canUpgrade) {
+      out.push({ cell: g.cells[0], kind: 'upgrade' })
+    } else if (recipeChars.has(g.chars[0])) {
+      out.push({ cell: g.cells[0], kind: 'combine' })
+    }
+  }
+  return out
 }
 
 export function generalDefOf(u: Unit): GeneralDef | undefined {

@@ -84,6 +84,7 @@ export class Input {
       targetCell: -1,
       targetValid: false,
       targetMerge: false,
+      targetSwap: false,
     })
     this.evalTarget()
   }
@@ -141,6 +142,7 @@ export class Input {
       targetCell: cell,
       targetValid: true,
       targetMerge: false,
+      targetSwap: false,
     })
   }
 
@@ -237,6 +239,7 @@ export class Input {
     const cell = this.host.renderer.cellFromPoint(state, d.px, d.py)
     d.targetCell = cell
     d.targetMerge = false
+    d.targetSwap = false
     if (cell < 0 || !isPlot(state.board, cell)) {
       d.targetValid = false
       return
@@ -254,8 +257,18 @@ export class Input {
     }
     const mergeable =
       occupant.chars[0] === d.char && occupant.level === d.level && occupant.level < MAX_GLYPH_LEVEL
-    d.targetValid = mergeable
-    d.targetMerge = mergeable
+    if (mergeable) {
+      d.targetValid = true
+      d.targetMerge = true
+      return
+    }
+    // 不能疊合：場上字牌互相拖曳 → 交換位置（一定成立）；手牌拖到已占用的格子仍不允許
+    if (src?.kind === 'unit') {
+      d.targetValid = true
+      d.targetSwap = true
+      return
+    }
+    d.targetValid = false
   }
 }
 

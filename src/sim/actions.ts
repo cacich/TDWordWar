@@ -178,18 +178,33 @@ export function moveGlyph(state: GameState, glyphId: number, toCell: number): Ac
 
   const occupant = glyphAt(state, toCell)
   if (occupant) {
-    if (occupant.chars[0] !== u.chars[0]) return fail('不同的字無法疊合')
-    if (occupant.level !== u.level) return fail('品質不同無法疊合')
-    if (occupant.level >= MAX_GLYPH_LEVEL) return fail('已達最高品質')
+    const mergeable =
+      occupant.chars[0] === u.chars[0] && occupant.level === u.level && occupant.level < MAX_GLYPH_LEVEL
+    if (mergeable) {
+      const broken = dissolveFormsOf(state, u.id)
+      removeGlyph(state, u)
+      const lv = occupant.level + 1
+      levelUpGlyph(state, occupant, lv)
+      emit(state, { kind: 'merge', char: occupant.chars[0], level: lv })
+      const combined = tryCombine(state, toCell)
+      recalcUnits(state)
+      return { ok: true, msg: `疊合為${qualityName(lv)}`, combined, broken }
+    }
 
-    const broken = dissolveFormsOf(state, u.id)
-    removeGlyph(state, u)
-    const lv = occupant.level + 1
-    levelUpGlyph(state, occupant, lv)
-    emit(state, { kind: 'merge', char: occupant.chars[0], level: lv })
-    const combined = tryCombine(state, toCell)
+    // 無法疊合（不同字，或品質不同，或已滿階）→ 兩個字牌互換位置，讓移動一定成立。
+    // 兩者都算「移動」，各自所屬的武將都要解除，再於新位置重新判定組詞。
+    const fromCell = u.cells[0]
+    const broken = [...dissolveFormsOf(state, u.id), ...dissolveFormsOf(state, occupant.id)]
+    u.cells = [toCell]
+    occupant.cells = [fromCell]
+    const combined = [...(tryCombine(state, toCell) ?? []), ...(tryCombine(state, fromCell) ?? [])]
     recalcUnits(state)
-    return { ok: true, msg: `疊合為${qualityName(lv)}`, combined, broken }
+    return {
+      ok: true,
+      msg: `「${u.chars[0]}」與「${occupant.chars[0]}」交換位置`,
+      combined: combined.length ? combined : undefined,
+      broken,
+    }
   }
 
   const broken = dissolveFormsOf(state, u.id)

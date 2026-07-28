@@ -22,6 +22,7 @@ export const THEME = {
   hintGreen: 'rgba(60,160,90,0.55)',
   hintRed: 'rgba(200,60,50,0.45)',
   hintMerge: 'rgba(60,120,220,0.5)',
+  hintSwap: 'rgba(150,90,210,0.5)',
   gold: '#d9a520',
 } as const
 
@@ -32,6 +33,21 @@ export const TIER_COLOR: Record<Tier, string> = {
   legendary: '#d9a520',
   mythic: '#d43b3b',
 }
+
+/** 武將本體的底色：組成字牌會鋪上這層淡色，讓整個武將讀起來是「一塊」而不是零散白卡 */
+export const TIER_TINT: Record<Tier, string> = {
+  common: '#e9e6df',
+  fine: '#dfe8fb',
+  epic: '#ece2fb',
+  legendary: '#f6eccb',
+  mythic: '#f7dede',
+}
+
+/** 場上提示光暈：可疊合升級＝綠、可湊將＝金 */
+export const HINT_COLOR = {
+  upgrade: '#3f9f5a',
+  combine: '#d9a520',
+} as const
 
 /** 字牌品質階級的顏色：一階灰 → 五階金。兩個同階同字可疊成上一階 */
 export const QUALITY_COLOR = ['#9a9a9a', '#3f8f4f', '#3b6fd4', '#8a4fd4', '#d9a520'] as const

@@ -352,4 +352,15 @@ export interface GameState {
   stats: { kills: number; foodEarned: number; leaks: number }
   /** UI 提示：目前手牌+場上可組成的配方名稱 */
   hints: string[]
+  /**
+   * 棋盤上「現在就有動作可做」的字牌，供 render 在對應格子上畫提示光暈。
+   * upgrade＝有可疊合的同字同階夥伴（手牌或場上另一枚）；combine＝是某個可湊配方的成員。
+   */
+  hintCells: HintCell[]
+}
+
+/** 場上字牌的提示標記（見 GameState.hintCells） */
+export interface HintCell {
+  cell: number
+  kind: 'upgrade' | 'combine'
 }
