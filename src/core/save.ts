@@ -19,6 +19,7 @@ export const EMPTY_META: MetaProgress = {
   seenGlyphs: [],
   seenGenerals: [],
   best: {},
+  items: [],
 }
 
 export function loadMeta(): MetaProgress {
@@ -40,6 +41,7 @@ export function loadMeta(): MetaProgress {
       seenGlyphs: arr(p.seenGlyphs),
       seenGenerals: arr(p.seenGenerals),
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
+      items: arr(p.items),
     }
   } catch {
     return { ...EMPTY_META }

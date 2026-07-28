@@ -15,6 +15,7 @@ import { effectiveRange, troopFromTags, unitCenter } from './combat'
 import { possibleRecipes } from './combine'
 import { generateMap } from './mapgen'
 import { buildGlyphPool } from './pool'
+import { perksFrom } from '../data/shop'
 import { SKILLS } from './skills'
 import { PREP_SECONDS } from './waves'
 import type { Aura, FxKind, GameState, GeneralDef, GlyphDef, OnHit, Unit } from './types'
@@ -39,6 +40,8 @@ export interface MetaProgress {
   seenGenerals: string[]
   /** 每關的最佳波數 */
   best: Record<string, number>
+  /** 商城已購買的道具 key（見 data/shop.ts） */
+  items: string[]
 }
 
 export const DEFAULT_META: MetaProgress = {
@@ -51,6 +54,7 @@ export const DEFAULT_META: MetaProgress = {
   seenGlyphs: [],
   seenGenerals: [],
   best: {},
+  items: [],
 }
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3
@@ -70,6 +74,7 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
   const board = parseMap(map, level.key)
   const pool = buildGlyphPool(rng, level)
   const handSize = Math.min(meta.handSize, MAX_HAND_SIZE)
+  const perks = perksFrom(meta.items)
 
   return {
     levelKey: level.key,
@@ -106,6 +111,8 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     nextEnemyId: 1,
     time: 0,
     stats: { kills: 0, foodEarned: 0, leaks: 0 },
+    perks,
+    meteorTimer: perks.meteorInterval,
     hints: [],
     hintCells: [],
   }
@@ -326,8 +333,9 @@ export function recalcUnits(state: GameState): void {
   state.cdMul = bonds.cdMul
 
   for (const u of state.units) {
-    u.atk = u.baseAtk * bonds.atkMul
-    u.aps = u.baseAps * bonds.apsMul
+    // 羈絆倍率之外，再乘上局外道具（號令旗／疾風令）的全場加成
+    u.atk = u.baseAtk * bonds.atkMul * state.perks.atkMul
+    u.aps = u.baseAps * bonds.apsMul * state.perks.apsMul
     u.range = effectiveRange(state.board, u)
   }
 

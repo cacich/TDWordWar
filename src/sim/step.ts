@@ -5,11 +5,11 @@
 import { ENEMY_BY_KEY } from '../data/enemies'
 import { beginBattle } from './actions'
 import { stepBondSkills } from './bonds'
-import { SLOW_FACTOR, damageEnemy, stepCombat, stepEffects } from './combat'
+import { SLOW_FACTOR, damageEnemy, enemyPos, pushEffect, stepCombat, stepEffects } from './combat'
 import { unitIncome, waveIncome } from './economy'
 import { stepSkills } from './skills'
 import { emit } from './events'
-import { PREP_SECONDS } from './waves'
+import { PREP_SECONDS, enemyBaseHp } from './waves'
 import type { Enemy, GameState } from './types'
 
 export function stepGame(state: GameState, dt: number): void {
@@ -31,9 +31,40 @@ export function stepGame(state: GameState, dt: number): void {
   stepCombat(state, dt)
   stepSkills(state, dt)
   stepBondSkills(state, dt)
+  stepMeteor(state, dt)
   stepEffects(state, dt)
   cleanupDead(state)
   checkWaveEnd(state)
+}
+
+/**
+ * 流星火雨（局外道具「流星火雨」）：戰鬥中每隔一段時間，對最前方那群敵人降下火球。
+ * 傷害綁在 enemyBaseHp 上，才能跟著波次的指數血量一起成長、後期不失效。
+ */
+function stepMeteor(state: GameState, dt: number): void {
+  if (state.perks.meteorInterval <= 0) return
+  state.meteorTimer -= dt
+  if (state.meteorTimer > 0) return
+  state.meteorTimer += state.perks.meteorInterval
+
+  const alive = state.enemies.filter((e) => e.hp > 0)
+  if (!alive.length) return
+  let front = alive[0]
+  for (const e of alive) if (e.dist > front.dist) front = e
+  const c = enemyPos(state.board, front)
+  const dmg = 0.7 * enemyBaseHp(state.wave) * state.hpMul
+  for (const e of alive) {
+    const p = enemyPos(state.board, e)
+    if (Math.hypot(p.x - c.x, p.y - c.y) > 1.5) continue
+    damageEnemy(state, e, dmg)
+    if (e.hp > 0) {
+      e.burnT = Math.max(e.burnT, 3)
+      e.burnDps = Math.max(e.burnDps, dmg * 0.12)
+    }
+  }
+  emit(state, { kind: 'skill', name: '流星火雨', x: c.x, y: c.y })
+  pushEffect(state.effects, { kind: 'splash', fromX: c.x, fromY: c.y, toX: c.x, toY: c.y, life: 0.35, maxLife: 0.35, fx: 'fire' })
+  pushEffect(state.effects, { kind: 'ring', fromX: c.x, fromY: c.y, toX: c.x + 1.5, toY: c.y, life: 0.35, maxLife: 0.35, color: '#c8502a' })
 }
 
 function spawnDue(state: GameState): void {
@@ -111,12 +142,24 @@ function cleanupDead(state: GameState): void {
 
 function checkWaveEnd(state: GameState): void {
   if (state.spawnQueue.length || state.enemies.length) return
-  state.lastIncome = { base: waveIncome(state.wave), units: unitIncome(state) }
+  // 糧道暢通：固定收入 ×incomeMul（產糧不受影響）
+  state.lastIncome = {
+    base: Math.round(waveIncome(state.wave) * state.perks.incomeMul),
+    units: unitIncome(state),
+  }
   state.food += state.lastIncome.base + state.lastIncome.units
   if (state.wave >= state.maxWave) {
     state.phase = 'won'
     emit(state, { kind: 'won' })
     return
+  }
+  // 杏林春暖：每通過 N 波回 1 生命（以剛清掉的這一波計）
+  if (
+    state.perks.healEveryWaves > 0 &&
+    state.wave % state.perks.healEveryWaves === 0 &&
+    state.lives < state.maxLives
+  ) {
+    state.lives = Math.min(state.maxLives, state.lives + 1)
   }
   emit(state, { kind: 'waveClear', wave: state.wave })
   state.wave++

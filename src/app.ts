@@ -7,6 +7,7 @@ import { startLoop, type LoopHandle } from './core/loop'
 import { saveMeta } from './core/save'
 import { LEVEL_ORDER } from './data/levels'
 import { buyUpgrade } from './data/upgrades'
+import { buyItem } from './data/shop'
 import { Input } from './input/pointer'
 import { Renderer } from './render/renderer'
 import { qualityColor } from './render/theme'
@@ -277,6 +278,13 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.audio.play(res.ok ? 'combine' : 'deny')
     saveMeta(this.meta)
     this.screens.renderForge()
+    this.hud.toast(res.msg)
+  }
+  buyItem(key: string): void {
+    const res = buyItem(this.meta, key)
+    this.audio.play(res.ok ? 'combine' : 'deny')
+    saveMeta(this.meta)
+    this.screens.renderShop()
     this.hud.toast(res.msg)
   }
   show(screen: ScreenName): void {

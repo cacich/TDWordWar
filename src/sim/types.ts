@@ -288,6 +288,27 @@ export interface ActiveBond {
   combo?: { name: string; cd: number; cdMax: number }
 }
 
+// ── 局外道具（商城）帶來的被動效果 ────────────────────
+/**
+ * 由 data/shop.ts 依「已購買的道具」推導，createGame 時寫進 GameState。
+ * 全部是被動、整局有效；未購買時為中性值（倍率 1、機率/間隔 0），
+ * 所以 npm run sim 的預設 meta（無道具）難度基準完全不受影響。
+ */
+export interface Perks {
+  /** 徵兵時每個字直接抽到二階的機率 */
+  recruitEliteChance: number
+  /** 天降火球間隔秒數；0 = 未啟用 */
+  meteorInterval: number
+  /** 每波固定收入倍率 */
+  incomeMul: number
+  /** 每通過幾波回復 1 點生命；0 = 未啟用 */
+  healEveryWaves: number
+  /** 全場友軍攻擊倍率 */
+  atkMul: number
+  /** 全場友軍攻速倍率 */
+  apsMul: number
+}
+
 // ── 遊戲狀態 ──────────────────────────────────────────
 export type Phase = 'prep' | 'battle' | 'won' | 'lost'
 
@@ -350,6 +371,10 @@ export interface GameState {
   nextEnemyId: number
   time: number
   stats: { kills: number; foodEarned: number; leaks: number }
+  /** 局外道具帶來的被動效果（由 createGame 依 meta.items 算好，整局固定） */
+  perks: Perks
+  /** 天降火球倒數（runtime，只在戰鬥階段遞減） */
+  meteorTimer: number
   /** UI 提示：目前手牌+場上可組成的配方名稱 */
   hints: string[]
   /**

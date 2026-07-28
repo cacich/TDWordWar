@@ -206,6 +206,23 @@ export const SKILLS: Record<string, SkillFn> = {
 `max`、`cost(level)` 與 `apply(meta)`。兵書畫面會自動長出那一列。
 若新增的欄位不在 `MetaProgress` 裡，要一併加欄位並在 `core/save.ts` 的 `loadMeta()` 補預設值。
 
+## 10f2. 加一個商城道具（被動效果）
+
+商城賣的是**整局有效的被動道具**（一次性購買），效果比兵書更會改變玩法。兩步：
+
+1. `src/data/shop.ts`：在 `SHOP` 加一筆 `ShopItem`（key／name／desc／cost），
+   並在 `perksFrom()` 把它對應到一個 `Perks` 欄位（未購買時務必是中性值）。
+2. 讓 sim 讀那個 `Perks` 欄位。`Perks` 定義在 `sim/types.ts`，`createGame` 依 `meta.items`
+   算好寫進 `state.perks`。既有 hook 範例：
+   - 徵兵升階 → `sim/actions.ts` 的 `recruit()`
+   - 全場攻擊／攻速加成 → `sim/state.ts` 的 `recalcUnits()`
+   - 每波收入／回血 → `sim/step.ts` 的 `checkWaveEnd()`
+   - 週期性效果（流星火雨）→ `sim/step.ts` 的 `stepMeteor()`
+
+⚠ **未購買時 `perksFrom` 必須回中性值（倍率 1、機率/間隔 0）**，否則 `npm run sim`
+（用預設 meta、無道具）的難度基準會跑掉。新增 `Perks` 欄位不需動 `core/save.ts`——
+只有 `meta.items` 進存檔，效果都是從它現算的。
+
 ## 10g. 改 PWA（圖示、名稱、離線快取）
 
 | 想改什麼 | 動哪裡 |

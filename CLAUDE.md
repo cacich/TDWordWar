@@ -77,7 +77,7 @@ M0 骨架 ✅　M1 可玩核心 ✅　M2 組詞與經濟 ✅　M3 技能與深�
 M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 pwaPlugin() 產生）
 
 內容量：**53 字／28 武將／8 羈絆／19 個主動技／4 個組合技／6 關**（3 關固定地圖 + 3 關隨機地形）
-局外：圖鑑、兵書（4 種永久升級 + 聲望）、心願單。音效與粒子皆由 sim 事件佇列驅動。
+局外：圖鑑、兵書（4 種永久升級 + 聲望）、商城（6 種聲望購買的被動道具，見 `data/shop.ts`）、心願單。音效與粒子皆由 sim 事件佇列驅動。
 
 未實作項目與已知陷阱列在 [docs/llm-wiki/04-invariants.md](docs/llm-wiki/04-invariants.md)。
 新增技能／控場狀態的步驟在 [03-change-recipes.md](docs/llm-wiki/03-change-recipes.md) §10、§10b。

@@ -6,18 +6,20 @@ import { GENERALS } from '../data/generals'
 import { GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
 import { UPGRADES } from '../data/upgrades'
+import { SHOP } from '../data/shop'
 import { TIER_COLOR, TIER_LABEL } from '../render/theme'
 import { FX_COLOR } from '../render/fx'
 import type { MetaProgress } from '../sim/state'
 import type { GlyphCategory } from '../sim/types'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | null
+export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
   startLevel(key: string): void
   show(screen: ScreenName): void
   buyUpgrade(key: string): void
+  buyItem(key: string): void
 }
 
 const CATEGORY_TITLE: Record<GlyphCategory, string> = {
@@ -43,6 +45,9 @@ export class Screens {
   private forge = el('screen-forge')
   private forgeBody = el('forge-body')
   private forgeRenown = el('forge-renown')
+  private shop = el('screen-shop')
+  private shopBody = el('shop-body')
+  private shopRenown = el('shop-renown')
   private renownCount = el('renown-count')
   private levelList = el('level-list')
   private codexBody = el('codex-body')
@@ -57,6 +62,8 @@ export class Screens {
     el('codex-back').addEventListener('click', () => this.host.show('menu'))
     el('btn-forge').addEventListener('click', () => this.host.show('forge'))
     el('forge-back').addEventListener('click', () => this.host.show('menu'))
+    el('btn-shop').addEventListener('click', () => this.host.show('shop'))
+    el('shop-back').addEventListener('click', () => this.host.show('menu'))
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
   }
@@ -66,9 +73,39 @@ export class Screens {
     this.menu.hidden = screen !== 'menu'
     this.codex.hidden = screen !== 'codex'
     this.forge.hidden = screen !== 'forge'
+    this.shop.hidden = screen !== 'shop'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
+    if (screen === 'shop') this.renderShop()
+  }
+
+  /** 商城：花聲望買被動道具（一次性擁有） */
+  renderShop(): void {
+    const meta = this.host.getMeta()
+    this.shopRenown.textContent = `聲望 ${meta.renown}`
+    this.shopBody.innerHTML = ''
+    for (const item of SHOP) {
+      const owned = meta.items.includes(item.key)
+      const row = document.createElement('div')
+      row.className = 'forge-row'
+      row.innerHTML = `<div>
+          <div class="fg-name">${item.name}${owned ? ' <span class="muted">已擁有</span>' : ''}</div>
+          <div class="fg-desc">${item.desc}</div>
+        </div>`
+      const btn = document.createElement('button')
+      btn.textContent = owned ? '已購買' : `聲望 ${item.cost}`
+      btn.disabled = owned || meta.renown < item.cost
+      btn.addEventListener('click', () => this.host.buyItem(item.key))
+      row.appendChild(btn)
+      this.shopBody.appendChild(row)
+    }
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '道具皆為被動效果，購買後永久擁有，<b>下一局開始</b>套用。<br>' +
+      '<span class="muted">聲望與兵書共用，於每局結束依抵達波次結算。</span>'
+    this.shopBody.appendChild(note)
   }
 
   /** 兵書：局外養成 */

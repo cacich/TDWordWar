@@ -39,7 +39,10 @@ export function recruit(state: GameState): ActionResult {
   const ctx = { pool: state.pool, familiar: familiarChars(state), wishes: state.wishes }
   for (let i = 0; i < state.hand.length; i++) {
     if (state.hand[i] === null) {
-      state.hand[i] = { char: rollGlyph(state.rng, state.wave, ctx).char, level: 1 }
+      const char = rollGlyph(state.rng, state.wave, ctx).char
+      // 精兵符：每個字有機率直接抽到二階（已升級的單位）
+      const level = state.rng() < state.perks.recruitEliteChance ? 2 : 1
+      state.hand[i] = { char, level }
     }
   }
   recalcUnits(state)
