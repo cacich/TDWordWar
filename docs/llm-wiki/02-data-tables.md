@@ -15,7 +15,7 @@
 |---|---|
 | `category` | `weapon` 兵器 / `troop` 兵種 / `surname` 姓氏 / `given` 名字 / `strategy` 謀略 / `economy` 經濟 |
 | `rarity` | 1～4，同時是抽卡權重分級（見下方權重表） |
-| `range` | 單位是**格**，這裡填的是**基礎值**。實效射程 = `baseRange × RANGE_MUL`（全域 ×2，見 `sim/combat.ts`），武將再 ×`GENERAL_RANGE_BONUS`（1.25）並補償多格中心外移。**對空資格（`< 2.0` `ANTI_AIR_RANGE`）看的是 baseRange，不受放大影響** |
+| `range` | 單位是**格**，這裡填的是**基礎值**。實效射程 = `baseRange × RANGE_MUL`（全域 ×2，見 `sim/combat.ts`），單個字（尚未組成武將）再 ×`GLYPH_RANGE_MUL`（0.8），武將則是 ×`GENERAL_RANGE_BONUS`（1.25）並補償多格中心外移，兩者互斥。**對空資格（`< 2.0` `ANTI_AIR_RANGE`）看的是 baseRange，不受放大影響** |
 | `shape` | `single` 單體 / `pierce` 沿路徑貫穿最多 3 名 / `splash` 目標周圍 1.3 格 |
 | `tags` | 給羈絆、兵種相剋（`騎`/`弓`/`步`）與對空加成（`弓`）用 |
 | `onHit` | 命中附加控場，見下表 |

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cellIndex } from '../board'
 import { placeFromHand } from '../actions'
-import { GENERAL_RANGE_BONUS, RANGE_MUL, canHit } from '../combat'
+import { GENERAL_RANGE_BONUS, GLYPH_RANGE_MUL, RANGE_MUL, canHit } from '../combat'
 import { GLYPH_BY_CHAR } from '../../data/glyphs'
 import { GENERAL_BY_NAME } from '../../data/generals'
 import { createGame, glyphAt } from '../state'
@@ -15,12 +15,12 @@ const flyer = { flying: true } as Enemy
 const ground = { flying: false } as Enemy
 
 describe('射程放大', () => {
-  it('單獨字牌的射程 = 基礎 × 全域倍率', () => {
+  it('單獨字牌的射程 = 基礎 × 全域倍率 × 單字收斂倍率', () => {
     const s = createGame()
     const cell = cellIndex(s.board, 0, 1)
     hand(s, 0, '刀') // baseRange 1.2
     placeFromHand(s, 0, cell)
-    expect(glyphAt(s, cell)!.range).toBeCloseTo(GLYPH_BY_CHAR['刀'].range * RANGE_MUL, 5)
+    expect(glyphAt(s, cell)!.range).toBeCloseTo(GLYPH_BY_CHAR['刀'].range * RANGE_MUL * GLYPH_RANGE_MUL, 5)
   })
 
   it('武將射程 = 基礎 × 全域倍率 × 武將加成 + 多格中心補償', () => {
@@ -62,7 +62,7 @@ describe('射程放大', () => {
     const dao = glyphAt(s, cellIndex(s.board, 0, 1))!
     const gong = glyphAt(s, cellIndex(s.board, 1, 1))!
 
-    expect(dao.range).toBeGreaterThan(2) // 放大後半徑超過 2，但…
+    expect(dao.range).toBeGreaterThan(GLYPH_BY_CHAR['刀'].range) // 放大後半徑比基礎值大，但…
     expect(canHit(dao, flyer)).toBe(false) // …仍打不到飛行
     expect(canHit(dao, ground)).toBe(true)
     expect(canHit(gong, flyer)).toBe(true)

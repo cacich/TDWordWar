@@ -17,10 +17,12 @@ export const VULN_MUL = 1.3
 export const COUNTER_BONUS = 1.25
 export const COUNTER_PENALTY = 0.75
 
-/** 全域射程倍率：所有會攻擊的單位射程一律 ×2（字牌與武將皆是） */
+/** 全域射程倍率：所有會攻擊的單位射程一律先 ×2（字牌與武將皆是），再疊上各自的加成 */
 export const RANGE_MUL = 2
 /** 武將的額外射程加成，疊在 RANGE_MUL 之上——武將需要比單字更大的覆蓋範圍 */
 export const GENERAL_RANGE_BONUS = 1.25
+/** 單個字（尚未組成武將）的射程收斂到 8 成，跟武將的射程優勢拉開差距，鼓勵組將 */
+export const GLYPH_RANGE_MUL = 0.8
 
 export function mitigate(atk: number, def: number): number {
   return Math.max(1, atk * (1 - def / (def + DEF_K)))
@@ -66,6 +68,7 @@ export function effectiveRange(board: Board, u: Unit): number {
   if (u.baseRange <= 0) return 0
   let r = u.baseRange * RANGE_MUL
   if (u.kind === 'general') r *= GENERAL_RANGE_BONUS
+  else r *= GLYPH_RANGE_MUL
   if (u.cells.length > 1) {
     const c = unitCenter(board, u)
     let maxOff = 0
