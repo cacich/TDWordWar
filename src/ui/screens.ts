@@ -3,9 +3,10 @@
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
 import { BONDS } from '../data/bonds'
-import { GENERAL_BY_NAME, GENERALS } from '../data/generals'
-import { GLYPH_BY_CHAR, GLYPHS, qualityName } from '../data/glyphs'
+import { GENERALS } from '../data/generals'
+import { GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
+import { isGeneralUnlocked } from '../data/loadout'
 import { UPGRADES } from '../data/upgrades'
 import { SHOP, itemLevel } from '../data/shop'
 import { TIER_COLOR, TIER_LABEL } from '../render/theme'
@@ -46,6 +47,10 @@ const CATEGORY_TITLE: Record<GlyphCategory, string> = {
 }
 
 const CATEGORY_ORDER: GlyphCategory[] = ['weapon', 'troop', 'strategy', 'economy', 'surname', 'given']
+/** 稀有度由高到低，圖鑑與編隊的武將分區都用這個順序 */
+const TIER_DISPLAY_ORDER = ['mythic', 'legendary', 'epic', 'fine', 'common'] as const
+/** 編隊「攜帶的字」只列這些類別——姓氏／名字要透過「攜帶的武將」帶入，見 data/loadout.ts */
+const LOADOUT_GLYPH_CATEGORIES: GlyphCategory[] = ['weapon', 'troop', 'strategy', 'economy']
 
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id)
@@ -221,48 +226,63 @@ export class Screens {
       '<span class="muted">已解鎖但沒被選進來的字／武將不會出現在字池裡；不必選滿也沒關係。</span>'
     this.loadoutBody.appendChild(note)
 
+    // 攜帶的字：按類別分區；姓氏／名字不列在這裡，只能透過下面的「攜帶的武將」帶入
+    const glyphSeen = new Set(meta.seenGlyphs)
     this.loadoutBody.appendChild(section(`攜帶的字　${meta.loadoutGlyphs.length}/${MAX_LOADOUT_GLYPHS}`))
-    const glyphGrid = document.createElement('div')
-    glyphGrid.className = 'codex-grid'
-    for (const char of meta.seenGlyphs) {
-      const g = GLYPH_BY_CHAR[char]
-      if (!g) continue
-      const selected = meta.loadoutGlyphs.includes(char)
-      const cell = document.createElement('div')
-      cell.className = `codex-cell${selected ? ' selected' : ''}`
-      const color = g.fx && g.fx !== 'none' ? FX_COLOR[g.fx] : '#2b2b2b'
-      cell.innerHTML = `<div class="cx-char" style="color:${color}">${selected ? '★' : ''}${g.char}</div>
-        <div class="cx-name">${g.income ? `糧${g.income}` : g.atk > 0 ? `攻${g.atk}` : '輔助'}</div>`
-      cell.addEventListener('click', () => this.host.toggleLoadoutGlyph(char))
-      glyphGrid.appendChild(cell)
+    let anyGlyph = false
+    for (const cat of LOADOUT_GLYPH_CATEGORIES) {
+      const list = GLYPHS.filter((g) => g.category === cat && glyphSeen.has(g.char))
+      if (!list.length) continue
+      anyGlyph = true
+      this.loadoutBody.appendChild(section(CATEGORY_TITLE[cat]))
+      const grid = document.createElement('div')
+      grid.className = 'codex-grid'
+      for (const g of list) {
+        const selected = meta.loadoutGlyphs.includes(g.char)
+        const cell = document.createElement('div')
+        cell.className = `codex-cell${selected ? ' selected' : ''}`
+        const color = g.fx && g.fx !== 'none' ? FX_COLOR[g.fx] : '#2b2b2b'
+        cell.innerHTML = `<div class="cx-char" style="color:${color}">${selected ? '★' : ''}${g.char}</div>
+          <div class="cx-name">${g.income ? `糧${g.income}` : g.atk > 0 ? `攻${g.atk}` : '輔助'}</div>`
+        cell.addEventListener('click', () => this.host.toggleLoadoutGlyph(g.char))
+        grid.appendChild(cell)
+      }
+      this.loadoutBody.appendChild(grid)
     }
-    this.loadoutBody.appendChild(glyphGrid)
-    if (!meta.seenGlyphs.length) {
+    if (!anyGlyph) {
       const empty = document.createElement('div')
       empty.className = 'muted'
-      empty.textContent = '還沒解鎖任何字，先去玩一局吧。'
+      empty.textContent = '還沒解鎖任何可帶的字，先去玩一局吧。'
       this.loadoutBody.appendChild(empty)
     }
 
+    // 攜帶的武將：按稀有度分區；配方的字都已解鎖過就算解鎖，不必真的湊出來過
     this.loadoutBody.appendChild(section(`攜帶的武將　${meta.loadoutGenerals.length}/${MAX_LOADOUT_GENERALS}`))
-    const genGrid = document.createElement('div')
-    genGrid.className = 'codex-grid'
-    for (const name of meta.seenGenerals) {
-      const g = GENERAL_BY_NAME[name]
-      if (!g) continue
-      const selected = meta.loadoutGenerals.includes(name)
-      const cell = document.createElement('div')
-      cell.className = `codex-cell${selected ? ' selected' : ''}`
-      cell.innerHTML = `<div class="cx-char" style="font-size:15px;color:${TIER_COLOR[g.tier]}">${selected ? '★' : ''}${g.name}</div>
-        <div class="cx-name">${g.recipe.join('＋')}</div>`
-      cell.addEventListener('click', () => this.host.toggleLoadoutGeneral(name))
-      genGrid.appendChild(cell)
+    let anyGeneral = false
+    for (const tier of TIER_DISPLAY_ORDER) {
+      const list = GENERALS.filter(
+        (g) => g.tier === tier && isGeneralUnlocked(meta.seenGlyphs, meta.seenGenerals, g.name),
+      )
+      if (!list.length) continue
+      anyGeneral = true
+      this.loadoutBody.appendChild(section(TIER_LABEL[tier]))
+      const grid = document.createElement('div')
+      grid.className = 'codex-grid'
+      for (const g of list) {
+        const selected = meta.loadoutGenerals.includes(g.name)
+        const cell = document.createElement('div')
+        cell.className = `codex-cell${selected ? ' selected' : ''}`
+        cell.innerHTML = `<div class="cx-char" style="font-size:15px;color:${TIER_COLOR[g.tier]}">${selected ? '★' : ''}${g.name}</div>
+          <div class="cx-name">${g.recipe.join('＋')}</div>`
+        cell.addEventListener('click', () => this.host.toggleLoadoutGeneral(g.name))
+        grid.appendChild(cell)
+      }
+      this.loadoutBody.appendChild(grid)
     }
-    this.loadoutBody.appendChild(genGrid)
-    if (!meta.seenGenerals.length) {
+    if (!anyGeneral) {
       const empty = document.createElement('div')
       empty.className = 'muted'
-      empty.textContent = '還沒組出任何武將，先去玩一局吧。'
+      empty.textContent = '還沒解鎖任何武將，先去玩一局吧。'
       this.loadoutBody.appendChild(empty)
     }
   }
@@ -372,8 +392,7 @@ export class Screens {
       }
     } else {
       const seen = new Set(meta.seenGenerals)
-      const tiers = ['mythic', 'legendary', 'epic', 'fine', 'common'] as const
-      for (const tier of tiers) {
+      for (const tier of TIER_DISPLAY_ORDER) {
         const list = GENERALS.filter((g) => g.tier === tier)
         if (!list.length) continue
         const got = list.filter((g) => seen.has(g.name)).length

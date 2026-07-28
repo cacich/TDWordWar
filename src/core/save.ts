@@ -3,6 +3,7 @@
  * 注意：只存局外 meta 進度，不存局內狀態（GameState 內含 rng 閉包，不可直接序列化）。
  * 若要做局內續玩，需改為存 { seed, rngCallCount } 並在載入時重播 —— 見 docs/llm-wiki/04-invariants.md
  */
+import { isGeneralUnlocked, isLoadoutableGlyph } from '../data/loadout'
 import { SHOP_BY_KEY } from '../data/shop'
 import { MAX_HAND_SIZE, MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, MAX_WISH_SLOTS, type MetaProgress } from '../sim/state'
 
@@ -49,12 +50,13 @@ export function loadMeta(): MetaProgress {
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
       items: items(p.items),
       loadoutActive: typeof p.loadoutActive === 'boolean' ? p.loadoutActive : false,
-      // 只保留仍然「已解鎖」的項目，並夾在上限內——避免存檔被手動改壞或道具表變動後選到不存在的東西
+      // 只保留仍然「已解鎖」且可選的項目，並夾在上限內——避免存檔被手動改壞、
+      // 道具表變動後選到不存在的東西，或姓氏／名字字被舊版存檔留下來
       loadoutGlyphs: arr(p.loadoutGlyphs)
-        .filter((ch) => seenGlyphs.includes(ch))
+        .filter((ch) => seenGlyphs.includes(ch) && isLoadoutableGlyph(ch))
         .slice(0, MAX_LOADOUT_GLYPHS),
       loadoutGenerals: arr(p.loadoutGenerals)
-        .filter((name) => seenGenerals.includes(name))
+        .filter((name) => isGeneralUnlocked(seenGlyphs, seenGenerals, name))
         .slice(0, MAX_LOADOUT_GENERALS),
     }
   } catch {

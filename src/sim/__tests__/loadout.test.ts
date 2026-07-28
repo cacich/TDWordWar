@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mulberry32 } from '../../core/rng'
-import { setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from '../../data/loadout'
+import { isGeneralUnlocked, isLoadoutableGlyph, setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from '../../data/loadout'
 import { GENERALS } from '../../data/generals'
 import { GLYPHS } from '../../data/glyphs'
 import { LEVELS } from '../../data/levels'
@@ -69,6 +69,33 @@ describe('編隊：切換字／武將', () => {
     expect(m.loadoutActive).toBe(true)
     setLoadoutActive(m, false)
     expect(m.loadoutActive).toBe(false)
+  })
+
+  it('姓氏／名字字不能直接選進「攜帶的字」——只能透過武將帶入', () => {
+    const surname = GLYPHS.find((g) => g.category === 'surname')!.char
+    const given = GLYPHS.find((g) => g.category === 'given')!.char
+    expect(isLoadoutableGlyph(surname)).toBe(false)
+    expect(isLoadoutableGlyph(given)).toBe(false)
+    const m = meta({ seenGlyphs: [surname, given] })
+    expect(toggleLoadoutGlyph(m, surname).ok).toBe(false)
+    expect(toggleLoadoutGlyph(m, given).ok).toBe(false)
+    expect(m.loadoutGlyphs).toEqual([])
+  })
+
+  it('兵器／兵種／謀略／經濟字仍可直接選進「攜帶的字」', () => {
+    const weapon = GLYPHS.find((g) => g.category === 'weapon')!.char
+    expect(isLoadoutableGlyph(weapon)).toBe(true)
+  })
+
+  it('武將配方的字都解鎖過就算解鎖，不必真的湊出來過', () => {
+    const gen = GENERALS.find((g) => g.name === '黃蓋')! // 配方 ['黃', '蓋']
+    expect(isGeneralUnlocked([], [], gen.name)).toBe(false)
+    expect(isGeneralUnlocked(gen.recipe, [], gen.name)).toBe(true)
+    expect(isGeneralUnlocked([], [gen.name], gen.name)).toBe(true)
+
+    const m = meta({ seenGlyphs: [...gen.recipe] }) // 沒有實際組成過，只解鎖了配方字
+    expect(toggleLoadoutGeneral(m, gen.name).ok).toBe(true)
+    expect(m.loadoutGenerals).toContain(gen.name)
   })
 })
 

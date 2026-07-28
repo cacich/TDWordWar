@@ -245,16 +245,27 @@ export const SKILLS: Record<string, SkillFn> = {
   玩家可能選出打不了怪的隊伍，這是刻意的（見 `sim/pool.ts` 的 `buildLoadoutPool()`）
 - 唯一的防呆：算出來的字集合若是空的（例如 0 字 0 武將又全部解鎖），退回骨幹字，
   避免 `rollGlyph` 在空池上壞掉
+- **姓氏／名字字（category `surname`／`given`）不能直接選進「攜帶的字」**——它們單獨戰力低，
+  存在的唯一目的是組成武將，只能透過「攜帶的武將」帶入（`data/loadout.ts` 的
+  `isLoadoutableGlyph()`），跟 `sim/pool.ts` 的 ALWAYS／SUPPORT／NAMED_RECIPES 三分法一致
+- **武將的「已解鎖」判定比 `meta.seenGenerals` 寬**：只要配方的字都個別解鎖過
+  （`meta.seenGlyphs` 全部命中）就算解鎖，不必真的湊出來過（`data/loadout.ts` 的
+  `isGeneralUnlocked()`）——否則玩家明明字都抽過了，卻因為沒手動拼過這個武將而選不到它
 
 修改／擴充時的動線：
 
-1. 選字／選武將的上限與切換邏輯在 `data/loadout.ts`（`toggleLoadoutGlyph` / `toggleLoadoutGeneral` /
-   `setLoadoutActive`），跟 `data/shop.ts`／`data/upgrades.ts` 一樣只碰 `MetaProgress`，不碰 `GameState`。
+1. 選字／選武將的上限、可選類別與切換邏輯在 `data/loadout.ts`（`toggleLoadoutGlyph` /
+   `toggleLoadoutGeneral` / `setLoadoutActive` / `isLoadoutableGlyph` / `isGeneralUnlocked`），
+   跟 `data/shop.ts`／`data/upgrades.ts` 一樣只碰 `MetaProgress`，不碰 `GameState`。
 2. 實際套用字池的地方是 `sim/pool.ts` 的 `buildGlyphPool(rng, level, loadout?)`——
    有傳 `loadout` 就完全走 `buildLoadoutPool()`，不會跟原本的隨機抽樣混合。
    `sim/state.ts` 的 `createGame()` 依 `meta.loadoutActive` 決定要不要組出這個參數。
-3. UI 在 `ui/screens.ts` 的 `renderLoadout()`：只列出已解鎖的字／武將（未解鎖的不會出現在選單，
-   不需要額外的「未解鎖」灰階格），點擊呼叫 `ScreensHost` 的 `toggleLoadoutGlyph` / `toggleLoadoutGeneral`。
+3. UI 在 `ui/screens.ts` 的 `renderLoadout()`：字按類別（`LOADOUT_GLYPH_CATEGORIES`）分區、
+   武將按稀有度（`TIER_DISPLAY_ORDER`）分區，只列出已解鎖／可選的項目，
+   點擊呼叫 `ScreensHost` 的 `toggleLoadoutGlyph` / `toggleLoadoutGeneral`。
+4. `core/save.ts` 的 `loadMeta()` 讀舊存檔時，也要用 `isLoadoutableGlyph()` /
+   `isGeneralUnlocked()` 重新過濾 `loadoutGlyphs` / `loadoutGenerals`，
+   否則規則改了但舊存檔裡不合規的項目不會被清掉。
 
 ## 10g. 改 PWA（圖示、名稱、離線快取）
 
