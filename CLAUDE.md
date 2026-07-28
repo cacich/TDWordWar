@@ -10,7 +10,7 @@
 
 ```bash
 npm run dev             # 開發伺服器（http://localhost:5188）
-npm test                # 92 個單元測試，改完務必跑
+npm test                # 109 個單元測試，改完務必跑
 npm run typecheck       # tsc --noEmit
 npm run sim             # 自動平衡：傻 AI 跑 30 局，印出陣亡波次分佈
 npm run sim 16 guandu   # 指定局數與關卡
