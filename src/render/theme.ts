@@ -43,9 +43,13 @@ export const TIER_TINT: Record<Tier, string> = {
   mythic: '#f7dede',
 }
 
-/** 場上提示光暈：可疊合升級＝綠、可湊將＝金 */
+/**
+ * 場上提示光暈：可疊合升級＝青、可湊將＝金。
+ * upgrade 原本用綠色，跟 QUALITY_COLOR 的二階綠（#3f8f4f）幾乎同色，
+ * 二階字牌本身的描邊會跟提示光暈疊在一起分不清楚，所以改用青色跟所有品質／階級色錯開。
+ */
 export const HINT_COLOR = {
-  upgrade: '#3f9f5a',
+  upgrade: '#1fb6c9',
   combine: '#d9a520',
 } as const
 
