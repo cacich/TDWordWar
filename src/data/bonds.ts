@@ -85,9 +85,11 @@ export const BONDS: BondDef[] = [
     cdMul: 0.75,
   },
   {
+    // ⚠ 門檻不能超過 MAX_LOADOUT_GENERALS（見 sim/state.ts）：「蜀」只掛在姓名配方武將上，
+    // 而姓名字無法選進編隊的「攜帶的字」，只能靠武將欄位帶入，所以門檻 > 上限就永遠湊不齊。
     name: '蜀漢棟樑',
-    desc: '場上 6 名以上「蜀」武將：全體攻擊 +15%、攻速 +10%',
-    requireTag: { tag: '蜀', count: 6 },
+    desc: '場上 5 名以上「蜀」武將：全體攻擊 +15%、攻速 +10%',
+    requireTag: { tag: '蜀', count: 5 },
     atkMul: 1.15,
     apsMul: 1.1,
   },

@@ -1,5 +1,6 @@
 /**
- * 全螢幕畫面：選關與圖鑑。
+ * 全螢幕畫面（六個）：選單 menu／圖鑑 codex／兵書 forge／商城 shop／編隊 loadout／開發密技 dev。
+ * 由 show(ScreenName) 統一切換，一次只顯示一個；screen === null 代表回到對局畫面。
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
 import { BONDS } from '../data/bonds'

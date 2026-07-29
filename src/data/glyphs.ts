@@ -48,10 +48,11 @@ export const GLYPHS: GlyphDef[] = [
   },
   {
     char: '陣', category: 'strategy', rarity: 3, atk: 0, aps: 0, range: 0, shape: 'single', tags: ['謀略', '光環'],
-    desc: '布陣。本身不攻擊，使半徑 2 格內的友軍攻擊 +25%。', aura: { radius: 2.2, atkMul: 1.25 }, fx: 'none' },
+    // desc 給玩家看，講一階的效果；實際加成會隨品質階級由 scaleAura() 放大
+    desc: '布陣。本身不攻擊，使半徑 2.2 格內的友軍攻擊 +25%（隨品質提升）。', aura: { radius: 2.2, atkMul: 1.25 }, fx: 'none' },
   {
     char: '令', category: 'strategy', rarity: 3, atk: 0, aps: 0, range: 0, shape: 'single', tags: ['謀略', '光環'],
-    desc: '軍令。本身不攻擊，使半徑 2 格內的友軍攻速 +25%。', aura: { radius: 2.2, apsMul: 1.25 }, fx: 'none' },
+    desc: '軍令。本身不攻擊，使半徑 2.2 格內的友軍攻速 +25%（隨品質提升）。', aura: { radius: 2.2, apsMul: 1.25 }, fx: 'none' },
 
   // ── 經濟（不攻擊，每波產糧；產出 = income × 品質階級） ──
   {

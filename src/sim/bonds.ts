@@ -14,7 +14,15 @@ export interface BondResult {
   active: ActiveBond[]
 }
 
-export function computeBonds(units: Unit[], bondCds: Record<string, number> = {}): BondResult {
+/**
+ * @param perksCdMul 局外道具（兵法傳承）的冷卻倍率。必須傳進來才能讓 active[].combo.cdMax
+ *   跟 stepBondSkills 實際用的 state.cdMul 一致——否則面板顯示的冷卻會比真實值長。
+ */
+export function computeBonds(
+  units: Unit[],
+  bondCds: Record<string, number> = {},
+  perksCdMul = 1,
+): BondResult {
   const generals = units.filter((u) => u.kind === 'general')
   const names = new Set(generals.map((u) => u.defKey))
   const tagCount = new Map<string, number>()
@@ -36,7 +44,9 @@ export function computeBonds(units: Unit[], bondCds: Record<string, number> = {}
     matched.push(b)
   }
 
-  // cdMul 要先全部乘完，組合技的 cdMax 才算得對
+  // cdMul 要先全部乘完，組合技的 cdMax 才算得對；
+  // 並且要跟 stepBondSkills 用的 state.cdMul 同基準（羈絆 × 局外道具），面板才不會顯示錯的冷卻
+  const effectiveCdMul = cdMul * perksCdMul
   const active: ActiveBond[] = matched.map((b) => ({
     name: b.name,
     desc: b.desc,
@@ -44,7 +54,7 @@ export function computeBonds(units: Unit[], bondCds: Record<string, number> = {}
       ? {
           name: b.comboSkill.name,
           cd: Math.max(0, bondCds[b.name] ?? 0),
-          cdMax: b.comboSkill.cd * cdMul,
+          cdMax: b.comboSkill.cd * effectiveCdMul,
         }
       : undefined,
   }))

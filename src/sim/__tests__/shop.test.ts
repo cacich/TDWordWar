@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cellIndex } from '../board'
+import { BONDS } from '../../data/bonds'
 import { placeFromHand, recruit } from '../actions'
 import { dealDamage, damageEnemy } from '../combat'
 import { recruitCost, rerollCost, rollGlyph } from '../economy'
@@ -218,6 +219,28 @@ describe('道具在對局中生效', () => {
     const s = createGame('julu', 1, meta({ items: { bondcd: 3 } }))
     recalcUnits(s) // cdMul 是衍生值，createGame 之後要重算一次才會套用
     expect(s.cdMul).toBeCloseTo(s.perks.cdMul, 5)
+  })
+
+  /**
+   * 迴歸守護：activeBonds 面板顯示的 combo.cdMax 曾經只乘羈絆的 cdMul、
+   * 漏掉 perks.cdMul，導致買了兵法傳承後 UI 顯示的冷卻比實際倒數還長。
+   */
+  it('兵法傳承：組合技面板的 cdMax 與實際倒數同基準', () => {
+    const s = createGame('julu', 1, meta({ items: { bondcd: 3 } }))
+    // 湊出「呂布陳宮」這個有組合技的羈絆
+    for (const [ch, col, row] of [
+      ['呂', 2, 1],
+      ['布', 3, 1],
+      ['陳', 2, 2],
+      ['宮', 3, 2],
+    ] as const) {
+      s.hand[0] = { char: ch, level: 1 }
+      placeFromHand(s, 0, cellIndex(s.board, col, row))
+    }
+    const bond = s.activeBonds.find((b) => b.name === '呂布陳宮')
+    expect(bond?.combo).toBeTruthy()
+    const declared = BONDS.find((b) => b.name === '呂布陳宮')!.comboSkill!.cd
+    expect(bond!.combo!.cdMax).toBeCloseTo(declared * s.cdMul, 5)
   })
 
   it('廣結善緣：familiarBoostMul 提高熟悉字被抽到的權重', () => {

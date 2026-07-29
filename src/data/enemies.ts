@@ -1,5 +1,5 @@
 /**
- * 敵表。HP = BASE_HP × 1.18^wave × hpMul（見 sim/waves.ts）
+ * 敵表。HP = BASE_HP × HP_GROWTH^wave × hpMul（目前 HP_GROWTH = 1.25，見 sim/waves.ts）
  * troop 用於三向相剋：騎 → 弓 → 步 → 騎（克制 +25%，被克 −25%）
  */
 import type { EnemyDef } from '../sim/types'

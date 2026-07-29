@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mulberry32 } from '../../core/rng'
+import { BONDS } from '../../data/bonds'
 import { isGeneralUnlocked, isLoadoutableGlyph, setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from '../../data/loadout'
 import { GENERALS } from '../../data/generals'
 import { GLYPHS } from '../../data/glyphs'
@@ -18,6 +19,36 @@ function meta(overrides: Partial<MetaProgress> = {}): MetaProgress {
     ...overrides,
   }
 }
+
+describe('編隊上限與羈絆門檻的相容性', () => {
+  /**
+   * 迴歸守護：姓名字無法選進 loadoutGlyphs，只能靠 loadoutGenerals 帶入，
+   * 所以「只由姓名配方武將滿足」的羈絆門檻不能超過 MAX_LOADOUT_GENERALS，
+   * 否則該羈絆在啟用編隊時永遠湊不齊（蜀漢棟樑曾經是 6，就踩到這個坑）。
+   * 「部隊」武將不受限——它們的配方是兵器／兵種字，可直接選進 loadoutGlyphs。
+   */
+  it('每個羈絆的門檻在啟用編隊時都達成得到', () => {
+    for (const b of BONDS) {
+      if (b.requireGenerals) {
+        expect(
+          b.requireGenerals.length,
+          `羈絆「${b.name}」需要 ${b.requireGenerals.length} 名指定武將，超過編隊上限 ${MAX_LOADOUT_GENERALS}`,
+        ).toBeLessThanOrEqual(MAX_LOADOUT_GENERALS)
+        continue
+      }
+      if (!b.requireTag) continue
+      const matching = GENERALS.filter((g) => g.tags.includes(b.requireTag!.tag))
+      // 能靠「攜帶的字」湊出來的（部隊系）不吃武將欄位上限
+      const viaGlyphs = matching.filter((g) => g.recipe.every((ch) => isLoadoutableGlyph(ch)))
+      if (viaGlyphs.length >= b.requireTag.count) continue
+      expect(
+        b.requireTag.count,
+        `羈絆「${b.name}」需要 ${b.requireTag.count} 名「${b.requireTag.tag}」武將，` +
+          `但符合的武將只能透過編隊武將欄位帶入（上限 ${MAX_LOADOUT_GENERALS}）`,
+      ).toBeLessThanOrEqual(MAX_LOADOUT_GENERALS)
+    }
+  })
+})
 
 describe('編隊：切換字／武將', () => {
   it('未解鎖的字無法加入編隊', () => {

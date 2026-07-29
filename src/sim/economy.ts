@@ -30,7 +30,14 @@ export function unitIncome(state: GameState): number {
   return Math.round(sum)
 }
 
-/** 稀有度權重表：波次越後面，越容易抽到姓氏／名字字 */
+/**
+ * 稀有度權重表：波次越後面，越容易抽到姓氏／名字字。
+ * 每一列對應 rarity 1/2/3/4；`rollGlyph` 用 `w[g.rarity - 1]` 取值。
+ *
+ * ⚠ **第 4 欄目前是死的**：`data/glyphs.ts` 裡沒有任何 rarity 4 的字
+ * （分布為 rarity1=5／rarity2=29／rarity3=37），所以索引 3 永遠不會被讀到。
+ * 保留它是為了將來要加「傳說級單字」時有位子；在那之前調整第 4 欄不會有任何效果。
+ */
 const RARITY_TABLE: { untilWave: number; w: [number, number, number, number] }[] = [
   { untilWave: 5, w: [70, 25, 5, 0] },
   { untilWave: 12, w: [50, 32, 15, 3] },

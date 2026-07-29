@@ -9,7 +9,9 @@
  * 因此得到全中性 Perks，難度基準不受影響。
  *
  * 平衡基準：打完一關約 25～45 聲望。每種道具買到 1 級成本 130～240，
- * 全部 16 種道具買滿 3 級總價約 9000 聲望，是長期養成目標，不是短期就能集滿。
+ * 全部 16 種道具買滿 3 級總價 13590 聲望（≈300～540 局），是超長期目標而非可集滿的清單——
+ * 設計意圖是讓玩家永遠在「這局的聲望要投哪一項」之間取捨。
+ * ⚠ 聲望與兵書共用（兵書買滿另需 1230），調價時要一起看。
  */
 import type { Perks } from '../sim/types'
 import type { MetaProgress } from '../sim/state'
@@ -33,7 +35,12 @@ export interface ShopItem {
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`
 
-/** 標準價格曲線：第一級 base，之後每級 ×1.55 左右成長（跟兵書的 cost(level) 手感一致） */
+/**
+ * 標準價格曲線：線性遞增，第 n 級（0-based）= base + n × round(base × 0.55)。
+ * 三級的實際倍率是 1× / 1.55× / 2.10×（**加法**，不是每級再乘 1.55）。
+ * 刻意用線性而非指數：道具效果本身也是線性遞增（例如 +8%／+14%／+20%），
+ * 價格若用指數成長，第 3 級的性價比會差到沒人想買。
+ */
 function stdCost(base: number): (level: number) => number {
   return (level) => base + level * Math.round(base * 0.55)
 }

@@ -48,9 +48,13 @@ export interface MetaProgress {
    * 已解鎖但沒被選進編隊的字／武將會被排除。見 data/loadout.ts、sim/pool.ts。
    */
   loadoutActive: boolean
-  /** 編隊選的字（最多 MAX_LOADOUT_GLYPHS 個，須是 seenGlyphs 裡的字） */
+  /** 編隊選的字（最多 MAX_LOADOUT_GLYPHS 個，須是 seenGlyphs 裡「非姓名」的字） */
   loadoutGlyphs: string[]
-  /** 編隊選的武將（最多 MAX_LOADOUT_GENERALS 個，須是 seenGenerals 裡的武將） */
+  /**
+   * 編隊選的武將（最多 MAX_LOADOUT_GENERALS 個）。
+   * 解鎖判定比 seenGenerals 寬：配方字都在 seenGlyphs 裡也算解鎖，
+   * 見 data/loadout.ts 的 isGeneralUnlocked()。
+   */
   loadoutGenerals: string[]
 }
 
@@ -72,8 +76,17 @@ export const DEFAULT_META: MetaProgress = {
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3
 export const MAX_LOADOUT_GLYPHS = 8
-// 5 是 BONDS 裡最大的 requireGenerals 數量（五虎上將），編隊上限跟著看齊，
-// 才能讓玩家一次把某個羈絆需要的全部武將都排進編隊
+/**
+ * 5 = BONDS 裡最大的 requireGenerals 數量（五虎上將），編隊上限跟著看齊，
+ * 才能讓玩家一次把某個羈絆需要的全部武將都排進編隊。
+ *
+ * ⚠ 新增羈絆時的硬約束：**任何靠姓名配方武將達成的門檻都不能超過這個數字**。
+ * 姓名字無法選進 loadoutGlyphs（見 data/loadout.ts 的 isLoadoutableGlyph），
+ * 只能透過 loadoutGenerals 帶入，所以 requireGenerals.length 或
+ * requireTag.count 一旦大於 5，該羈絆在啟用編隊時就永遠湊不齊。
+ * 例外：tag 掛在「部隊」武將上的羈絆（如虎狼之師）不受限——
+ * 部隊的配方是兵器／兵種字，可以直接選進 loadoutGlyphs。
+ */
 export const MAX_LOADOUT_GENERALS = 5
 
 /** 每局結束獲得的聲望：波次是主要來源，擊殺是零頭 */
@@ -348,7 +361,7 @@ export function recalcUnits(state: GameState): void {
   }
 
   // 2. 羈絆
-  const bonds = computeBonds(state.units, state.bondCds)
+  const bonds = computeBonds(state.units, state.bondCds, state.perks.cdMul)
   state.activeBonds = bonds.active
   // 兵法傳承：局外道具再疊一層冷卻倍率，跟羈絆的 cdMul 相乘
   state.cdMul = bonds.cdMul * state.perks.cdMul

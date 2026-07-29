@@ -69,7 +69,7 @@ export interface GlyphDef {
   aura?: Aura
   /** 每波結算時產出的糧（經濟字）。實際產出 = income × 品質階級 */
   income?: number
-  /** 攻擊特效樣式；未指定則由 sim/state.ts 的 deriveFx() 推導 */
+  /** 攻擊特效樣式；未指定則由 sim/state.ts 的 deriveGlyphFx() 推導 */
   fx?: FxKind
 }
 
@@ -144,12 +144,12 @@ export interface Unit {
   memberIds: number[]
   tier: Tier
   tags: string[]
-  // 未計入羈絆的基礎值
+  // 未計入任何加成的基礎值
   baseAtk: number
   baseAps: number
   baseRange: number
   shape: AttackShape
-  // 計入羈絆後的實效值，由 recalcUnits() 覆寫
+  // 實效值，由 recalcUnits() 覆寫：基礎值 × 羈絆 × 局外道具 perks × 光環
   atk: number
   aps: number
   range: number
@@ -387,7 +387,7 @@ export interface GameState {
   activeBonds: ActiveBond[]
   /** 組合技冷卻，key = 羈絆名 */
   bondCds: Record<string, number>
-  /** 羈絆提供的技能冷卻倍率，由 recalcUnits 寫入 */
+  /** 技能冷卻倍率，由 recalcUnits 寫入 = 羈絆的 cdMul × perks.cdMul（兵法傳承） */
   cdMul: number
   nextUnitId: number
   nextEnemyId: number
