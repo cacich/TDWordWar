@@ -23,9 +23,9 @@
 | 字表 | `GLYPHS` / `GlyphDef` | `data/glyphs.ts` |
 | 配方 | `recipe` / `RECIPE_INDEX` | `['張','飛']`，正讀順序 |
 | 配方表 | `GENERALS` / `GeneralDef` | `data/generals.ts` |
-| 組詞／成將 | `findCombination` / `tryCombine` | 判定在 `sim/combine.ts`，執行在 `sim/actions.ts` |
+| 組詞／成將 | **`findCombinations`**（複數）/ `tryCombine` | 判定在 `sim/combine.ts`，執行在 `sim/actions.ts`。⚠ 單數版 `findCombination` 只給測試用，會丟掉第二個方向 |
 | 品質階級 | `Unit.level` / `HandCard.level` | 一階～五階，同字同階疊合可升階 |
-| 疊合 | merge（`placeFromHand` / `moveUnit` / `mergeHand`） | 棋盤上或手牌之間都可以 |
+| 疊合 | merge（`placeFromHand` / `moveGlyph` / `mergeHand`） | 棋盤上或手牌之間都可以 |
 | 控場 | `OnHit` + `Enemy` 上的秒數欄位 | 灼燒 burn / 減速 slow / 定身 stun / 易傷 vuln / 擊退 knock / 連鎖 chain |
 | 光環 | `Aura` | 影響半徑內其他單位，「陣」「令」 |
 | 主動技 | `GeneralDef.skill` + `SKILLS[名]` | 宣告在 data、實作在 `sim/skills.ts` |
@@ -49,7 +49,8 @@
 | 戰鬥階段 | `phase: 'battle'` | |
 | 征兵 | `recruit()` | 花糧抽滿手牌 |
 | 熔爐 | `smelt()` | 分解手牌換糧 |
-| 鏟子／鏟除 | `sellUnit()` | 移除場上單位 |
+| 鏟子／鏟除 | `sellGlyph()` | 移除場上字牌，相關武將由 `dissolveFormsOf()` 一併解除 |
+| 搬動字牌 | `moveGlyph()` | 一律搬字牌而非整個武將 |
 | 手牌 | `state.hand` | 長度 = `handSize` |
 | 空地 | `TileKind: 'plot'` | 可放置 |
 | 路 | `TileKind: 'path'` | 敵人走的格子 |
@@ -62,4 +63,12 @@
 | 攻擊型態 | `shape` | single 單體 / pierce 穿透 / splash 濺射 |
 | 索敵 | `targeting` | front 最前 / near 最近 / strong 最強 |
 | 特效 | `Effect` | 純資料，`render` 負責畫 |
-| 局外養成 | `MetaProgress` | 手牌格數、初始糧、初始生命 |
+| 局外養成 | `MetaProgress` | 定義在 `sim/state.ts`：手牌格數、初始糧／生命、心願格、聲望、圖鑑進度、通關記錄、商城道具等級、編隊設定 |
+| 聲望 | `meta.renown` | 局外貨幣，兵書與商城共用；每局結束依抵達波次結算 |
+| 兵書 | `UPGRADES`（`data/upgrades.ts`） | 4 種數值養成，效果直接寫進 `MetaProgress` |
+| 商城 | `SHOP`（`data/shop.ts`） | 16 種可升級被動道具，每種 3 級 |
+| 局外道具效果 | `Perks`（`sim/types.ts`） | 由 `perksFrom()` 依道具等級推導，`createGame` 注入 `state.perks`。等級 0 必須是中性值 |
+| 編隊 | `data/loadout.ts` + `meta.loadout*` | 手動挑選字池內容（8 字 + 5 武將）；姓名字只能透過武將帶入 |
+| 圖鑑 | `meta.seenGlyphs` / `seenGenerals` | 由 app 層的 `syncProgress()` 每幀累積 |
+| 開發密技 | `core/devtools.ts` | 選單標題連點 7 下開啟，測試後門、不經 `actions.ts` 驗證 |
+| 提示光暈 | `state.hintCells` | `recalcUnits` 的衍生值：可疊合＝青、可湊將＝金 |

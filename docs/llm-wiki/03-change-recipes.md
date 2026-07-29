@@ -64,15 +64,23 @@ function composition(wave: number): string[] {
 myLevel: {
   key: 'myLevel', name: '街亭', subtitle: '窄路，落點極少',
   startFood: 24, lives: 3, maxWave: 20, hpMul: 1.1,
+  pool: { support: 4, generals: 5 },   // ★ 必填，漏掉會 TS 編譯錯誤
   map: ['S########', 'PPPPPPPP#', '#########', /* … 每列長度必須一致 */],
 }
 ```
 
-隨機地形：把 `map` 換成 `gen`，其他都一樣。
+`pool` 決定本局字池大小：`support` = 抽幾個謀略／經濟字，`generals` = 抽幾組姓名配方
+（成組加入，不會產生湊不成配方的孤兒字）。教學關用小數字（2/3），後期關卡用大數字（7/9）。
+
+隨機地形：把 `map` 換成 `gen`，其他欄位（含 `pool`）都一樣。
 
 ```ts
 gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 ```
+
+⚠ `cols` 至少要 5（檔內 `MIN_RUN = 4`），否則路會退化成垂直直線。
+`minPathLen` 訂太高不會拋錯——`generateMap` 重試 24 次後會保留最長的那條照樣回傳，
+只有測試會抓到。
 
 調隨機地形的手感：`minPathLen` 拉高 → 路更長更繞；`blockRate` 拉高 → 可放置的地更零碎。
 改完跑 `npm test`（mapgen 測試會用 180 張地圖驗證連通性）與 `npm run sim 16 myLevel`。
@@ -308,4 +316,9 @@ npm run sim 100      # 跑 100 局統計，比手動試玩快得多
 npm test -- combine  # 只跑組詞相關測試
 ```
 
-要重現特定對局：`src/app.ts` 裡把 `createGame('julu', Date.now() >>> 0, meta)` 的種子換成固定數字。
+要重現特定對局：`src/app.ts` 的 `createGame('huangjin', newSeed(), meta)`，把 `newSeed()`
+換成固定數字（`newSeed()` 定義在同檔案底部，就是 `Date.now() >>> 0`）。
+
+⚠ 「同種子 → 同一場對局」的前提是**同一份 meta**。編隊開關與商城道具都會改變
+亂數的消耗量（見 [modules/05](modules/05-economy-and-waves.md) 與 [modules/06](modules/06-meta-progression.md)），
+所以重現 bug 時要連 meta 一起對齊。

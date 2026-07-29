@@ -1,0 +1,258 @@
+# 局外進度：存檔、兵書、商城、編隊
+
+> **負責檔案**
+>
+> | 檔案 | 規模 | 職責 |
+> |---|---|---|
+> | `src/core/save.ts` | 104 行 | localStorage 讀寫、版本遷移、載入時的資料清洗 |
+> | `src/data/upgrades.ts` | 85 行 | 兵書：4 種永久數值養成，效果**直接寫進 MetaProgress** |
+> | `src/data/shop.ts` | 275 行 | 商城：16 種可升級被動道具，效果**經 Perks 注入 GameState** |
+> | `src/data/loadout.ts` | 78 行 | 編隊：手動挑選字池內容的規則與切換 |
+> | `src/core/devtools.ts` | 55 行 | 開發密技：直接竄改 state／meta 的測試後門 |
+>
+> **上游依賴**：`sim/state.ts`（`MetaProgress`、`DEFAULT_META`、`MAX_*` 常數、`renownFor`）、
+> `sim/types.ts:297-332`（`Perks`）、`data/glyphs.ts`、`data/generals.ts`。
+>
+> **下游使用者**：`main.ts:11`（`loadMeta()` → `new App`）、`app.ts`（唯一呼叫 `saveMeta` 的地方）、
+> `ui/screens.ts`（兵書／商城／編隊／密技四個畫面）、`sim/state.ts:110`（`perksFrom`）、
+> `sim/pool.ts:58-93`（編隊字池）。
+
+## 這個模組解決什麼問題
+
+局內（`GameState`）每局重置；玩家跨局累積的東西全部住在 `MetaProgress` 這一個物件裡，
+序列化成一條 localStorage 字串。四個系統共用同一種貨幣「聲望」：
+
+| 系統 | 存哪裡 | 怎麼影響對局 | 檔案 |
+|---|---|---|---|
+| 圖鑑 | `seenGlyphs` / `seenGenerals` | 不影響（純收集紀錄），但是編隊的解鎖判定來源 | 由 `app.ts:122-153` 每幀寫入 |
+| 兵書 | `handSize` / `wishSlots` / `extraFood` / `extraLives` | `createGame` 直接讀這些欄位 | `data/upgrades.ts` |
+| 商城 | `items`（key → 等級） | 先推導成 `Perks`，再注入 `GameState.perks` | `data/shop.ts` |
+| 編隊 | `loadoutActive` / `loadoutGlyphs` / `loadoutGenerals` | `createGame` 轉成 `LoadoutConfig` 給 `buildGlyphPool` | `data/loadout.ts` |
+
+分工的關鍵差別：**兵書改的是 meta 欄位本身**（所以 `UpgradeDef.level()` 得從欄位值反推等級），
+**商城改的是一張獨立的等級表**（等級直接存著，效果每局重算）。新增養成項目時先決定屬於哪一類。
+
+## 核心概念
+
+### ★ 不變量：`perksFrom()` 在等級 0 必須回傳中性值
+
+`NEUTRAL_PERKS`（`data/shop.ts:230-248`）是中性值的**單一真相來源**，
+`perksFrom()`（`:251-258`）先 spread 它，再只對 `lv > 0` 的道具呼叫 `apply`。
+
+```
+倍率類（*Mul）中性 = 1　　機率／間隔類（*Chance、meteorInterval、healEveryWaves）中性 = 0
+```
+
+為什麼是不變量：`npm run sim` 的 `createGame(LEVEL, seed)`（`tools/autobalance.ts:63`）走 `DEFAULT_META`，
+`items` 為 `{}` → 全中性 Perks。**任何一個欄位的中性值寫錯，整份難度基準（黃巾 12／董卓 18／巨鹿 20…）就全部失效**，
+而且會靜默失效——模擬照跑，只是數字不再可比。守護測試：`sim/__tests__/shop.test.ts:51-74`
+（逐欄比對全 17 個中性值）與 `:76-86`（每種道具只准動自己那 1 欄，`crit` 例外動 2 欄）。
+
+### 為什麼要 Perks 這層間接
+
+`sim/` 只認識 `Perks` 這個中性的扁平結構，**完全不知道商城存在**：
+沒有 `items`、沒有價格、沒有 key 字串。好處有三：
+
+1. 維持分層（`sim/` 不 import 存檔或 UI），`npm run sim` 與單元測試能直接捏 `state.perks.xxx` 做定點測試
+   （見 `shop.test.ts:113`、`:135`、`:178` 都是直接改 perks 欄位、避免依賴亂數）。
+2. 商城可以任意改價、改等級曲線、換道具名稱，`sim/` 一行都不用動。
+3. `Perks` 整局固定（`createGame` 算一次），所以 `recalcUnits` 每次重算都能安全地重乘一遍。
+
+**⚠ 效果只在「下一局開始」生效**（`ui/screens.ts:158` 的說明文字就是這件事），
+因為 `perksFrom` 只在 `createGame`（`sim/state.ts:110`）被呼叫過一次。
+
+### Perks 的 17 個欄位在 sim 的讀取點
+
+| 欄位 | 中性值 | 道具 | sim 讀取點 |
+|---|---|---|---|
+| `recruitEliteChance` | 0 | `elite` 精兵符 | `sim/actions.ts:49`（征兵時每格判定 → level 2） |
+| `meteorInterval` | 0 | `meteor` 流星火雨 | `sim/step.ts:45`（`<= 0` 直接 return）、`:48`；初值寫進 `sim/state.ts:148` 的 `meteorTimer` |
+| `incomeMul` | 1 | `supply` 糧道暢通 | `sim/step.ts:151`（只乘 `waveIncome`，**不含** `unitIncome`） |
+| `healEveryWaves` | 0 | `medic` 杏林春暖 | `sim/step.ts:162-163`（`checkWaveEnd` 內，勝利 return 之後） |
+| `atkMul` | 1 | `banner` 號令旗 | `sim/state.ts:371`（`recalcUnits`，乘在羈絆 `atkMul` 之後） |
+| `apsMul` | 1 | `gale` 疾風令 | `sim/state.ts:372` |
+| `critChance` | 0 | `crit` 奇兵秘計 | `sim/combat.ts:187` |
+| `critMul` | 1 | `crit`（同一個 `apply` 寫兩欄） | `sim/combat.ts:188` |
+| `extraLives` | 0 | `fortify` 鐵壁工事 | `sim/state.ts:129-130`（`lives` 與 `maxLives` 同時加） |
+| `costMul` | 1 | `thrift` 輕裝簡從 | `sim/economy.ts:12`（`recruitCost`）、`:102`（`rerollCost`） |
+| `familiarBoostMul` | 1 | `familiar` 廣結善緣 | `sim/actions.ts:43`／`:70` 塞進 `RollContext` → `sim/economy.ts:81` 乘在 `FAMILIAR_BOOST` 上 |
+| `leakBlockChance` | 0 | `leakshield` 回魂旗 | `sim/step.ts:129`（`stats.leaks` 照計，只擋扣命） |
+| `splashMul` | 1 | `splash` 烽火連城 | `sim/combat.ts:308`（pierce）、`:318`（splash） |
+| `bountyMul` | 1 | `bounty` 狩獵好手 | `sim/combat.ts:157`（`damageEnemy` 的死亡結算，`foodEarned` 也吃這個值） |
+| `enemySpeedMul` | 1 | `enemyslow` 沼澤泥沼 | `sim/step.ts:122`（乘在 `SLOW_FACTOR` 之後） |
+| `rangeMul` | 1 | `range` 精工兵器 | `sim/state.ts:374`（乘在 `effectiveRange` 之後） |
+| `cdMul` | 1 | `bondcd` 兵法傳承 | `sim/state.ts:367` → 寫入 `state.cdMul`，再由 `sim/state.ts:397`（`skillCdMax`）與 `sim/bonds.ts:47`／`:66`（組合技 `cdMax`）讀取 |
+
+沒有第 18 個讀取點：`state.perks` 只被上表這幾處讀。要加新欄位就照這張表補一行。
+
+### 價格曲線：線性，不是指數
+
+`stdCost(base)`（`data/shop.ts:44-46`）：
+
+```ts
+(level) => base + level * Math.round(base * 0.55)
+```
+
+三級的實際倍率是 **1× / 1.55× / 2.10×（加法）**，不是每級再乘 1.55（那會是 1× / 1.55× / 2.40×）。
+理由寫在原始碼註解：道具效果本身也是線性遞增（例如 +8%／+14%／+20%），
+價格若指數成長，第 3 級性價比會差到沒人買。
+
+買滿總價（改價時的兩個對照數字）：
+
+| | 買滿聲望 | 換算局數（一局 25～45） |
+|---|---|---|
+| 商城 16 種 × 3 級 | **13590**（只買到 1 級是 2920） | ≈300～540 局 |
+| 兵書 4 項全滿 | **1230**（hand 360 + wish 240 + food 270 + lives 360） | ≈28～50 局 |
+
+兩者共用同一個 `meta.renown`，所以商城是超長期投資標的、兵書是短期「先買哪一項」的決策。
+**動任何一邊的價格都要重算另一邊的相對吸引力。**
+
+### 聲望結算
+
+公式在 `sim/state.ts:93-95`（放在 sim 是為了讓測試不必碰 app 層）：
+
+```ts
+renownFor(wave, kills, won) = max(1, round(wave * 1.5 + kills * 0.05) + (won ? 20 : 0))
+```
+
+波次是主要來源，擊殺是零頭，通關 +20。呼叫點只有 `app.ts:159`，
+用 `this.renownPaid` 旗標保證 **一局只結一次**（`phase` 變成 `won`／`lost` 後每幀都會經過那段）。
+
+## 主要流程
+
+### 開機載入與清洗（`core/save.ts:30-65`）
+
+```
+localStorage['tdwordwar.meta.v3']（沒有 → 依序找 LEGACY_KEYS: v2, v1）
+  → JSON.parse
+  → 逐欄補預設值 + clamp（handSize 5..8、extraFood 0..50、extraLives 0..5、wishSlots 1..3、renown >= 0）
+  → items(p.items)：舊版 string[] → Record<key, level>（見下）
+  → loadoutGlyphs 重新過濾：seenGlyphs.includes(ch) && isLoadoutableGlyph(ch)，再 slice(0, 8)
+  → loadoutGenerals 重新過濾：isGeneralUnlocked(seenGlyphs, seenGenerals, name)，再 slice(0, 5)
+  → 任何 throw → { ...EMPTY_META }
+```
+
+**重點：`loadMeta` 是每次開機都跑的資料清洗器**，不只是反序列化。
+規則改了（例如某個字改成 `surname` 類別、某個武將被刪掉、`MAX_LOADOUT_*` 調小），
+舊存檔的編隊內容會在下次載入時自動被清掉，不需要寫遷移程式。
+反過來說：**編隊的合法性規則只要放進 `isLoadoutableGlyph`／`isGeneralUnlocked`，就自動具備向後相容。**
+
+`items()`（`:71-88`）的相容轉換：舊版 `items` 是 `string[]`（一次性擁有）→ 全部視為 Lv.1；
+新版是物件 → 逐一 `clamp(floor(lv), 0, def.max)`，`SHOP_BY_KEY` 查不到的 key 直接丟棄。
+
+### 寫入（`saveMeta`）
+
+`saveMeta` 本身沒有節流，**節流在 app 層**：`app.ts:165-171`，
+`metaDirty` 旗標 + `saveTimer` 倒數，最多每 2 秒寫一次（圖鑑是每幀掃描的，不節流會每幀寫 localStorage）。
+但**購買／編隊／密技類操作是立即寫入**（`app.ts:289`、`:296`、`:305`、`:311`、`:318`、`:326`、`:347`）——
+它們發生在選單畫面，`syncProgress` 因為 `screens.visible` 早退（`app.ts:123`）不會跑到節流那段。
+
+### 購買（兵書與商城完全同構）
+
+```
+buyUpgrade(meta, key)  /  buyItem(meta, key)
+  找 def（找不到 → { ok:false }）
+  → 讀目前等級（兵書從 meta 欄位反推；商城讀 meta.items[key] ?? 0）
+  → 已滿級 → 擋
+  → def.cost(lv) > meta.renown → 擋
+  → meta.renown -= cost；兵書呼叫 def.apply(meta)／商城 meta.items[key] = lv + 1
+  → 回傳 BuyResult { ok, msg }（msg 直接進 toast，見 app.ts:291）
+```
+
+兩者都**原地改 meta、不回傳新物件**，呼叫端要自己 `saveMeta` 並重繪畫面。
+
+### 編隊套用（跨到 sim 的路徑）
+
+```
+meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state.ts:105-107
+  → buildGlyphPool(rng, level, loadout)                             // sim/state.ts:108
+  → buildLoadoutPool()                                              // sim/pool.ts:75-93
+     編隊字 ∪ 編隊武將的 recipe 字 ∪ 全部「還沒解鎖過」的字
+     （空池防呆 → 退回 ALWAYS 骨幹字）
+```
+
+`loadoutActive = false` 時完全走原本的隨機抽樣，`loadoutGlyphs` 不影響任何東西
+（`sim/__tests__/loadout.test.ts:172-187` 守這件事）。字池與抽卡加權的規則本身在 `sim/pool.ts`／`sim/economy.ts`。
+
+## 契約與陷阱
+
+**★ `perksFrom()` 等級 0 必須中性。** 見上。改 `NEUTRAL_PERKS` 或新增 Perks 欄位時，
+`shop.test.ts:51-74` 那份硬編碼清單也要同步，否則測試會告訴你哪裡漏了。
+
+**⚠ `MAX_LOADOUT_GENERALS = 5` 是新增羈絆的硬約束**（宣告與理由在 `sim/state.ts:79-90`）。
+姓名字**不能**選進 `loadoutGlyphs`，只能透過 `loadoutGenerals` 帶入，
+所以任何「只能靠姓名配方武將達成」的羈絆門檻（`requireGenerals.length` 或 `requireTag.count`）
+一旦 > 5，該羈絆**在啟用編隊時就永遠湊不齊**。蜀漢棟樑曾經是 6，踩過這個坑。
+例外：tag 掛在「部隊」武將上的羈絆（虎狼之師）不受限，因為部隊配方是兵器／兵種字，可直接選進 `loadoutGlyphs`。
+守護測試：`sim/__tests__/loadout.test.ts:23-51`（會逐一列出違規的羈絆名稱）。
+`5` 這個數字本身 = `BONDS` 裡最大的 `requireGenerals` 長度（五虎上將），要動就兩邊一起動。
+
+**⚠ 編隊的兩條非顯而易見規則。**
+(a) `isLoadoutableGlyph`（`data/loadout.ts:22-25`）只允許 `weapon`／`troop`／`strategy`／`economy` 四類；
+`surname`／`given` 被排除，因為姓名字單獨戰力極低、存在的唯一目的是組武將——
+讓玩家選「張」而不是選「張飛」只會浪費格子。這也和 `sim/pool.ts` 的 ALWAYS／SUPPORT／NAMED_RECIPES 三分法一致。
+(b) `isGeneralUnlocked`（`:33-41`）比 `seenGenerals` **寬**：配方字都在 `seenGlyphs` 裡就算解鎖，
+不必真的湊出來過——否則玩家明明字都抽過了卻選不到那名武將，會很困惑。
+它刻意接收兩個陣列而不是整個 `MetaProgress`，這樣 `core/save.ts:59` 才能在物件還沒組完時就呼叫。
+
+**⚠ 買道具會改變 rng 呼叫序列，同種子只在「同一份 `meta.items`」下可重現。**
+`sim/actions.ts:49` 的精兵符判定**無條件**消耗一次 `rng()`（所以中性時也照樣消耗，基準穩定），
+但 `sim/combat.ts:187` 的爆擊判定有 `critChance > 0 &&` 短路（中性時不消耗）。
+結論：買了奇兵秘計後，整條 rng 流會位移。回報 bug 時種子必須連同 `items` 一起附上。
+
+**⚠ `EMPTY_META`（`core/save.ts:14-28`）與 `DEFAULT_META`（`sim/state.ts:61-75`）是兩份重複定義。**
+新增 `MetaProgress` 欄位要改 **4 個地方**：型別、`DEFAULT_META`、`EMPTY_META`、`loadMeta` 的解析與 clamp。
+漏掉 `loadMeta` 的話新欄位會是 `undefined`，執行期才炸。
+
+**⚠ 兵書的 `level()` 是從 meta 欄位反推的。** 例如 `food` 的 `level: (m) => Math.round(m.extraFood / 6)`
+搭配 `apply: (m) => { m.extraFood += 6 }`。改步長（6）必須同時改除數，否則等級顯示與滿級判定會錯亂；
+`core/save.ts` 的 clamp 上限（`extraFood` 0..50、`extraLives` 0..5）也要留足餘裕（目前 max 4 級 × 6 = 24）。
+
+**⚠ `sim/` 不能 import `core/save.ts`。** `localStorage` 在 Node 不存在（`npm run sim` 會炸）。
+現況只有 `main.ts` 與 `app.ts` 認識存檔。`saveMeta`／`loadMeta` 都有 try/catch，是為了瀏覽器隱私模式。
+
+**依賴方向的既有例外**：`data/loadout.ts:14` 從 `sim/state.ts` import `MAX_LOADOUT_*`（值，不只型別），
+`data/shop.ts` 也 import `type { Perks }`／`type { MetaProgress }`。`data → sim` 這條邊只放常數與型別，
+不要以為可以把 `MAX_LOADOUT_GENERALS` 搬進 `data/`——它跟 `MAX_HAND_SIZE` 等一起住在 `sim/state.ts:76-90`。
+
+**只存局外 meta，不存局內狀態。** `GameState` 含 `rng` 閉包，`JSON.stringify` 會靜默丟掉它。
+**但**：`mulberry32`（`core/rng.ts:5-14`）的內部狀態只是**單一個 uint32 `a`**，
+所以「局內續玩」的成本遠低於舊文件說的「存 seed + 重播整局」——只要讓 rng 額外暴露／接受那個 uint32
+（例如回傳 `{ next, getState, setState }`）就能精確續存。擴充方向見 [../06-roadmap.md](../06-roadmap.md)。
+
+**靜音設定不在這裡。** `tdwordwar.muted` 是獨立的 key，讀寫在 `app.ts:486-502`，不走 `MetaProgress`。
+
+**`loadMeta` 不清洗 `seenGlyphs`／`seenGenerals`。** `arr()`（`:98-100`）只過濾非字串。
+刪掉某個字／武將後，舊存檔會殘留不存在的識別字；目前無害（圖鑑 UI 是迭代 `GLYPHS` 再比對 Set，
+編隊過濾也會因為查不到 def 而回 false），但新增讀 `seenGlyphs` 的程式碼時不要假設每個元素都查得到 def。
+
+**開發密技刻意繞過驗證。** `core/devtools.ts` 直接改 `state`／`meta`，**不經過 `sim/actions.ts`**——
+這是明知故犯的例外（檔頭註解有寫），與 `main.ts` 的 `__dev` console 掛載點同等級的測試後門。
+入口：選單標題 **2.5 秒內連點 7 下**（`ui/screens.ts:103-112` 的 `handleTitleTap`），面板在 `:164-205`。
+凡是改 `state.units`／`state.hand` 的密技都必須自己呼叫 `recalcUnits`（`devtools.ts:28`、`:53` 已經有）。
+`devClearEnemies` 靠清空 `enemies` + `spawnQueue`，讓下一幀的 `checkWaveEnd` 自然結算進下一波。
+
+## 我想改 X → 動哪裡
+
+| 想改什麼 | 動哪裡 | 注意 |
+|---|---|---|
+| 調某個道具的數值 | `data/shop.ts` 對應項的 `detail` + `apply` 兩個陣列 | 兩處等級數必須一致，且 `apply` 只准寫自己那一欄（`shop.test.ts:76-86` 會抓） |
+| 新增一種商城道具 | ① `sim/types.ts:297` 加 `Perks` 欄位 → ② `data/shop.ts:230` 加中性值 → ③ `SHOP` 加一項（`cost: stdCost(base)`）→ ④ 在 `sim/` 讀取點乘進去 → ⑤ 更新 `shop.test.ts:51-74` 的中性清單 | **中性值一定要是 1 或 0**；讀取點記得寫上「中性時為何無影響」的註解；跑 `npm run sim` 確認中位數沒變 |
+| 改道具價格 | `stdCost(base)` 的 base，或整條曲線（`data/shop.ts:44-46`） | 重算買滿總價，跟兵書的 1230 一起看；`shop.test.ts:44-48` 要求逐級遞增 |
+| 提高道具等級上限 | `MAX_ITEM_LEVEL`（`data/shop.ts:20`）+ 每項的 `detail`／`apply` 陣列補值 | `apply` 用 `[...][lv-1]` 索引，陣列長度不足會拿到 `undefined` → NaN 傳染整局 |
+| 調／新增兵書項目 | `data/upgrades.ts` 的 `UPGRADES` | `level()` 必須是 `apply()` 的反函數；新欄位要同步 `MetaProgress`＋兩份預設值＋`loadMeta` clamp |
+| 改聲望給多少 | `sim/state.ts:93-95` 的 `renownFor` | 商城／兵書總價的「換算局數」註解要跟著改（`shop.ts:12`、`upgrades.ts:5`） |
+| 改編隊上限 | `sim/state.ts:78`／`:90` | 動 `MAX_LOADOUT_GENERALS` 前先讀 `loadout.test.ts:23-51`；調小的話舊存檔會被 `loadMeta` 的 `slice` 截斷（可接受） |
+| 改「哪些字能選進編隊」 | `data/loadout.ts:22-25` 的 `isLoadoutableGlyph` | 規則改嚴 → 舊存檔下次載入自動清理（`core/save.ts:56`），不用寫遷移 |
+| 改武將解鎖判定 | `data/loadout.ts:33-41` 的 `isGeneralUnlocked` | 同時影響圖鑑列表（`ui/screens.ts:265`）與 `loadMeta` 過濾 |
+| 新增存檔欄位 | `sim/types.ts`／`sim/state.ts:27` 型別 → `DEFAULT_META` → `EMPTY_META` → `loadMeta` 解析 | 4 處全改；能 clamp 的就 clamp，存檔是使用者可手改的輸入 |
+| 破壞性改存檔格式 | `core/save.ts:11-12`：`KEY` 升到 v4，把 v3 推進 `LEGACY_KEYS` | 舊 key 的資料會被當成 partial 解析，不相容的欄位靠 clamp／過濾吸收 |
+| 新增一個開發密技 | `core/devtools.ts` 加函式 → `ui/screens.ts:28-34` 的 host 介面 → `app.ts:324+` 轉接 → `:172` 的 `actions` 陣列加按鈕 | 改 `units`／`hand` 要 `recalcUnits`；改 `meta` 要 `saveMeta` |
+
+## 相關頁面
+
+- [01-state-and-units.md](01-state-and-units.md) — `MetaProgress`／`GameState` 的完整欄位、`recalcUnits` 的四階段（本頁只引用不重寫）
+- [../02-data-tables.md](../02-data-tables.md) — 字／武將／羈絆的資料表欄位與平衡基準（羈絆門檻與 `MAX_LOADOUT_GENERALS` 的關聯）
+- [../03-change-recipes.md](../03-change-recipes.md) — 跨模組的改動流程
+- [../04-invariants.md](../04-invariants.md) — 全專案的七條鐵則與已知陷阱
+- [../06-roadmap.md](../06-roadmap.md) — 未實作項目（含「局內續玩」需要的 rng state 暴露）

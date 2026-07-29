@@ -37,31 +37,51 @@ requestAnimationFrame
 
 ```
 phase === 'prep'   → prepTimer 遞減 → 歸零則 beginBattle()
-phase === 'battle' → spawnDue()      依 spawnQueue[].at 生成敵人
-                   → moveEnemies()   沿 path 前進；抵達 camp 扣生命
-                   → stepCombat()    索敵、傷害、特效
-                   → stepEffects()   特效壽命
-                   → cleanupDead()   移除 hp<=0
-                   → checkWaveEnd()  隊列與場上皆空 → 結算收入、進下一波
+                   → stepEffects() → return（佈陣階段只推進特效）
+phase === 'battle' → spawnDue()        依 spawnQueue[].at 生成敵人
+                   → stepStatuses()    控場倒數與灼燒持續傷害
+                   → moveEnemies()     沿 path 前進；抵達 camp 扣生命
+                   → stepCombat()      索敵、傷害、特效
+                   → stepSkills()      武將主動技
+                   → stepBondSkills()  羈絆組合技
+                   → stepMeteor()      流星火雨（局外道具）
+                   → stepEffects()     特效壽命
+                   → cleanupDead()     移除 hp<=0
+                   → checkWaveEnd()    隊列與場上皆空 → 結算收入、進下一波
 ```
 
-順序有意義：先生成再移動再攻擊，確保剛生成的敵人當幀就能被打。
+**順序有意義**：
+- 先生成再移動，剛生成的敵人當幀就能被打
+- `stepStatuses` 在 `moveEnemies` **之前**，定身才能當幀生效
+- `cleanupDead` 在所有傷害來源之後，才不會有 hp<=0 的敵人被重複結算
+
+詳細逐步說明見 [modules/05-economy-and-waves.md](modules/05-economy-and-waves.md)。
 
 ## GameState 形狀（權威定義在 src/sim/types.ts）
 
 ```ts
 GameState {
   board: { cols, rows, tiles[], path[], spawn, camp }   // path 是 cell 索引序列
-  rng: () => number                                     // ⚠ 閉包，不可 JSON 序列化
-  units: Unit[]        // 場上所有字牌與武將
+  rng: () => number                    // ⚠ 閉包。內部狀態其實只是一個 uint32（core/rng.ts）
+  units: Unit[]        // 場上所有字牌與武將（★ 一格可能有多個）
   enemies: Enemy[]     // 位置用 dist（沿 path 的浮點進度）表示，不存 x/y
   effects: Effect[]    // 純資料，render 負責畫
+  events: SimEvent[]   // 事件佇列，app 層每幀 drain 成音效與粒子
   hand: (HandCard|null)[]   // 長度 = handSize（5，局外養成可到 8）
-  food, lives, wave, phase, prepTimer, spawnQueue[]
-  activeBonds[], hints[]    // 衍生值，由 recalcUnits() 重算
+  food, lives, maxLives, wave, maxWave, phase, prepTimer, spawnQueue[], waveTime
+  pool: string[], poolGenerals: string[]   // 本局字池（見 sim/pool.ts）
+  wishes: string[], wishSlots               // 心願單
+  perks: Perks         // 局外道具推導出的被動效果（見 data/shop.ts），整局固定
+  meteorTimer          // 流星火雨倒數（runtime）
+  recruitsThisWave, smeltFreeLeft, lastIncome
+  // ── 以下皆為衍生值，由 recalcUnits() 重算，不要手動改 ──
+  activeBonds[], bondCds{}, cdMul, hints[], hintCells[]
   stats: { kills, foodEarned, leaks }
 }
 ```
+
+權威定義在 `sim/types.ts`；欄位語意與生命週期見
+[modules/01-state-and-units.md](modules/01-state-and-units.md)。
 
 **座標系統**：`sim/` 一律以「格」為單位（cell 索引或浮點格座標）；換算成畫布 px 只發生在 `render/renderer.ts`。
 敵人位置是 `dist`（沿 path 的進度），`sim/combat.ts` 的 `enemyPos()` 才插值出格座標——這讓「穿透」等機制可以直接比較 `dist`。
@@ -102,7 +122,17 @@ state.units = [
 
 ## 組詞判定的合約
 
-`sim/combine.ts` 的 `findCombination(board, units, changedCell)`：
+> ### ⚠ 先看這個：有兩個名字很像的函式，只有一個是正式路徑
+>
+> | 函式 | 回傳 | 誰在用 |
+> |---|---|---|
+> | **`findCombinations()`（複數）** | 橫向與縱向**各一個**結果 | ✅ **正式路徑**：`sim/actions.ts` 的 `tryCombine()` |
+> | `findCombination()`（單數） | 複數版的薄 wrapper，用 `betterThan` 把兩個方向 **reduce 成一個** | 只有 `combine.test.ts` 與 `tools/autobalance.ts` 的傻 AI 落點評分 |
+>
+> **把新 action 接到單數版，會靜默失去「十字同時成兩將」**——型別檢查與現有測試都不會報錯。
+> 一律用 `tryCombine()`（它內部呼叫複數版）。
+
+`sim/combine.ts` 的 `findCombinations(board, units, changedCell)`：
 
 1. 只掃 `changedCell` 所在的**一列與一欄**（其他位置的組合在它們自己被放置時就判定過了）
 2. 只有 `kind === 'glyph'` 的單位參與；武將不再參與組詞（設計決定 #3）
@@ -112,7 +142,9 @@ state.units = [
 5. 已經存在的武將（同名 + 同格子）會被跳過，不會重複產生
 6. **純函式**，不改 state。真正的建立發生在 `sim/actions.ts` 的 `tryCombine()`
 
-呼叫時機：`placeFromHand()`、`moveUnit()`（含疊合升級後）。新增任何會改變棋盤配置的 action 時，記得也要接上 `tryCombine()`。
+呼叫時機：`placeFromHand()`、`moveGlyph()`（含疊合升級後）。
+新增任何會改變棋盤配置的 action 時，記得也要接上 `tryCombine()`。
+細節見 [modules/02-actions-and-combine.md](modules/02-actions-and-combine.md)。
 
 ## UI 的三處契約
 

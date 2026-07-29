@@ -3,14 +3,19 @@
 文字塔防。每個「字」是一座塔，相鄰的字組成詞（武將名／兵種名）時融合成更強的單位。
 規格書：[docs/game-design.md](docs/game-design.md)　深入細節：[docs/llm-wiki/](docs/llm-wiki/00-index.md)
 
-**接到任務時的最短路徑**：先看 [docs/llm-wiki/03-change-recipes.md](docs/llm-wiki/03-change-recipes.md)，
-裡面列出「我想改 X → 動哪個檔案」。九成的需求只需要改 `src/data/` 底下一個檔案。
+**接到任務時的最短路徑**：先看 [docs/llm-wiki/00-index.md](docs/llm-wiki/00-index.md) 的
+「任務 → 該讀哪一頁」路由表，它會直接指到單一頁面。九成的需求只需要改 `src/data/` 底下一個檔案。
+每個程式子系統都有一份對應的深入說明在 [docs/llm-wiki/modules/](docs/llm-wiki/modules/)。
+
+**⚠ 改完之後**：依 [07-wiki-maintenance.md](docs/llm-wiki/07-wiki-maintenance.md) 的
+「改了程式碼 → 要回寫哪裡」對照表更新文件。這份 wiki 是靠每次改動回寫維持有效的——
+一旦跟程式碼脫節就會從資產變成負債。
 
 ## 指令
 
 ```bash
 npm run dev             # 開發伺服器（http://localhost:5188）
-npm test                # 172 個單元測試，改完務必跑
+npm test                # 174 個單元測試，改完務必跑
 npm run typecheck       # tsc --noEmit
 npm run sim             # 自動平衡：傻 AI 跑 30 局，印出陣亡波次分佈
 npm run sim 16 guandu   # 指定局數與關卡

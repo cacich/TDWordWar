@@ -15,7 +15,8 @@
 |---|---|
 | `category` | `weapon` 兵器 / `troop` 兵種 / `surname` 姓氏 / `given` 名字 / `strategy` 謀略 / `economy` 經濟 |
 | `rarity` | 1～4，同時是抽卡權重分級（見下方權重表） |
-| `range` | 單位是**格**，這裡填的是**基礎值**。實效射程 = `baseRange × RANGE_MUL`（全域 ×2，見 `sim/combat.ts`），單個字（尚未組成武將）再 ×`GLYPH_RANGE_MUL`（0.8），武將則是 ×`GENERAL_RANGE_BONUS`（1.25）並補償多格中心外移，兩者互斥。**對空資格（`< 2.0` `ANTI_AIR_RANGE`）看的是 baseRange，不受放大影響** |
+| `range` | 單位是**格**，這裡填的是**基礎值**。實效射程 = `baseRange × RANGE_MUL`（全域 ×2，見 `sim/combat.ts`），單個字（尚未組成武將）再 ×`GLYPH_RANGE_MUL`（0.8），武將則是 ×`GENERAL_RANGE_BONUS`（1.25）並補償多格中心外移，兩者互斥。**對空資格看的是 baseRange，不受放大影響**：`canHit` 要求 `baseRange >= ANTI_AIR_RANGE`（2.0），
+即資料表的 `range < 2.0` 視為近戰、打不到飛行單位 |
 | `shape` | `single` 單體 / `pierce` 沿路徑貫穿最多 3 名 / `splash` 目標周圍 1.3 格 |
 | `tags` | 給羈絆、兵種相剋（`騎`/`弓`/`步`）與對空加成（`弓`）用 |
 | `onHit` | 命中附加控場，見下表 |
@@ -50,7 +51,7 @@ onHit: {
 - 同字同階疊合 → 升一階，屬性 ×`LEVEL_MUL`（1.55），上限 `MAX_GLYPH_LEVEL`（5）
 - 顏色與名稱：`qualityName()` 在 `data/glyphs.ts`，`qualityColor()` 在 `render/theme.ts`（兩處的階數必須一致）
 - 光環強度也隨品質成長，換算在 `sim/state.ts` 的 `scaleAura()`
-- 疊合可在棋盤（`placeFromHand` / `moveUnit`）或手牌之間（`mergeHand`）發生
+- 疊合可在棋盤（`placeFromHand` / `moveGlyph`）或手牌之間（`mergeHand`）發生
 
 ---
 
@@ -69,9 +70,14 @@ g(name, recipe, tier, range, shape, tags, desc, skill?)
 | `fine` 精良 | 2.0 | 1.15 | 副將（黃蓋、馬岱） |
 | `epic` 史詩 | 2.4 | 1.20 | 名將（馬超、關興） |
 | `legendary` 傳說 | 3.0 | 1.30 | 頂級武將（張飛、關羽…） |
-| `mythic` 神話 | 3.8 | 1.40 | 尚未使用，保留給三字以上配方 |
+| `mythic` 神話 | 3.8 | 1.40 | 三字以上配方，目前只有諸葛亮 |
 
-武將戰力公式（`sim/state.ts` 的 `makeGeneralUnit`）：
+武將戰力公式（`sim/state.ts` 的 **`recomputeForm()`**）：
+
+> ⚠ **不要改 `makeGeneralUnit`**——它只建殼，`baseAtk`／`baseAps`／`level`／`income`
+> 都設 0 後在同一次呼叫的最後委派給 `recomputeForm()` 覆寫。改 `makeGeneralUnit`
+> 裡的數字完全沒有效果。
+
 
 ```
 baseAtk = Σ(組成字牌的 baseAtk，已含等級倍率) × atkMul
@@ -125,7 +131,12 @@ waveIncome(wave)   = 5 + floor(wave × 1.2)
 SELL_RATIO = { glyph: 1.0, general: 0.3 }   // 鏟除武將只退 3 成
 ```
 
-抽卡稀有度權重（`RARITY_TABLE`，每列總和必須是 100，有測試把關）：
+抽卡稀有度權重（`sim/economy.ts` 的 `RARITY_TABLE`，每列總和必須是 100，有測試把關。
+`RARITY_TABLE` 本身是 module-private，公開介面是 `rarityWeights(wave)`）：
+
+> ⚠ **第 4 欄目前是死的**：沒有任何字是 `rarity: 4`（分布為 1→5／2→29／3→37），
+> 所以索引 3 永遠不會被讀取，調整它不會有任何效果。
+
 
 | 波次 | R1 | R2 | R3 | R4 |
 |---|---|---|---|---|
@@ -164,13 +175,17 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 | `global` | 全場敵人 | `(mul, onHit?)` |
 | `healLife` | 恢復生命（滿血時回傳 false，不消耗冷卻） | `(n)` |
 | `gainFood` | 徵糧（隨波次成長） | `(base, perWave?)` |
+| `burstAndFood` | 先範圍傷害再徵糧（曹操用） | `(mul, extra, food)` |
 
-`extra` 是「在單位射程之外再加幾格」，所以射程長的武將技能範圍自然更大。
+共 9 個原型。`extra` 是「在單位射程之外再加幾格」，所以射程長的武將技能範圍自然更大。
+
+**新增技能時請優先組合現有原型，不要新增原型**——原型越少，技能行為越可預測。
 
 ## src/data/levels/index.ts — 關卡
 
 ```ts
 { key, name, subtitle, startFood, lives, maxWave, hpMul,
+  pool: { support: number; generals: number },             // ★ 必填，別漏掉
   map?: string[],                                          // 固定地圖
   gen?: { cols, rows, minPathLen, blockRate? } }           // 隨機地形
 ```
@@ -179,6 +194,9 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 S 出兵口   C 大營   # 路   P 空地   . 障礙
 ```
 
+- **`pool` 是必填欄位**（漏掉會 TS 編譯錯誤）：`support` = 抽幾個謀略／經濟字，
+  `generals` = 抽幾組姓名配方。數字越小越容易疊高與湊配方，但變化也越少。
+  可直接複製的完整範例見 [03-change-recipes.md](03-change-recipes.md) §5。
 - `map` 與 `gen` 二選一（有測試檢查每關至少有一個）
 - 固定地圖每一列長度必須相等，否則 `parseMap()` 會拋錯（有測試）
 - `hpMul` 是該關的難度旋鈕，乘在敵人血量上
