@@ -272,6 +272,8 @@ function enemy(
     damage: opts.damage ?? 1,
     troop: 'none',
     ccImmune: false,
+    burnImmune: false,
+    slowImmune: false,
     dist: opts.dist ?? 1,
     hitFlash: 0,
     slow: 0,

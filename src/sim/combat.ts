@@ -204,11 +204,17 @@ export function dealDamage(
   if (applyOnHit && u.onHit) applyStatus(state, e, u.onHit, raw)
 }
 
-/** 施加控場狀態。BOSS 的 ccImmune 會擋掉定身與擊退 */
+/**
+ * 施加控場狀態。三種免疫各自擋掉不同的東西：
+ *   ccImmune   → 定身與擊退（BOSS 幾乎都有）
+ *   slowImmune → 減速（疾風系）
+ *   burnImmune → 灼燒（因為灼燒無視防禦，這是唯一能逼玩家改帶高單擊的手段）
+ * 易傷（vuln）刻意不給任何免疫，否則控場流會完全失去對 BOSS 的作用。
+ */
 export function applyStatus(state: GameState, e: Enemy, onHit: OnHit, baseAtk: number): void {
-  if (onHit.slowDur) e.slow = Math.max(e.slow, onHit.slowDur)
+  if (onHit.slowDur && !e.slowImmune) e.slow = Math.max(e.slow, onHit.slowDur)
   if (onHit.vulnDur) e.vuln = Math.max(e.vuln, onHit.vulnDur)
-  if (onHit.burn) {
+  if (onHit.burn && !e.burnImmune) {
     e.burnT = Math.max(e.burnT, onHit.burn.dur)
     e.burnDps = Math.max(e.burnDps, baseAtk * onHit.burn.mul)
   }

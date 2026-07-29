@@ -4,6 +4,7 @@
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
 import { BONDS } from '../data/bonds'
+import { COUNTER_LABEL, countersFor } from '../data/enemies'
 import { GENERALS } from '../data/generals'
 import { GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
@@ -334,6 +335,10 @@ export class Screens {
       const unlocked = i === 0 || meta.cleared.includes(LEVEL_ORDER[i - 1])
       const best = meta.best[key] ?? 0
 
+      // 推薦手段由關卡的 bias 經 TRAIT_COUNTERS 推導，不是另外手寫的清單
+      const counters = countersFor(level.bias)
+      const tips = counters.map((c) => `<span class="lv-tip">${COUNTER_LABEL[c]}</span>`).join('')
+
       const card = document.createElement('button')
       card.className = `level-card${unlocked ? '' : ' locked'}${level.gen ? ' random' : ''}`
       card.disabled = !unlocked
@@ -341,6 +346,7 @@ export class Screens {
         <div>
           <div class="lv-name">${level.name}</div>
           <div class="lv-sub">${unlocked ? level.subtitle : `通關「${LEVELS[LEVEL_ORDER[i - 1]].name}」後解鎖`}</div>
+          ${unlocked && tips ? `<div class="lv-tips"><span class="lv-tip-label">建議帶</span>${tips}</div>` : ''}
         </div>
         <div class="lv-meta">
           ${cleared ? '<div class="lv-cleared">已通關</div>' : ''}

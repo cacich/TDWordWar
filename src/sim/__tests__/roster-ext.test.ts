@@ -24,6 +24,8 @@ function spawnEnemy(state: GameState, over: Partial<Enemy> = {}): Enemy {
     damage: 1,
     troop: 'none',
     ccImmune: false,
+    burnImmune: false,
+    slowImmune: false,
     dist: 5,
     hitFlash: 0,
     slow: 0,
@@ -135,7 +137,7 @@ describe('新增羈絆', () => {
     expect(liang.skillCdMax).toBeCloseTo(full * 0.75, 5)
   })
 
-  it('蜀漢棟樑：6 名以上「蜀」武將同時在場時攻擊 +15%、攻速 +10%', () => {
+  it('蜀漢棟樑：5 名以上「蜀」武將同時在場時攻擊 +15%、攻速 +10%', () => {
     const s = createGame()
     // 刻意避開 桃園結義／五虎上將（缺 劉備 或缺全部五虎成員）、西涼鐵騎（只 1 名「馬」）、
     // 奇門遁甲（只 2 名「謀略」）——確保只有蜀漢棟樑單獨觸發，測出來的倍率才乾淨

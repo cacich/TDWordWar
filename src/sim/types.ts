@@ -173,6 +173,17 @@ export interface Unit {
 }
 
 // ── 敵人 ──────────────────────────────────────────────
+/**
+ * 敵人特徵：描述「這隻敵人難對付的地方」。
+ * 用途有兩個，共用同一份定義避免重複：
+ *   1. 關卡的 `bias` 宣告偏好哪些特徵 → 加權該類敵人的出現率（sim/waves.ts）
+ *   2. 經 TRAIT_COUNTERS（data/enemies.ts）推導出關卡卡片上的「推薦手段」（ui/screens.ts）
+ */
+export type EnemyTrait = 'swarm' | 'armored' | 'flying' | 'fast' | 'healer' | 'splitter' | 'tanky'
+
+/** 應對手段。顯示在關卡卡片上，讓玩家知道這一關該帶什麼 */
+export type CounterKind = 'splash' | 'pierce' | 'single' | 'air' | 'cc' | 'dot'
+
 export interface EnemyDef {
   key: string
   char: string
@@ -187,8 +198,26 @@ export interface EnemyDef {
   /** 兵種，用於三向相剋 */
   troop: Troop
   desc: string
+  /** 這隻敵人的難處，決定關卡加權與推薦手段 */
+  traits: EnemyTrait[]
   /** true 表示免疫定身與擊退（BOSS 用） */
   ccImmune?: boolean
+  /** 免疫灼燒。⚠ 灼燒無視防禦，所以這是唯一能逼玩家改用高單擊的手段 */
+  burnImmune?: boolean
+  /** 免疫減速 */
+  slowImmune?: boolean
+  /** 為半徑內其他敵人每秒回血（妖道系） */
+  healAura?: { radius: number; hps: number }
+  /** 自我每秒回血，數值是「最大血量的比例」，逼玩家用爆發而非磨血 */
+  regen?: number
+  /** 死亡時分裂出的小怪 */
+  splitInto?: { key: string; count: number }
+  /** 生成時一起帶出來的護衛（在 buildWave 展開） */
+  escort?: { key: string; count: number }
+  /** 是 BOSS 候選（波次為 5 的倍數時隨機挑一個） */
+  boss?: boolean
+  /** 最早可以出現的波次，用來把強力敵種擋在後期 */
+  minWave?: number
 }
 
 export interface Enemy {
@@ -206,6 +235,8 @@ export interface Enemy {
   dist: number
   troop: Troop
   ccImmune: boolean
+  burnImmune: boolean
+  slowImmune: boolean
   /** 受擊閃白剩餘秒數 */
   hitFlash: number
   // ── 狀態（剩餘秒數） ──
@@ -346,6 +377,8 @@ export interface GameState {
   levelName: string
   /** 關卡難度：敵人血量倍率 */
   hpMul: number
+  /** 本關的敵人偏好（見 data/levels），buildWave 依它加權敵種與 BOSS 的出現率 */
+  bias: EnemyTrait[]
   board: Board
   rng: () => number
   /** 本局字池（見 sim/pool.ts）。征兵只會抽到這些字 */

@@ -4,7 +4,12 @@
  * 每一列的長度必須等於 cols，否則 parseMap 會拋錯（有測試把關）。
  *
  * 有 `map` 就是固定地圖；有 `gen` 就是每局隨機生成（同種子 → 同地圖，見 sim/mapgen.ts）。
+ *
+ * 平衡基準：難度靠 hpMul／lives／maxWave 三者搭配，`npm run sim` 各關中位數應落在 12～20。
+ * 前兩關是教學弧，傻 AI 打得完是刻意的。
  */
+import type { EnemyTrait } from '../../sim/types'
+
 export interface LevelDef {
   key: string
   name: string
@@ -24,9 +29,21 @@ export interface LevelDef {
    * 數字越小越容易疊高與湊成配方，但變化也越少。
    */
   pool: { support: number; generals: number }
+  /**
+   * 關卡的敵人偏好。帶這些特徵的敵人出現權重 ×BIAS_WEIGHT（見 sim/waves.ts），
+   * BOSS 的隨機挑選也吃同一份加權。
+   *
+   * 這個欄位同時決定關卡卡片上的「推薦手段」標籤——由 data/enemies.ts 的
+   * countersFor() 經 TRAIT_COUNTERS 推導，**不要另外手寫推薦清單**，
+   * 否則會出現兩份不同步的真相。
+   */
+  bias?: EnemyTrait[]
 }
 
-export const LEVEL_ORDER = ['huangjin', 'dongzhuo', 'julu', 'guandu', 'chibi', 'wuzhang'] as const
+export const LEVEL_ORDER = [
+  'huangjin', 'dongzhuo', 'julu', 'guandu', 'chibi', 'wuzhang',
+  'xiangyang', 'hanzhong', 'luoyang',
+] as const
 
 export const LEVELS: Record<string, LevelDef> = {
   huangjin: {
@@ -38,6 +55,8 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 12,
     hpMul: 0.85,
     pool: { support: 2, generals: 3 },
+    // 教學關不設偏好：先讓玩家認識最基本的賊與盾賊
+    bias: [],
     map: [
       'S########',
       'PPPPPPPP#',
@@ -62,6 +81,8 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 18,
     hpMul: 1.0,
     pool: { support: 3, generals: 4 },
+    // 飛賊變多，逼玩家準備射程 >= 2 的單位
+    bias: ['flying'],
     map: [
       '########S',
       '#PPPPPPPP',
@@ -88,6 +109,8 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 30,
     hpMul: 1.15,
     pool: { support: 4, generals: 6 },
+    // 蟻賊成群，範圍攻擊的價值第一次浮現
+    bias: ['swarm'],
     map: [
       'S########',
       'PPPPPPPP#',
@@ -115,6 +138,8 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 24,
     hpMul: 1.1,
     pool: { support: 5, generals: 6 },
+    // 快賊與疾風賊居多，需要控場攔下
+    bias: ['fast'],
     gen: { cols: 9, rows: 14, minPathLen: 44 },
   },
 
@@ -127,6 +152,8 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 30,
     hpMul: 1.2,
     pool: { support: 6, generals: 7 },
+    // 重甲當道；灼燒無視防禦，火系在這關最強
+    bias: ['armored'],
     gen: { cols: 9, rows: 15, minPathLen: 48, blockRate: 0.13 },
   },
 
@@ -139,7 +166,49 @@ export const LEVELS: Record<string, LevelDef> = {
     maxWave: 40,
     hpMul: 1.3,
     pool: { support: 7, generals: 9 },
+    // 妖道與高血敵人並存，考驗集火與持續輸出
+    bias: ['healer', 'tanky'],
     gen: { cols: 9, rows: 16, minPathLen: 52 },
+  },
+
+  // ── 後三關：每一關針對一組特徵，把「該帶什麼」的答案收窄 ──
+  xiangyang: {
+    key: 'xiangyang',
+    name: '襄陽',
+    subtitle: '★ 隨機地形。蟻賊與分裂賊成潮，沒有範圍攻擊會被淹沒',
+    startFood: 28,
+    lives: 3,
+    maxWave: 32,
+    hpMul: 1.25,
+    pool: { support: 7, generals: 8 },
+    bias: ['swarm', 'splitter'],
+    gen: { cols: 9, rows: 15, minPathLen: 50 },
+  },
+
+  hanzhong: {
+    key: 'hanzhong',
+    name: '漢中',
+    subtitle: '★ 隨機地形。清一色重甲與高血，普通攻擊幾乎打不動',
+    startFood: 30,
+    lives: 3,
+    maxWave: 32,
+    hpMul: 1.2,
+    pool: { support: 7, generals: 8 },
+    bias: ['armored', 'tanky'],
+    gen: { cols: 9, rows: 16, minPathLen: 54, blockRate: 0.1 },
+  },
+
+  luoyang: {
+    key: 'luoyang',
+    name: '洛陽',
+    subtitle: '★ 隨機地形。最終關。飛行、高速與治療同時上陣',
+    startFood: 32,
+    lives: 2,
+    maxWave: 40,
+    hpMul: 1.28,
+    pool: { support: 8, generals: 10 },
+    bias: ['flying', 'fast', 'healer'],
+    gen: { cols: 9, rows: 17, minPathLen: 58, blockRate: 0.08 },
   },
 }
 

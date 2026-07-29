@@ -27,6 +27,8 @@ function spawnEnemy(state: GameState, over: Partial<Enemy> = {}): Enemy {
     damage: 1,
     troop: '步',
     ccImmune: false,
+    burnImmune: false,
+    slowImmune: false,
     dist: 5,
     hitFlash: 0,
     slow: 0,

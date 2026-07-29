@@ -27,6 +27,7 @@ export function stepGame(state: GameState, dt: number): void {
   for (const u of state.units) if (u.atkFlash > 0) u.atkFlash -= dt
   spawnDue(state)
   stepStatuses(state, dt)
+  stepEnemySupport(state, dt)
   moveEnemies(state, dt)
   stepCombat(state, dt)
   stepSkills(state, dt)
@@ -67,32 +68,64 @@ function stepMeteor(state: GameState, dt: number): void {
   pushEffect(state.effects, { kind: 'ring', fromX: c.x, fromY: c.y, toX: c.x + 1.5, toY: c.y, life: 0.35, maxLife: 0.35, color: '#c8502a' })
 }
 
+/** 依敵表建立一隻執行期敵人。分裂出的小怪也走這裡，避免欄位漏填 */
+function makeEnemy(state: GameState, defKey: string, hp: number, dist = 0): Enemy {
+  const def = ENEMY_BY_KEY[defKey]
+  return {
+    id: state.nextEnemyId++,
+    defKey: def.key,
+    char: def.char,
+    hp,
+    maxHp: hp,
+    def: def.def,
+    speed: def.speed,
+    flying: def.flying,
+    bounty: def.bounty,
+    damage: def.damage,
+    troop: def.troop,
+    ccImmune: def.ccImmune ?? false,
+    burnImmune: def.burnImmune ?? false,
+    slowImmune: def.slowImmune ?? false,
+    dist,
+    hitFlash: 0,
+    slow: 0,
+    stun: 0,
+    vuln: 0,
+    burnT: 0,
+    burnDps: 0,
+  }
+}
+
 function spawnDue(state: GameState): void {
   while (state.spawnQueue.length && state.spawnQueue[0].at <= state.waveTime) {
     const entry = state.spawnQueue.shift()!
-    const def = ENEMY_BY_KEY[entry.defKey]
-    const e: Enemy = {
-      id: state.nextEnemyId++,
-      defKey: def.key,
-      char: def.char,
-      hp: entry.hp,
-      maxHp: entry.hp,
-      def: def.def,
-      speed: def.speed,
-      flying: def.flying,
-      bounty: def.bounty,
-      damage: def.damage,
-      troop: def.troop,
-      ccImmune: def.ccImmune ?? false,
-      dist: 0,
-      hitFlash: 0,
-      slow: 0,
-      stun: 0,
-      vuln: 0,
-      burnT: 0,
-      burnDps: 0,
+    state.enemies.push(makeEnemy(state, entry.defKey, entry.hp))
+  }
+}
+
+/**
+ * 敵方的支援行為：妖道系的回血光環與 BOSS 的自我再生。
+ * 兩者都以「最大血量的比例」計算，才能跟著波次的指數血量一起成長、後期不失效。
+ * 放在 stepStatuses（灼燒）之後，讓灼燒與回血在同一幀正面對撞。
+ */
+function stepEnemySupport(state: GameState, dt: number): void {
+  for (const e of state.enemies) {
+    if (e.hp <= 0) continue
+    const def = ENEMY_BY_KEY[e.defKey]
+
+    if (def.regen) {
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * def.regen * dt)
     }
-    state.enemies.push(e)
+
+    if (def.healAura) {
+      const c = enemyPos(state.board, e)
+      for (const other of state.enemies) {
+        if (other === e || other.hp <= 0 || other.hp >= other.maxHp) continue
+        const p = enemyPos(state.board, other)
+        if (Math.hypot(p.x - c.x, p.y - c.y) > def.healAura.radius) continue
+        other.hp = Math.min(other.maxHp, other.hp + other.maxHp * def.healAura.hps * dt)
+      }
+    }
   }
 }
 
@@ -138,10 +171,39 @@ function moveEnemies(state: GameState, dt: number): void {
   }
 }
 
+/**
+ * 移除死亡敵人，並處理死亡分裂。
+ *
+ * ⚠ 分裂**必須**在這裡做，不能在傷害來源那邊直接 push：
+ *   stepCombat／stepStatuses 都在迭代 state.enemies，當場新增會造成
+ *   「剛分裂出來的小怪在同一幀又被打死再分裂」的連鎖。
+ *   這裡是每幀唯一一次、且在所有傷害結算之後的安全點。
+ *   **允許多層分裂**（分裂將 → 分裂賊 → 蟻賊）：子代死亡是在後續的幀才結算，
+ *   每一層都各自走過一次完整的傷害流程，所以不會在同一幀爆炸性增殖。
+ *   安全性靠「分裂圖必須是無環的有限圖」保證——蟻賊沒有 splitInto，鏈一定終止。
+ *   ⚠ 新增 splitInto 時**絕對不能形成環**（A→B→A 會無限增殖）；
+ *   enemies-ext.test.ts 有測試驗證分裂圖無環。
+ */
 function cleanupDead(state: GameState): void {
-  if (state.enemies.some((e) => e.hp <= 0)) {
-    state.enemies = state.enemies.filter((e) => e.hp > 0)
+  if (!state.enemies.some((e) => e.hp <= 0)) return
+
+  const born: Enemy[] = []
+  for (const e of state.enemies) {
+    if (e.hp > 0) continue
+    const split = ENEMY_BY_KEY[e.defKey].splitInto
+    // 漏過大營的敵人（dist 已到終點）不該再分裂，否則會在終點刷出一批必漏的小怪
+    if (!split || e.dist >= state.board.path.length - 1) continue
+    const childDef = ENEMY_BY_KEY[split.key]
+    if (!childDef) continue
+    // 子代血量以「母體出生血量」換算，才會跟著波次成長；沿路徑稍微散開避免完全重疊
+    const childHp = Math.max(1, Math.round((e.maxHp / ENEMY_BY_KEY[e.defKey].hpMul) * childDef.hpMul))
+    for (let i = 0; i < split.count; i++) {
+      born.push(makeEnemy(state, split.key, childHp, Math.max(0, e.dist - i * 0.25)))
+    }
   }
+
+  state.enemies = state.enemies.filter((e) => e.hp > 0)
+  for (const b of born) state.enemies.push(b)
 }
 
 function checkWaveEnd(state: GameState): void {

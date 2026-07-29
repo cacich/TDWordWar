@@ -113,6 +113,7 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     levelKey: level.key,
     levelName: level.name,
     hpMul: level.hpMul,
+    bias: level.bias ?? [],
     board,
     rng,
     pool: pool.chars,
