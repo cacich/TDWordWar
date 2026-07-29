@@ -39,19 +39,44 @@ g('關興', ['關', '興'], 'epic', 1.5, 'single', ['蜀', '將二代'], '關羽
 
 羈絆條件在 `sim/bonds.ts` 的 `computeBonds()` 判定，觸發後由 `recalcUnits()` 套用；UI 的紅色小標籤會自動出現。
 
-## 4. 新增敵人
+## 4. 新增敵人／BOSS
 
-1. `src/data/enemies.ts` 加一筆 `EnemyDef`
-2. `src/sim/waves.ts` 的 `composition(wave)` 決定它從第幾波開始出現
+**只改 `src/data/enemies.ts`**：在 `ENEMIES` 加一筆 `EnemyDef`。
+`REGULARS` / `BOSSES` 是從 `boss` 欄位衍生的，`composition()` 與 `pickBoss()` 會自動撿到，
+**不需要再去 `waves.ts` 註冊**（舊版需要手動加解鎖時程，現在改成用 `minWave` 宣告）。
+
+一般兵：
 
 ```ts
-function composition(wave: number): string[] {
-  const pool = ['thief']
-  if (wave >= 3) pool.push('swift')
-  if (wave >= 9) pool.push('myNewEnemy')   // ← 加這行
-  return pool
+{
+  key: 'myEnemy', char: '例', hpMul: 1.4, def: 20, speed: 0.9, flying: false,
+  bounty: 4, damage: 1, troop: '步',
+  traits: ['armored'],     // ★ 必填：決定關卡加權與 UI 推薦標籤
+  minWave: 8,              // 第 8 波才開始出現
+  desc: '一句話說明它的難處與解法。',
 }
 ```
+
+BOSS（加 `boss: true`，慣例上都給 `ccImmune`）：
+
+```ts
+{
+  key: 'bossMine', char: '例', hpMul: 12, def: 60, speed: 0.7, flying: false,
+  bounty: 26, damage: 2, troop: '步',
+  traits: ['tanky'], boss: true, ccImmune: true, minWave: 15,
+  regen: 0.02,             // 選一個「必須改變打法」的鉤子
+  desc: '…',
+}
+```
+
+可用的機制鉤子：`burnImmune`／`slowImmune`／`healAura`／`regen`／`splitInto`／`escort`。
+
+⚠ 注意事項
+- **`traits` 必填**。新增 trait 時要一併補 `TRAIT_COUNTERS` 與 `TRAIT_LABEL`，
+  否則 `enemies-ext.test.ts` 會紅燈。
+- **`splitInto` 不可形成環**（A→B→A 會無限增殖），且單次分裂總量有上限（測試把關）。
+- **新 BOSS 的機制指紋不能跟現有 BOSS 重複**——有測試檢查，避免只是血量不同的複製品。
+- 加完**必須跑 `npm run sim`**，新機制對難度的影響通常比數值更大。
 
 ## 5. 新增關卡
 
@@ -89,8 +114,11 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 
 | 想要的效果 | 改哪裡 |
 |---|---|
-| 整體變難／變簡單 | `sim/waves.ts` 的 `HP_GROWTH`（最有效，1.18 → 1.20 差很多） |
+| 整體變難／變簡單 | `sim/waves.ts` 的 `HP_GROWTH`（最有效，0.02 的差距就很明顯；目前 1.23） |
 | 敵人變多 | `sim/waves.ts` 的 `enemyCount()` |
+| 某類敵人出現更頻繁 | 該關的 `bias`（`data/levels/index.ts`）或 `BIAS_WEIGHT`（`sim/waves.ts`，目前 4） |
+| 強力敵種太早出現 | 該敵人的 `minWave`（`data/enemies.ts`） |
+| 單關變難 | 該關的 `hpMul`／`lives`／`maxWave`（`data/levels/index.ts`） |
 | 前期太窮 | `sim/economy.ts` 的 `recruitCost()` 常數 8、`waveIncome()` |
 | 抽不到好字 | `sim/economy.ts` 的 `RARITY_TABLE`（每列總和要 100） |
 | 佈陣時間 | `sim/waves.ts` 的 `PREP_SECONDS` |
@@ -172,13 +200,19 @@ export const SKILLS: Record<string, SkillFn> = {
 ## 10b. 新增一種控場狀態
 
 1. `sim/types.ts` 的 `OnHit` 加欄位；`Enemy` 加對應的剩餘秒數欄位
-2. `sim/combat.ts` 的 `applyStatus()` 寫入（會不會被 `ccImmune` 擋掉在這裡決定）
-3. `sim/step.ts` 的 `stepStatuses()` 倒數並生效
-4. `sim/state.ts` 的 `mergeOnHit()` 加一行，武將才會繼承
-5. `render/renderer.ts` 的狀態小圓點 + `render/theme.ts` 的 `STATUS_COLOR` 加顏色
-6. `ui/hud.ts` 的 `onHitText()` 加一行，資訊面板才看得到
+2. `sim/step.ts` 的 `makeEnemy()` 給初值（**漏掉會是 `undefined`，比對時靜默出錯**）
+3. `sim/combat.ts` 的 `applyStatus()` 寫入（要不要被 `ccImmune` / `slowImmune` / `burnImmune` 擋掉在這裡決定）
+4. `sim/step.ts` 的 `stepStatuses()` 倒數並生效
+5. `sim/state.ts` 的 `mergeOnHit()` 加一行，武將才會繼承
+6. `render/renderer.ts` 的狀態小圓點 + `render/theme.ts` 的 `STATUS_COLOR` 加顏色
+7. `ui/hud.ts` 的 `onHitText()` 加一行，資訊面板才看得到
 
-這六處都要改，漏掉任何一處都會安靜地失效（例如漏 4 就只有字牌有效、武將沒有）。
+這七處都要改，漏掉任何一處都會安靜地失效（例如漏 5 就只有字牌有效、武將沒有）。
+
+若這個狀態需要「某些敵人免疫」，免疫欄位是**獨立的第四種**，不要塞進 `ccImmune`——
+現有三種（`ccImmune` 定身＋擊退／`slowImmune` 減速／`burnImmune` 灼燒）各自判斷，
+新增一種要同時改 `EnemyDef`、`Enemy` 與 `makeEnemy`。易傷刻意不可免疫，見
+[modules/04](modules/04-combat-and-skills.md) §6。
 
 ## 10c. 調整「抽到想要的字」的機率
 

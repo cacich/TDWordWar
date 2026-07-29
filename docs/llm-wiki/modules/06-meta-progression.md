@@ -11,7 +11,7 @@
 > | `src/core/devtools.ts` | 55 行 | 開發密技：直接竄改 state／meta 的測試後門 |
 >
 > **上游依賴**：`sim/state.ts`（`MetaProgress`、`DEFAULT_META`、`MAX_*` 常數、`renownFor`）、
-> `sim/types.ts:297-332`（`Perks`）、`data/glyphs.ts`、`data/generals.ts`。
+> `sim/types.ts:328-363`（`Perks`）、`data/glyphs.ts`、`data/generals.ts`。
 >
 > **下游使用者**：`main.ts:11`（`loadMeta()` → `new App`）、`app.ts`（唯一呼叫 `saveMeta` 的地方）、
 > `ui/screens.ts`（兵書／商城／編隊／密技四個畫面）、`sim/state.ts:110`（`perksFrom`）、
@@ -45,7 +45,7 @@
 
 為什麼是不變量：`npm run sim` 的 `createGame(LEVEL, seed)`（`tools/autobalance.ts:63`）走 `DEFAULT_META`，
 `items` 為 `{}` → 全中性 Perks。**任何一個欄位的中性值寫錯，整份難度基準（黃巾 12／董卓 18／巨鹿 20…）就全部失效**，
-而且會靜默失效——模擬照跑，只是數字不再可比。守護測試：`sim/__tests__/shop.test.ts:51-74`
+而且會靜默失效——模擬照跑，只是數字不再可比。守護測試：`sim/__tests__/shop.test.ts:53-76`
 （逐欄比對全 17 個中性值）與 `:76-86`（每種道具只准動自己那 1 欄，`crit` 例外動 2 欄）。
 
 ### 為什麼要 Perks 這層間接
@@ -54,11 +54,11 @@
 沒有 `items`、沒有價格、沒有 key 字串。好處有三：
 
 1. 維持分層（`sim/` 不 import 存檔或 UI），`npm run sim` 與單元測試能直接捏 `state.perks.xxx` 做定點測試
-   （見 `shop.test.ts:113`、`:135`、`:178` 都是直接改 perks 欄位、避免依賴亂數）。
+   （見 `shop.test.ts:115`、`:137`、`:180` 都是直接改 perks 欄位、避免依賴亂數）。
 2. 商城可以任意改價、改等級曲線、換道具名稱，`sim/` 一行都不用動。
 3. `Perks` 整局固定（`createGame` 算一次），所以 `recalcUnits` 每次重算都能安全地重乘一遍。
 
-**⚠ 效果只在「下一局開始」生效**（`ui/screens.ts:158` 的說明文字就是這件事），
+**⚠ 效果只在「下一局開始」生效**（`ui/screens.ts:159` 的說明文字就是這件事），
 因為 `perksFrom` 只在 `createGame`（`sim/state.ts:110`）被呼叫過一次。
 
 ### Perks 的 17 個欄位在 sim 的讀取點
@@ -66,22 +66,22 @@
 | 欄位 | 中性值 | 道具 | sim 讀取點 |
 |---|---|---|---|
 | `recruitEliteChance` | 0 | `elite` 精兵符 | `sim/actions.ts:49`（征兵時每格判定 → level 2） |
-| `meteorInterval` | 0 | `meteor` 流星火雨 | `sim/step.ts:45`（`<= 0` 直接 return）、`:48`；初值寫進 `sim/state.ts:148` 的 `meteorTimer` |
-| `incomeMul` | 1 | `supply` 糧道暢通 | `sim/step.ts:151`（只乘 `waveIncome`，**不含** `unitIncome`） |
-| `healEveryWaves` | 0 | `medic` 杏林春暖 | `sim/step.ts:162-163`（`checkWaveEnd` 內，勝利 return 之後） |
-| `atkMul` | 1 | `banner` 號令旗 | `sim/state.ts:371`（`recalcUnits`，乘在羈絆 `atkMul` 之後） |
-| `apsMul` | 1 | `gale` 疾風令 | `sim/state.ts:372` |
+| `meteorInterval` | 0 | `meteor` 流星火雨 | `sim/step.ts:46`（`<= 0` 直接 return）、`:49`；初值寫進 `sim/state.ts:149` 的 `meteorTimer` |
+| `incomeMul` | 1 | `supply` 糧道暢通 | `sim/step.ts:213`（只乘 `waveIncome`，**不含** `unitIncome`） |
+| `healEveryWaves` | 0 | `medic` 杏林春暖 | `sim/step.ts:223-229`（`checkWaveEnd` 內，勝利 return 之後） |
+| `atkMul` | 1 | `banner` 號令旗 | `sim/state.ts:372`（`recalcUnits`，乘在羈絆 `atkMul` 之後） |
+| `apsMul` | 1 | `gale` 疾風令 | `sim/state.ts:373` |
 | `critChance` | 0 | `crit` 奇兵秘計 | `sim/combat.ts:187` |
 | `critMul` | 1 | `crit`（同一個 `apply` 寫兩欄） | `sim/combat.ts:188` |
-| `extraLives` | 0 | `fortify` 鐵壁工事 | `sim/state.ts:129-130`（`lives` 與 `maxLives` 同時加） |
+| `extraLives` | 0 | `fortify` 鐵壁工事 | `sim/state.ts:130-131`（`lives` 與 `maxLives` 同時加） |
 | `costMul` | 1 | `thrift` 輕裝簡從 | `sim/economy.ts:12`（`recruitCost`）、`:102`（`rerollCost`） |
 | `familiarBoostMul` | 1 | `familiar` 廣結善緣 | `sim/actions.ts:43`／`:70` 塞進 `RollContext` → `sim/economy.ts:81` 乘在 `FAMILIAR_BOOST` 上 |
-| `leakBlockChance` | 0 | `leakshield` 回魂旗 | `sim/step.ts:129`（`stats.leaks` 照計，只擋扣命） |
-| `splashMul` | 1 | `splash` 烽火連城 | `sim/combat.ts:308`（pierce）、`:318`（splash） |
+| `leakBlockChance` | 0 | `leakshield` 回魂旗 | `sim/step.ts:162`（`stats.leaks` 照計，只擋扣命） |
+| `splashMul` | 1 | `splash` 烽火連城 | `sim/combat.ts:314`（pierce）、`:324`（splash） |
 | `bountyMul` | 1 | `bounty` 狩獵好手 | `sim/combat.ts:157`（`damageEnemy` 的死亡結算，`foodEarned` 也吃這個值） |
-| `enemySpeedMul` | 1 | `enemyslow` 沼澤泥沼 | `sim/step.ts:122`（乘在 `SLOW_FACTOR` 之後） |
-| `rangeMul` | 1 | `range` 精工兵器 | `sim/state.ts:374`（乘在 `effectiveRange` 之後） |
-| `cdMul` | 1 | `bondcd` 兵法傳承 | `sim/state.ts:367` → 寫入 `state.cdMul`，再由 `sim/state.ts:397`（`skillCdMax`）與 `sim/bonds.ts:47`／`:66`（組合技 `cdMax`）讀取 |
+| `enemySpeedMul` | 1 | `enemyslow` 沼澤泥沼 | `sim/step.ts:155`（乘在 `SLOW_FACTOR` 之後） |
+| `rangeMul` | 1 | `range` 精工兵器 | `sim/state.ts:375`（乘在 `effectiveRange` 之後） |
+| `cdMul` | 1 | `bondcd` 兵法傳承 | `sim/state.ts:368` → 寫入 `state.cdMul`，再由 `sim/state.ts:397`（`skillCdMax`）與 `sim/bonds.ts:47`／`:66`（組合技 `cdMax`）讀取 |
 
 沒有第 18 個讀取點：`state.perks` 只被上表這幾處讀。要加新欄位就照這張表補一行。
 
@@ -177,7 +177,7 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 ## 契約與陷阱
 
 **★ `perksFrom()` 等級 0 必須中性。** 見上。改 `NEUTRAL_PERKS` 或新增 Perks 欄位時，
-`shop.test.ts:51-74` 那份硬編碼清單也要同步，否則測試會告訴你哪裡漏了。
+`shop.test.ts:53-76` 那份硬編碼清單也要同步，否則測試會告訴你哪裡漏了。
 
 **⚠ `MAX_LOADOUT_GENERALS = 5` 是新增羈絆的硬約束**（宣告與理由在 `sim/state.ts:79-90`）。
 姓名字**不能**選進 `loadoutGlyphs`，只能透過 `loadoutGenerals` 帶入，
@@ -228,7 +228,7 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 
 **開發密技刻意繞過驗證。** `core/devtools.ts` 直接改 `state`／`meta`，**不經過 `sim/actions.ts`**——
 這是明知故犯的例外（檔頭註解有寫），與 `main.ts` 的 `__dev` console 掛載點同等級的測試後門。
-入口：選單標題 **2.5 秒內連點 7 下**（`ui/screens.ts:103-112` 的 `handleTitleTap`），面板在 `:164-205`。
+入口：選單標題 **2.5 秒內連點 7 下**（`ui/screens.ts:104-113` 的 `handleTitleTap`），面板在 `:165-206`。
 凡是改 `state.units`／`state.hand` 的密技都必須自己呼叫 `recalcUnits`（`devtools.ts:28`、`:53` 已經有）。
 `devClearEnemies` 靠清空 `enemies` + `spawnQueue`，讓下一幀的 `checkWaveEnd` 自然結算進下一波。
 
@@ -236,18 +236,18 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
-| 調某個道具的數值 | `data/shop.ts` 對應項的 `detail` + `apply` 兩個陣列 | 兩處等級數必須一致，且 `apply` 只准寫自己那一欄（`shop.test.ts:76-86` 會抓） |
-| 新增一種商城道具 | ① `sim/types.ts:297` 加 `Perks` 欄位 → ② `data/shop.ts:230` 加中性值 → ③ `SHOP` 加一項（`cost: stdCost(base)`）→ ④ 在 `sim/` 讀取點乘進去 → ⑤ 更新 `shop.test.ts:51-74` 的中性清單 | **中性值一定要是 1 或 0**；讀取點記得寫上「中性時為何無影響」的註解；跑 `npm run sim` 確認中位數沒變 |
-| 改道具價格 | `stdCost(base)` 的 base，或整條曲線（`data/shop.ts:44-46`） | 重算買滿總價，跟兵書的 1230 一起看；`shop.test.ts:44-48` 要求逐級遞增 |
+| 調某個道具的數值 | `data/shop.ts` 對應項的 `detail` + `apply` 兩個陣列 | 兩處等級數必須一致，且 `apply` 只准寫自己那一欄（`shop.test.ts:78-88` 會抓） |
+| 新增一種商城道具 | ① `sim/types.ts:328` 加 `Perks` 欄位 → ② `data/shop.ts:230` 加中性值 → ③ `SHOP` 加一項（`cost: stdCost(base)`）→ ④ 在 `sim/` 讀取點乘進去 → ⑤ 更新 `shop.test.ts:53-76` 的中性清單 | **中性值一定要是 1 或 0**；讀取點記得寫上「中性時為何無影響」的註解；跑 `npm run sim` 確認中位數沒變 |
+| 改道具價格 | `stdCost(base)` 的 base，或整條曲線（`data/shop.ts:44-46`） | 重算買滿總價，跟兵書的 1230 一起看；`shop.test.ts:45-49` 要求逐級遞增 |
 | 提高道具等級上限 | `MAX_ITEM_LEVEL`（`data/shop.ts:20`）+ 每項的 `detail`／`apply` 陣列補值 | `apply` 用 `[...][lv-1]` 索引，陣列長度不足會拿到 `undefined` → NaN 傳染整局 |
 | 調／新增兵書項目 | `data/upgrades.ts` 的 `UPGRADES` | `level()` 必須是 `apply()` 的反函數；新欄位要同步 `MetaProgress`＋兩份預設值＋`loadMeta` clamp |
 | 改聲望給多少 | `sim/state.ts:93-95` 的 `renownFor` | 商城／兵書總價的「換算局數」註解要跟著改（`shop.ts:12`、`upgrades.ts:5`） |
 | 改編隊上限 | `sim/state.ts:78`／`:90` | 動 `MAX_LOADOUT_GENERALS` 前先讀 `loadout.test.ts:23-51`；調小的話舊存檔會被 `loadMeta` 的 `slice` 截斷（可接受） |
 | 改「哪些字能選進編隊」 | `data/loadout.ts:22-25` 的 `isLoadoutableGlyph` | 規則改嚴 → 舊存檔下次載入自動清理（`core/save.ts:56`），不用寫遷移 |
-| 改武將解鎖判定 | `data/loadout.ts:33-41` 的 `isGeneralUnlocked` | 同時影響圖鑑列表（`ui/screens.ts:265`）與 `loadMeta` 過濾 |
+| 改武將解鎖判定 | `data/loadout.ts:33-41` 的 `isGeneralUnlocked` | 同時影響圖鑑列表（`ui/screens.ts:266`）與 `loadMeta` 過濾 |
 | 新增存檔欄位 | `sim/types.ts`／`sim/state.ts:27` 型別 → `DEFAULT_META` → `EMPTY_META` → `loadMeta` 解析 | 4 處全改；能 clamp 的就 clamp，存檔是使用者可手改的輸入 |
 | 破壞性改存檔格式 | `core/save.ts:11-12`：`KEY` 升到 v4，把 v3 推進 `LEGACY_KEYS` | 舊 key 的資料會被當成 partial 解析，不相容的欄位靠 clamp／過濾吸收 |
-| 新增一個開發密技 | `core/devtools.ts` 加函式 → `ui/screens.ts:28-34` 的 host 介面 → `app.ts:324+` 轉接 → `:172` 的 `actions` 陣列加按鈕 | 改 `units`／`hand` 要 `recalcUnits`；改 `meta` 要 `saveMeta` |
+| 新增一個開發密技 | `core/devtools.ts` 加函式 → `ui/screens.ts:29-35` 的 host 介面 → `app.ts:324+` 轉接 → `:173` 的 `actions` 陣列加按鈕 | 改 `units`／`hand` 要 `recalcUnits`；改 `meta` 要 `saveMeta` |
 
 ## 相關頁面
 

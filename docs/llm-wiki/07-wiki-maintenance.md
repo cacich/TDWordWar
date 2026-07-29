@@ -67,8 +67,9 @@
 | `data/glyphs.ts`（字表） | [02-data-tables.md](02-data-tables.md) 的內容量與分類統計、[CLAUDE.md](../../CLAUDE.md) 的內容量 |
 | `data/generals.ts`（武將） | 同上，另加 [02](02-data-tables.md) 的階級分布 |
 | `data/bonds.ts`（羈絆） | [02](02-data-tables.md) 的羈絆數、[modules/04](modules/04-combat-and-skills.md)、`docs/game-design.md` §5.5 的羈絆表 |
-| `data/enemies.ts`（敵人） | [modules/05](modules/05-economy-and-waves.md) 的敵表、`docs/game-design.md` §7.4 |
-| `data/levels/index.ts`（關卡） | [modules/03](modules/03-board-and-mapgen.md)、`docs/game-design.md` §8.1 |
+| `data/enemies.ts`（敵人／BOSS） | [modules/05](modules/05-economy-and-waves.md) 的敵表、[02](02-data-tables.md) 的敵種數與 traits 表、`docs/game-design.md` §7.4、[00-index](00-index.md) 的內容量 |
+| `data/enemies.ts` 的 `TRAIT_COUNTERS`（新增 trait） | 同上，**並確認 `TRAIT_LABEL` 與 `COUNTER_LABEL` 都補齊**（`enemies-ext.test.ts` 會檢查） |
+| `data/levels/index.ts`（關卡／`bias`） | [modules/03](modules/03-board-and-mapgen.md) 的關卡表、[02](02-data-tables.md) 的關卡表、`docs/game-design.md` §8.1、**並更新各關 sim 中位數** |
 | `data/shop.ts` / `upgrades.ts` | [modules/06](modules/06-meta-progression.md)，若改價格要更新總價與局數估算 |
 | `data/loadout.ts` | [modules/06](modules/06-meta-progression.md) |
 | `sim/skills.ts`（技能／組合技） | [modules/04](modules/04-combat-and-skills.md) 的原型清單與註冊表數量、[02](02-data-tables.md) |
@@ -80,6 +81,8 @@
 | `sim/types.ts` 的 `Perks` | [modules/06](modules/06-meta-progression.md) 的 Perks 對應表 |
 | 新增檔案到 `src/` | [00-index.md](00-index.md) 的檔案地圖 **＋** 對應的 `modules/` 頁；若是新子系統，照模板開新頁 |
 | 新增／移除測試檔 | [04-invariants.md](04-invariants.md) 的測試涵蓋清單與測試總數 |
+| 任何**增減行數**的改動（不只改值） | **回頭校對所有引用該檔的頁面的 `檔案:行號`**。`sim/types.ts`／`state.ts`／`step.ts`／`combat.ts` 被 [modules/01](modules/01-state-and-units.md)、[02](modules/02-actions-and-combine.md)、[04](modules/04-combat-and-skills.md)、[05](modules/05-economy-and-waves.md)、[06](modules/06-meta-progression.md)、[07](modules/07-presentation.md) 大量引用，改一次就會同時弄髒六頁。做法見下方「怎麼驗證文件沒失效」 |
+| `npm test` 的測試數變了 | [04-invariants.md](04-invariants.md) 的測試總數 **＋ [CLAUDE.md](../../CLAUDE.md) 指令區塊的註解** |
 | 完成 [06-roadmap.md](06-roadmap.md) 的項目 | 把該項移到 roadmap 的「已完成」區並註明日期 |
 
 ---
@@ -97,6 +100,9 @@
 | **數字沒跟著改** | 內容量、測試數、`HP_GROWTH`、商城總價都曾各自過時 |
 | **資料表數字被誤當實戰值** | 資料表的 `range` 還要經過 `RANGE_MUL` 等疊乘，規格書長期直接把它當實戰射程 |
 | **平衡註解沒重算** | 商城總價註解寫 9000，實際 13590（漏算每級成長項） |
+| **修好的 bug 還被寫成現存陷阱** | 組合技 cdMax 少乘 `perks.cdMul` 修好後，模組頁仍把它列為待修陷阱。**修 bug 時要一起搜尋文件裡對它的描述** |
+| **自己的修正讓行號位移** | 改 `sim/bonds.ts` 後，模組頁 9 處 `bonds.ts:NN` 全部失效。動過的檔案要回頭校對引用它的頁面 |
+| **只回寫「主場」頁面，忘了旁邊四頁** | 敵種擴充只動了 `data/enemies.ts` 與 `sim/waves.ts` 的**內容**，但順手在 `state.ts:116` 插了一行 `bias`、在 `types.ts` 插了 33 行——結果 modules/01・04・06・07 共約 90 個 `檔案:行號` 全部位移一格到三十三格，全部指到錯的地方。**回寫時先問「我增減了哪些檔案的行數」，再問「誰引用了那些檔案」** |
 
 **共通模式**：出錯的幾乎都是「數字」與「函式名」。回寫時優先檢查這兩類。
 
@@ -131,8 +137,19 @@ console.log('羈絆', BONDS.length, '主動技', Object.keys(SKILLS).length, '�
 **測試數**請以 `npm test` 的輸出為準，**不要用 grep 數 `it(` 的數量**——
 `shop.test.ts` 與 `roster-ext.test.ts` 用迴圈產生測試案例，靜態計數會少算約 29 個。
 
-**行號**是最容易失效的部分。抽查方式：隨機挑幾個 `檔案:行號` 引用，確認該行仍是所描述的內容。
-若某頁大幅改動過，優先重新驗證該頁的行號。
+**行號**是最容易失效的部分，而且**不要用抽查**——抽查抓不到「整頁一起位移一格」。
+把該頁所有引用一次印出來對照才可靠（bash，把 `<頁面>` 換掉）：
+
+```bash
+grep -o -E '(state|types|step|combat|actions|waves|economy|pool|skills|bonds)\.ts:[0-9]+' <頁面> \
+  | sort -u | while IFS=: read -r f n; do
+      p=$(ls src/sim/$f src/data/$f 2>/dev/null | head -1)
+      printf '%-12s %-5s | %s\n' "$f" "$n" "$(sed -n "${n}p" "$p")"
+    done
+```
+
+輸出的每一行都應該長得像該頁對它的描述；對不上的就是位移了。
+**動過任何 `src/` 檔案的行數之後，對每個引用它的頁面各跑一次**。
 
 ---
 
@@ -150,7 +167,11 @@ console.log('羈絆', BONDS.length, '主動技', Object.keys(SKILLS).length, '�
 | `perksFrom` 等級 0 時全部欄位為中性值 | `shop.test.ts` |
 | 每種商城道具只影響自己負責的 `Perks` 欄位 | `shop.test.ts` |
 | 羈絆門檻不超過編隊武將上限（否則永遠湊不齊） | `loadout.test.ts` |
-| 同種子產生同一場對局 | `core.test.ts` |
+| 12 種 BOSS 的機制指紋互不相同（不能只是血量差異） | `enemies-ext.test.ts` |
+| 死亡分裂圖無環、單次分裂總量有上限 | `enemies-ext.test.ts` |
+| 每個用到的 `EnemyTrait` 都有對應的應對手段與中文標籤 | `enemies-ext.test.ts` |
+| 關卡 `bias` 都是合法 trait 且有敵人帶該 trait | `enemies-ext.test.ts` |
+| 同種子產生同一場對局 | `core.test.ts` / `enemies-ext.test.ts` |
 
 **新增機制時請一併補測試**——尤其是 `sim/` 裡的純函式，它們是本專案最便宜的保險，
 也讓文件不必承擔「記住所有規則」的責任。

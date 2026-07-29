@@ -17,8 +17,8 @@
 | 加一個**字** | [03-change-recipes.md](03-change-recipes.md) §1 |
 | 加一名**武將**／改配方 | [03-change-recipes.md](03-change-recipes.md) §2 → 若要加技能再看 [modules/04](modules/04-combat-and-skills.md) |
 | 加一個**羈絆**／組合技 | [modules/04](modules/04-combat-and-skills.md)。⚠ 有一條門檻不能超過編隊上限的硬約束 |
-| 加一個**敵人** | [modules/05](modules/05-economy-and-waves.md) |
-| 加一**關卡** | [modules/03](modules/03-board-and-mapgen.md)（含可直接複製的完整範例） |
+| 加一個**敵人**／**BOSS** | [modules/05](modules/05-economy-and-waves.md)。⚠ `traits` 必填；分裂圖不可有環 |
+| 加一**關卡**／改關卡偏好 | [modules/03](modules/03-board-and-mapgen.md)（含可直接複製的完整範例） |
 | 加一個**商城道具**／兵書升級 | [modules/06](modules/06-meta-progression.md)。⚠ Perks 中性值不變量 |
 | 加一個**主動技／控場狀態** | [modules/04](modules/04-combat-and-skills.md) |
 
@@ -94,11 +94,12 @@
   **字牌不會消失**，武將是疊在字牌上的一層。
 - 湊齊特定武將組合 → 觸發**羈絆**全域加成與**組合技**。
 - 敵人沿預先算好的單一路徑從「寨」走到「營」，抵達就扣生命。
-- 6 關，其中 3 關**每局隨機生成地形**（由構造保證沒有死路，見 `sim/mapgen.ts`）。
+- 9 關，其中 6 關**每局隨機生成地形**（由構造保證沒有死路，見 `sim/mapgen.ts`）。
+- 每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，並自動推導出選單的「建議帶」標籤。
 - 全部視覺由 Canvas 2D 繪製，**零外部圖片／字型資產**；音效由 Web Audio 即時合成，**零音檔**。
 - 抽卡有四層收斂：**編隊**（玩家手動指定）→ 每局字池 → 熟悉度加權 → 心願單。
 - 局外系統：圖鑑、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單。共用「聲望」貨幣。
-- 內容量：**71 字／43 武將／13 羈絆／30 主動技／5 組合技／6 關／5 種敵人**。
+- 內容量：**71 字／43 武將／13 羈絆／30 主動技／5 組合技／22 種敵人（10 一般＋12 BOSS）／9 關**。
 
 ---
 
@@ -109,8 +110,8 @@ src/
   data/        glyphs.ts      字表（71）
                generals.ts    武將配方（43）
                bonds.ts       羈絆（13）
-               enemies.ts     敵表（5）
-               levels/index.ts 關卡（6）
+               enemies.ts     敵表（22：10 一般 + 12 BOSS）+ 特徵對照表
+               levels/index.ts 關卡（9，各帶 bias 敵人偏好）
                upgrades.ts    兵書：4 種數值養成
                shop.ts        商城：16 種可升級被動道具 → Perks
                loadout.ts     編隊：手動挑選字池內容

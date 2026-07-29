@@ -1,5 +1,5 @@
 /**
- * 敵表。HP = BASE_HP × HP_GROWTH^wave × hpMul（目前 HP_GROWTH = 1.25，見 sim/waves.ts）
+ * 敵表。HP = BASE_HP × HP_GROWTH^wave × hpMul（目前 HP_GROWTH = 1.23，見 sim/waves.ts）
  * troop 用於三向相剋：騎 → 弓 → 步 → 騎（克制 +25%，被克 −25%）
  *
  * ★ 設計骨架：每隻敵人宣告 `traits`（它難對付的地方），這一個欄位同時驅動兩件事：
@@ -89,7 +89,7 @@ export const ENEMIES: EnemyDef[] = [
   },
 
   // ── BOSS（每 5 波出現一隻，從合格者中隨機挑選） ────────
-  // 基準：hpMul 12～20、def 60±、bounty 20+、damage 2、全部 ccImmune。
+  // 基準：hpMul 8～22、def 25～95、bounty 20～34、damage 2～3、全部 ccImmune。
   // 每一隻都有一個「必須改變打法」的鉤子，而不是只有血量差異。
   {
     key: 'boss', char: '將', hpMul: 14, def: 60, speed: 0.6, flying: false, bounty: 20, damage: 2, troop: '騎',

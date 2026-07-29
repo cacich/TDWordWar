@@ -57,7 +57,14 @@
 | 障礙 | `TileKind: 'block'` | 不可放置，不阻擋射線 |
 | 出兵口／寨 | `TileKind: 'spawn'` | |
 | 大營 | `TileKind: 'camp'` | 玩家的血條所在 |
-| 賊 | `EnemyDef` key `thief` | 其他：`shield` 盾賊、`swift` 快賊、`flyer` 飛賊、`boss` 賊將 |
+| 賊 | `EnemyDef` key `thief` | 一般兵共 10 種：`shield` 盾賊、`swift` 快賊、`flyer` 飛賊、`shaman` 妖道、`armor` 甲賊、`splitter` 分裂賊、`gale` 疾風賊、`swarmlet` 蟻賊、`stone` 磐石賊 |
+| BOSS | `EnemyDef.boss` | 12 種，每 5 波由 `pickBoss()` 依關卡偏好隨機挑一隻 |
+| 敵人特徵 | `EnemyTrait` | 成群／重甲／飛行／高速／治療／分裂／高血。驅動關卡加權與 UI 推薦 |
+| 應對手段 | `CounterKind` | 範圍／貫穿／單體高傷／對空／控場／持續傷害。由 `TRAIT_COUNTERS` 推導 |
+| 關卡偏好 | `LevelDef.bias` | 該關偏好的敵人特徵，出現權重 ×`BIAS_WEIGHT` |
+| 回血光環 | `EnemyDef.healAura` | 妖道系：為半徑內其他敵人回血（比例／秒） |
+| 死亡分裂 | `EnemyDef.splitInto` | 只在 `cleanupDead()` 展開；分裂圖不可有環 |
+| 護衛 | `EnemyDef.escort` | BOSS 生成時一起帶出的小怪，在 `buildWave` 展開 |
 | 射程 | `range` | 單位是格 |
 | 攻速 | `aps` | attacks per second |
 | 攻擊型態 | `shape` | single 單體 / pierce 穿透 / splash 濺射 |

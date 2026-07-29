@@ -128,9 +128,28 @@ CSS 裡任何元件自己的 `display: grid/flex` 會蓋掉 HTML 的 `hidden` �
 存檔 key 是 `tdwordwar.meta.v3`，會依序往回讀 v2 / v1 做遷移（新欄位補預設值）。
 
 ### `ccImmune` 只擋定身與擊退
-賊將仍會吃灼燒、減速、易傷。這是刻意的平衡設計（控場流不該完全癱瘓 BOSS，
-但也不該對 BOSS 完全無效），改動前請先想清楚。
-註：`step.ts` 的流星火雨直接寫 `burnT`/`burnDps` 繞過 `applyStatus`，所以不受 `ccImmune` 影響。
+灼燒與減速各自由 `burnImmune`／`slowImmune` 管，是三個獨立欄位而不是一個開關——
+只帶 `ccImmune` 的 BOSS（例如賊將）仍會吃灼燒、減速、易傷。這是刻意的平衡設計
+（控場流不該完全癱瘓 BOSS，也不該對 BOSS 完全無效），改動前請先想清楚。
+註：`step.ts` 的流星火雨直接寫 `burnT`/`burnDps` 繞過 `applyStatus`，所以連 `burnImmune` 都無視。
+
+### 死亡分裂只能在 cleanupDead 做，且分裂圖不可有環
+`splitInto` 的展開必須留在 `step.ts` 的 `cleanupDead()`——那是每幀唯一一次、
+且在所有傷害結算之後的安全點。在 `stepCombat`／`stepStatuses` 裡直接 push 會造成
+「剛分裂出來的小怪在同一幀又被打死再分裂」的連鎖。
+允許多層分裂（分裂將 → 分裂賊 → 蟻賊），安全性靠**分裂圖無環**保證；
+`enemies-ext.test.ts` 有測試驗證無環與單次分裂的總量上限。
+
+### 灼燒無視防禦，burnImmune 是唯一的封鎖手段
+灼燒走 `damageEnemy()`，**不經過 `mitigate()`**，所以高防敵人的正解是持續傷害。
+如果希望某隻敵人逼玩家改帶高單擊，只能給它 `burnImmune`。
+易傷（`vuln`）刻意沒有任何免疫，否則控場流會對 BOSS 完全失效。
+
+### 敵人的 traits 是關卡偏好與 UI 推薦的單一來源
+`EnemyDef.traits` 同時驅動「關卡 `bias` 的加權」與「選單卡片的建議帶標籤」。
+新增敵人只要填對 traits，兩邊都會自動跟上——**不要在關卡資料裡手寫推薦清單**，
+那會立刻變成第二份不同步的真相。新增 trait 時要一併補 `TRAIT_COUNTERS` 與 `TRAIT_LABEL`
+（`enemies-ext.test.ts` 會檢查每個用到的 trait 都有對應）。
 
 ### 局外道具（Perks）等級 0 必須是中性值
 `data/shop.ts` 的 `perksFrom()` 在未購買時**必須**回傳中性值（倍率 1、機率／間隔 0），
@@ -178,7 +197,7 @@ safe-area 內距。實測關掉伺服器後重新整理仍可完整遊玩。
 
 ## 測試涵蓋範圍
 
-`npm test` 目前 174 個測試（**請以 `npm test` 的輸出為準，不要用 grep 數 `it(`**——
+`npm test` 目前 197 個測試（**請以 `npm test` 的輸出為準，不要用 grep 數 `it(`**——
 `shop.test.ts` 與 `roster-ext.test.ts` 用迴圈產生案例，靜態計數會少算約 29 個）：
 
 - `combine.test.ts` — 組詞：橫向、縱向、逆序不成立、不相鄰不成立、階級優先、武將不參與
@@ -202,6 +221,10 @@ safe-area 內距。實測關掉伺服器後重新整理仍可完整遊玩。
   `loadout` 參數時已解鎖但沒選的字被排除、還沒解鎖過的字不受影響、選武將連帶帶進配方字、
   空編隊防呆退回骨幹字、`createGame` 依 `meta.loadoutActive` 決定要不要套用、
   **每個羈絆的門檻在啟用編隊時都達成得到（迴歸守護）**
+- `enemies-ext.test.ts` — 敵表完整性（key 不重複、BOSS 全部 ccImmune、**12 種 BOSS 的機制指紋互不相同**
+  ——這個測試曾抓出疾風將與影將實質重複）、分裂圖無環且總量有上限、新機制（回血光環／自我再生／
+  死亡分裂／漏過大營不分裂／三種免疫各擋對的東西）、BOSS 隨機挑選與同種子決定性、
+  `minWave` 把強力敵種擋在前期、關卡 bias 確實提高該類敵人出現率、`countersFor` 推導正確
 - `roster-ext.test.ts` — M6 後新增的 15 名武將配方都能正確組成（含斧兵自動繼承「斧」的定身）、
   新增的 5 個羈絆各自正確觸發且不跟其他羈絆串在一起（含呂布陳宮的「轅門射戟」組合技實際造成傷害）、
   荀彧／姜維等新武將的主動技效果

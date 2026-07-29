@@ -42,7 +42,7 @@ onHit: {
 }
 ```
 
-- 定身與擊退會被 `EnemyDef.ccImmune`（賊將）擋掉；灼燒／減速／易傷不會
+- 定身與擊退會被 `EnemyDef.ccImmune`（全部 BOSS）擋掉；灼燒被 `burnImmune`、減速被 `slowImmune` 擋掉；**易傷沒有任何免疫**
 - **武將未自訂 `onHit` 時，會自動繼承組成字牌的 onHit**（取各欄位最強者），
   所以「火」＋「計」組出的「火計」自動同時有灼燒與減速——新增謀略配方時不必重寫
 
@@ -100,28 +100,62 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
 ## src/data/enemies.ts — 敵表
 
 ```ts
-{ key, char, hpMul, def, speed, flying, bounty, damage, troop, desc, ccImmune? }
+{ key, char, hpMul, def, speed, flying, bounty, damage, troop, desc,
+  traits,                        // ★ 必填：這隻敵人「難對付的地方」
+  ccImmune?, burnImmune?, slowImmune?,
+  healAura?: { radius, hps },    // 為半徑內其他敵人回血（比例／秒）
+  regen?,                        // 自我回血（最大血量的比例／秒）
+  splitInto?: { key, count },    // 死亡分裂
+  escort?: { key, count },       // 生成時一起帶出的護衛
+  boss?, minWave? }
 ```
+
+目前 **22 種敵人 = 10 一般兵 + 12 種 BOSS**。
 
 - `speed` 單位是「每秒前進幾格」
 - `def` 走遞減公式：`傷害 = atk × (1 - def/(def+60))`，`DEF_K = 60` 定義在 `sim/combat.ts`
 - `flying: true` 只有 `range >= 2` 的單位打得到
 - `troop` 參與三向相剋：騎 → 弓 → 步 → 騎（`COUNTER_BONUS` 1.25 / `COUNTER_PENALTY` 0.75）
-- `ccImmune: true` 免疫定身與擊退（目前只有賊將）
+- 三種免疫各擋不同東西：`ccImmune` 定身＋擊退／`slowImmune` 減速／`burnImmune` 灼燒。
+  **易傷刻意無法免疫**，否則控場流會對 BOSS 完全失效
+- ⚠ **灼燒無視防禦**（走 `damageEnemy` 不經 `mitigate`），所以「高防」的解法是持續傷害；
+  `burnImmune` 是唯一能封掉這條路、逼玩家改帶高單擊的手段
 - 實際血量 = `enemyBaseHp(wave) × hpMul`
+
+### traits 與推薦手段
+
+`traits` 一個欄位驅動兩件事，**不要在別處重複定義**：
+
+1. 關卡的 `bias` 加權帶該特徵的敵人與 BOSS 的出現率（`sim/waves.ts` 的 `BIAS_WEIGHT`）
+2. 經 `TRAIT_COUNTERS` 推導出選單卡片的「建議帶」標籤（`countersFor()`）
+
+| trait | 意義 | 推導出的應對手段 |
+|---|---|---|
+| `swarm` | 成群、血薄 | 範圍攻擊、貫穿 |
+| `armored` | 高防 | 持續傷害、單體高傷 |
+| `flying` | 飛行 | 對空 |
+| `fast` | 高速 | 控場 |
+| `healer` | 回血支援 | 單體高傷（集火） |
+| `splitter` | 死亡分裂 | 範圍攻擊 |
+| `tanky` | 血量厚 | 持續傷害、單體高傷 |
 
 ## src/sim/waves.ts — 波次成長
 
 ```ts
 BASE_HP = 20         // 第 0 波基準
-HP_GROWTH = 1.25     // 每波 ×1.25（射程全域 ×2 後上調，把難度拉回 12～20）
+HP_GROWTH = 1.23     // 每波 ×1.23（敵種擴充帶來回血／分裂／免疫後，從 1.25 往回讓一點）
 enemyCount(w) = 6 + floor(w × 1.4)
 PREP_SECONDS = 12    // 佈陣時間
 isBossWave(w) = w % 5 === 0
-composition(w)       // 波次解鎖敵種：3 波快賊、4 波盾賊、7 波飛賊
+BIAS_WEIGHT = 4      // 帶關卡偏好特徵的敵人，出現權重 ×4
+composition(w)       // 該波可出現的一般兵（依各敵人的 minWave 開放）
+pickBoss(w, rng, bias)  // BOSS 波從合格 BOSS 中依 bias 加權隨機挑一隻
 ```
 
-**難度旋鈕的優先順序**：先動 `HP_GROWTH`（影響最劇烈）→ `enemyCount` → `composition` 解鎖時機。
+**難度旋鈕的優先順序**：先動 `HP_GROWTH`（影響最劇烈）→ `enemyCount` → 各敵人的 `minWave`。
+
+⚠ `buildWave` 會**消耗 rng**（抽敵種與 BOSS）。要做「波次預覽」不能直接呼叫它，
+詳見 [06-roadmap.md](06-roadmap.md) §2。
 
 ## src/sim/economy.ts — 經濟
 
@@ -186,6 +220,7 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 ```ts
 { key, name, subtitle, startFood, lives, maxWave, hpMul,
   pool: { support: number; generals: number },             // ★ 必填，別漏掉
+  bias?: EnemyTrait[],                                     // 偏好的敵人特徵
   map?: string[],                                          // 固定地圖
   gen?: { cols, rows, minPathLen, blockRate? } }           // 隨機地形
 ```
@@ -194,14 +229,33 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 S 出兵口   C 大營   # 路   P 空地   . 障礙
 ```
 
+目前 **9 關**（3 關固定地圖 + 6 關隨機地形）。
+
 - **`pool` 是必填欄位**（漏掉會 TS 編譯錯誤）：`support` = 抽幾個謀略／經濟字，
   `generals` = 抽幾組姓名配方。數字越小越容易疊高與湊配方，但變化也越少。
   可直接複製的完整範例見 [03-change-recipes.md](03-change-recipes.md) §5。
+- **`bias` 決定這一關的性格**：帶那些特徵的敵人與 BOSS 出現權重 ×`BIAS_WEIGHT`，
+  並自動推導出選單卡片的「建議帶」標籤。**不要另外手寫推薦清單**，
+  推導只有一個來源（`data/enemies.ts` 的 `TRAIT_COUNTERS`）。
 - `map` 與 `gen` 二選一（有測試檢查每關至少有一個）
 - 固定地圖每一列長度必須相等，否則 `parseMap()` 會拋錯（有測試）
 - `hpMul` 是該關的難度旋鈕，乘在敵人血量上
 - 關卡順序與解鎖條件由 `LEVEL_ORDER` 決定（前一關通關才解鎖下一關）
 - 設計決定 #2：**障礙不阻擋射線**，`.` 只影響可放置性與視覺
+
+各關偏好與傻 AI 中位數（目標 12～20）：
+
+| 關卡 | 波數 | hpMul | bias | 建議帶 | sim 中位數 |
+|---|---|---|---|---|---|
+| 黃巾之亂 | 12 | 0.85 | —（教學） | — | 12（滿關） |
+| 討伐董卓 | 18 | 1.00 | flying | 對空 | 18（滿關） |
+| 巨鹿 | 30 | 1.15 | swarm | 範圍、貫穿 | 20 |
+| 官渡 | 24 | 1.10 | fast | 控場 | 20 |
+| 赤壁 | 30 | 1.20 | armored | 持續傷害、單體高傷 | 17 |
+| 五丈原 | 40 | 1.30 | healer, tanky | 單體高傷、持續傷害 | 18 |
+| 襄陽 | 32 | 1.25 | swarm, splitter | 範圍、貫穿 | 19 |
+| 漢中 | 32 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 19 |
+| 洛陽 | 40 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 18 |
 
 ## src/sim/mapgen.ts — 隨機地形
 

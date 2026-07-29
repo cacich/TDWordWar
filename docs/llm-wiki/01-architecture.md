@@ -38,22 +38,25 @@ requestAnimationFrame
 ```
 phase === 'prep'   → prepTimer 遞減 → 歸零則 beginBattle()
                    → stepEffects() → return（佈陣階段只推進特效）
-phase === 'battle' → spawnDue()        依 spawnQueue[].at 生成敵人
-                   → stepStatuses()    控場倒數與灼燒持續傷害
-                   → moveEnemies()     沿 path 前進；抵達 camp 扣生命
+phase === 'battle' → spawnDue()          依 spawnQueue[].at 生成敵人
+                   → stepStatuses()      控場倒數與灼燒持續傷害
+                   → stepEnemySupport()  敵方回血光環與自我再生
+                   → moveEnemies()       沿 path 前進；抵達 camp 扣生命
                    → stepCombat()      索敵、傷害、特效
                    → stepSkills()      武將主動技
                    → stepBondSkills()  羈絆組合技
-                   → stepMeteor()      流星火雨（局外道具）
-                   → stepEffects()     特效壽命
-                   → cleanupDead()     移除 hp<=0
-                   → checkWaveEnd()    隊列與場上皆空 → 結算收入、進下一波
+                   → stepMeteor()        流星火雨（局外道具）
+                   → stepEffects()       特效壽命
+                   → cleanupDead()       移除 hp<=0，並展開死亡分裂
+                   → checkWaveEnd()      隊列與場上皆空 → 結算收入、進下一波
 ```
 
 **順序有意義**：
 - 先生成再移動，剛生成的敵人當幀就能被打
 - `stepStatuses` 在 `moveEnemies` **之前**，定身才能當幀生效
-- `cleanupDead` 在所有傷害來源之後，才不會有 hp<=0 的敵人被重複結算
+- `stepEnemySupport`（回血）緊接在 `stepStatuses`（灼燒）之後，讓兩者在同一幀正面對撞
+- `cleanupDead` 在所有傷害來源之後，才不會有 hp<=0 的敵人被重複結算；
+  **死亡分裂也只能在這裡做**，在傷害來源那邊 push 會造成同幀連鎖分裂
 
 詳細逐步說明見 [modules/05-economy-and-waves.md](modules/05-economy-and-waves.md)。
 

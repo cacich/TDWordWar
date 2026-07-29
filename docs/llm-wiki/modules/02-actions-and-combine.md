@@ -56,7 +56,7 @@
 （`src/sim/actions.ts:185,232`），入口都會先擋 `u.kind !== 'glyph'`（`:188,234`）。
 
 武將屬性不由 action 維護，而是 `recalcUnits()` → `recomputeForm()` 每次從成員字牌現算
-（`src/sim/state.ts:325`）。這帶來兩個結果：
+（`src/sim/state.ts:326`）。這帶來兩個結果：
 
 - **成員字牌被疊高 → 武將自動變強，不需要重新合成**（`src/sim/__tests__/actions.test.ts:90-108` 鎖住這行為）。
 - **成員字牌被搬走／鏟除 → 武將必須解除**，這就是 `dissolveFormsOf()` 存在的理由。
@@ -78,7 +78,7 @@
 
 `runThrough` 的方向向量 `dc/dr` 由 `orientation` 決定（`:35-36`）：`'h'` = 左→右、`'v'` = 上→下，
 回傳陣列**就是正讀順序**（`before.unshift()` + `after.push()`，`:48,57`）。
-`makeGeneralUnit()` 直接把 `parts.map(p => p.cells[0])` 當成 `Unit.cells`（`src/sim/state.ts:282`），
+`makeGeneralUnit()` 直接把 `parts.map(p => p.cells[0])` 當成 `Unit.cells`（`src/sim/state.ts:283`），
 所以**正讀順序是從 `runThrough` 一路傳到渲染的**——這就是不變式 #5 的來源。
 
 搜尋上界是 `MAX_RECIPE_LEN`（`data/generals.ts:255`，由 `GENERALS` 自動算出最長配方），
@@ -137,8 +137,8 @@ B 兩邊都算「移動」，所以兩邊的武將都解除、兩端都要重新
 `makeGlyphUnit()` 造一個新物件，然後把 `id`、`formIds`、`targeting` 覆寫回去，最後
 `state.units[indexOf(target)] = fresh` 換掉陣列裡的元素。
 
-- **`id` 必須保留**：武將透過 `memberIds` → id 找成員（`glyphsOf()`，`src/sim/state.ts:169`），
-  換 id 等於成員憑空消失，`recomputeForm()` 會因為 `parts.length === 0` 直接 return（`state.ts:329`），
+- **`id` 必須保留**：武將透過 `memberIds` → id 找成員（`glyphsOf()`，`src/sim/state.ts:170`），
+  換 id 等於成員憑空消失，`recomputeForm()` 會因為 `parts.length === 0` 直接 return（`state.ts:330`），
   武將屬性靜默凍結在舊值。
 - **`formIds` 必須保留**：否則字牌會被當成「自由字牌」→ 單獨攻擊、單獨產糧、單獨投射光環，
   傷害與收入雙重計算（不變式 #5c）。`memberIds` 不需要動，因為 id 沒變。
@@ -150,7 +150,12 @@ B 兩邊都算「移動」，所以兩邊的武將都解除、兩端都要重新
 的一半換成糧（提前開戰的獎勵），然後呼叫 `beginBattle()`。
 `beginBattle()` `:296-301` 回傳 `void`（不是 `ActionResult`）——它是**階段轉換**而不是玩家操作，
 另一個呼叫者是 `sim/step.ts` 的佈陣倒數結束。反向的 `battle → prep` 轉換在
-`sim/step.ts:147-173` 的 `checkWaveEnd()`（那裡也負責 `recruitsThisWave = 0`）。
+`sim/step.ts:209-235` 的 `checkWaveEnd()`（那裡也負責 `recruitsThisWave = 0`）。
+
+`beginBattle` 唯一做的事是 `spawnQueue = buildWave(wave, rng, hpMul, state.bias)`（`actions.ts:300`）——
+**這一行會消耗 `state.rng`**（每隻敵人 1 抽，BOSS 波再多 1 抽）。所以要做「下一波預覽」時
+**不可以**在這裡多呼叫一次 `buildWave`，那會讓整條亂數流位移、破壞同種子重現性。
+正確做法見 [05-economy-and-waves.md](05-economy-and-waves.md) 的陷阱 2。
 
 ### 提示：`possibleRecipes`
 
@@ -161,8 +166,8 @@ B 兩邊都算「移動」，所以兩邊的武將都解除、兩端都要重新
 - `usesHand` → **只提示「用得到手牌」的組合**（`:165,168`）。理由寫在註解：純場上就能湊的，
   玩家早該組好了，提示它只是噪音。
 
-呼叫端只有 `recalcUnits()` 尾端（`src/sim/state.ts:403`），寫進 `state.hints`；
-`state.hints` 接著餵給 `computeHintCells()`（`state.ts:411`）算出棋盤上的 `hintCells` 標記。
+呼叫端只有 `recalcUnits()` 尾端（`src/sim/state.ts:404`），寫進 `state.hints`；
+`state.hints` 接著餵給 `computeHintCells()`（`state.ts:412`）算出棋盤上的 `hintCells` 標記。
 `hints` / `hintCells` 的欄位語意與渲染見 [01-state-and-units.md](01-state-and-units.md)。
 
 ### perks 介入點
@@ -263,7 +268,7 @@ findCombination (board, units, changedCell): CombineMatch|null ← 只給測試�
   （`actions.ts:38,45-52`）。不是「一格一次花費」。
 - `rerollHand` 只重抽**非空**的格子（`:73`）且**把階級重設為 1**（`:74`）——刻意的：
   不然玩家可以拿高階字免費換高階字。空格不會被填滿，重抽不增加張數。
-- `smelt` 的 `state.smeltFreeLeft`（初始 3，`state.ts:138`）不是「免費次數」而是
+- `smelt` 的 `state.smeltFreeLeft`（初始 3，`state.ts:139`）不是「免費次數」而是
   **高退款次數**：有額度時退 20%（`:124`），沒額度時走 `smeltRefund()` 的 12%（`economy.ts:97`）。
 - `sellGlyph` 的退款公式在 `actions.ts:237`，成員字牌只退 `SELL_RATIO.general = 0.3`
   （`economy.ts:106`，設計決定：拆將要有重量）。它**不走** `smeltRefund()`。
@@ -285,7 +290,7 @@ findCombination (board, units, changedCell): CombineMatch|null ← 只給測試�
 | 階級上限 | `data/glyphs.ts` 的 `MAX_GLYPH_LEVEL` | 三處疊合檢查都引用它，改一處即可 |
 | 移動／交換的判定 | `moveGlyph` 三條分支 `actions.ts:192-227` | 改分支 B 前先看 `__tests__/actions.test.ts:174-224` |
 | 武將解除的連帶效果 | `dissolveFormsOf()` `actions.ts:255` | 別忘 `bondCds` 與 `dissolve` 事件；呼叫端負責 `recalcUnits` |
-| 提示要提示什麼 | `possibleRecipes()` `combine.ts:138`（名單）＋ `state.ts:411` `computeHintCells()`（棋盤標記） | 純衍生值，不影響機制。`usesHand` 過濾是刻意的 |
+| 提示要提示什麼 | `possibleRecipes()` `combine.ts:138`（名單）＋ `state.ts:412` `computeHintCells()`（棋盤標記） | 純衍生值，不影響機制。`usesHand` 過濾是刻意的 |
 | 花費／退款數值 | `sim/economy.ts` | `actions.ts` 只呼叫，不重複算倍率 |
 | 抽字權重 | `sim/economy.ts` 的 `rollGlyph` / `RARITY_TABLE` | `actions.ts:39-44,66-71` 只負責組 `RollContext` |
 | 加一個影響征兵／抽字的 perk | 讀 `state.perks.*`，介入點見上表 | 新欄位要同時改 `types.ts` 的 `Perks` 與 `shop.ts` 的 `NEUTRAL_PERKS` |
