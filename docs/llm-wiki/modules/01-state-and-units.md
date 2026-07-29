@@ -46,7 +46,7 @@ state.units = [ ...字牌(kind:'glyph'), ...武將(kind:'general') ]   // 同一
 - 取武將成員：`glyphsOf(state, form)`（`state.ts:199`，走 `memberIds` 查 id，**不是**走 `cells`）
 
 **「成員字牌不重複計算」是散落在三處的同一條規則**（都用 `formIds.length > 0` 判斷）：
-攻擊 `combat.ts:250`、產糧 `economy.ts:27`、光環投射 `state.ts:409`。新增任何「掃全場 units 加總」的邏輯時必須自己補這個判斷，模組本身不會幫你擋。
+攻擊 `combat.ts:250`、產糧 `economy.ts:45`、光環投射 `state.ts:409`。新增任何「掃全場 units 加總」的邏輯時必須自己補這個判斷，模組本身不會幫你擋。
 
 ### 基礎值 vs 實效值（`types.ts:147-155`）
 
@@ -137,7 +137,7 @@ actions.placeFromHand(actions.ts:133)
 9. **`skillCdMax = 0` 表示「沒有可用主動技」**，判定條件是 `def.skill && SKILLS[u.defKey]` 兩者都成立（`state.ts:333`、`397`）。只在 `data/generals.ts` 寫了 `skill` 卻沒在 `sim/skills.ts` 註冊實作 → UI 不顯示、永遠放不出來，且不會報錯。
 10. **`recomputeForm` 在 `!parts.length` 時直接 return**（`state.ts:359`），留下舊值。正常流程下成員消失必經 `dissolveFormsOf`（武將整個被移除），所以不會發生；但若新增了「繞過 dissolve 直接刪字牌」的路徑，會留下一個屬性凍結的殭屍武將。
 11. **`levelUpGlyph`（`actions.ts:171`）用「重建物件＋沿用 id/formIds/targeting」實作升階**。任何加進 `Unit` 的新欄位若需要跨升階保留（例如玩家設定的偏好），必須在那裡補一行複製，否則會被 `makeGlyphUnit` 的初值重設。
-12. **`income` 不吃 `perks.incomeMul`**。`perks.incomeMul` 只乘在每波固定收入上（`step.ts:213`），單位產糧是原值（`economy.ts:24-31`）。字牌產糧刻意用線性 `income × level`（`state.ts:236`），不是 `levelMul` 的指數——五階「商」會直接破壞經濟曲線。武將產糧走平均階級（`state.ts:376-380`）。
+12. **`income` 不吃 `perks.incomeMul`**。`perks.incomeMul` 只乘在每波固定收入上（`step.ts:213`），單位產糧是原值（`economy.ts:43-49`）。字牌產糧刻意用線性 `income × level`（`state.ts:236`），不是 `levelMul` 的指數——五階「商」會直接破壞經濟曲線。武將產糧走平均階級（`state.ts:376-380`）。
 13. **`MetaProgress` 定義在 sim 卻被 `data/shop.ts`、`data/loadout.ts`、`data/upgrades.ts` 反向 import**。這些都是 `import type`，編譯後會被抹除，所以沒有真的執行期循環（`state.ts:18` 對 `data/shop` 是值 import）。要在那些 data 檔裡改成值 import 之前，先確認不會做出 `data → sim → data` 的執行期循環。
 14. **`types.ts` 不可 import 任何東西**，`state.ts` 不可 import `render/` `ui/` `input/`。這是 `npm run sim` 與所有 sim 測試能在 Node 跑的前提。
 15. **`Unit.cells` 必須維持正讀順序**。`combine.ts` 的配方比對、renderer 的武將底板連續繪製、`glyphsOf` 回傳順序都靠它。`makeGeneralUnit:283` 直接沿用 `findCombinations` 給的 `parts` 順序，不要在中途 sort。

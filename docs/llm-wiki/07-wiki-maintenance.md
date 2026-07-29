@@ -76,7 +76,10 @@
 | `sim/skills.ts`（技能／組合技） | [modules/04](modules/04-combat-and-skills.md) 的原型清單與註冊表數量、[02](02-data-tables.md) |
 | `sim/combat.ts` 的常數 | [modules/04](modules/04-combat-and-skills.md)、[02](02-data-tables.md) 的公式區、[03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 |
 | `sim/waves.ts`（`HP_GROWTH` 等） | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §7.5，**並更新各關 sim 中位數** |
-| `sim/economy.ts` | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §6 |
+| `sim/economy.ts` | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §6，**並跑 `npm run econ` 確認「一波征兵 1～2 次」仍成立** |
+| `data/enemies.ts` 的 `bounty` | 同上——它佔總收入約 65%，是經濟的主力旋鈕，改它一定要跑 `npm run econ` |
+| `data/glyphs.ts` 的 `atk`（整批縮放） | [02](02-data-tables.md) 的平衡基準（「刀」那把尺）、**並跑 `npm run sim` 九關** |
+| `level.maxWave` | ⚠ 它同時是難度弧的陡度，**改它等於改難度**：更新 [modules/03](modules/03-board-and-mapgen.md) 與 [02](02-data-tables.md) 的關卡表、`docs/game-design.md` §8.1，並重跑 `npm run sim` |
 | `sim/state.ts` 的 `recalcUnits` / `MetaProgress` | [modules/01](modules/01-state-and-units.md)、若動 `MetaProgress` 還要看 [modules/06](modules/06-meta-progression.md) 與 `core/save.ts` 的遷移 |
 | `sim/actions.ts`（新增操作） | [modules/02](modules/02-actions-and-combine.md) |
 | `sim/types.ts` 的 `Perks` | [modules/06](modules/06-meta-progression.md) 的 Perks 對應表 |
@@ -116,7 +119,8 @@
 ```bash
 npm test          # 資料表完整性、技能註冊表對得上、羈絆門檻相容性都有測試把關
 npm run typecheck
-npm run sim       # 改任何數值後必跑
+npm run sim       # 改任何數值後必跑；中位數目標 = 該關 maxWave 的一半
+npm run econ      # 改經濟數值後必跑；征兵次數目標 1～2 次/波
 ```
 
 **內容量數字**不要手數，用程式算（避免再出現數錯的情況）：
@@ -172,6 +176,8 @@ grep -o -E '(state|types|step|combat|actions|waves|economy|pool|skills|bonds)\.t
 | 死亡分裂圖無環、單次分裂總量有上限 | `enemies-ext.test.ts` |
 | 每個用到的 `EnemyTrait` 都有對應的應對手段與中文標籤 | `enemies-ext.test.ts` |
 | 關卡 `bias` 都是合法 trait 且有敵人帶該 trait | `enemies-ext.test.ts` |
+| 血量指數吃「相對進度」：同進度百分比 → 同血量 | `core.test.ts` |
+| `buildWave` 有把 `maxWave` 傳進血量計算 | `core.test.ts` |
 | 同種子產生同一場對局 | `core.test.ts` / `enemies-ext.test.ts` |
 
 **新增機制時請一併補測試**——尤其是 `sim/` 裡的純函式，它們是本專案最便宜的保險，

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { mulberry32 } from '../../core/rng'
 import { parseMap } from '../board'
 import { mitigate } from '../combat'
-import { rarityWeights, recruitCost } from '../economy'
+import { RECRUIT_STEP, rarityWeights, recruitCost } from '../economy'
 import { JULU, LEVELS, LEVEL_ORDER } from '../../data/levels'
 import { GENERALS } from '../../data/generals'
 import { GLYPH_BY_CHAR } from '../../data/glyphs'
 import { BONDS } from '../../data/bonds'
 import { COMBOS, SKILLS } from '../skills'
-import { buildWave, enemyBaseHp } from '../waves'
+import { BASE_HP, HP_GROWTH, WAVE_REF, buildWave, enemyBaseHp } from '../waves'
 import { createGame } from '../state'
 import { stepGame } from '../step'
 
@@ -88,7 +88,8 @@ describe('數值公式', () => {
     const s = createGame()
     const base = recruitCost(s)
     s.recruitsThisWave = 2
-    expect(recruitCost(s)).toBe(base + 4)
+    // 用常數而不是寫死數字：RECRUIT_STEP 調過一次，寫死的 +4 讓這個測試變成假警報
+    expect(recruitCost(s)).toBe(base + 2 * RECRUIT_STEP)
     s.recruitsThisWave = 0
     s.wave = 10
     expect(recruitCost(s)).toBeGreaterThan(base)
@@ -102,6 +103,32 @@ describe('數值公式', () => {
 
   it('敵人血量隨波次指數成長', () => {
     expect(enemyBaseHp(10)).toBeGreaterThan(enemyBaseHp(5) * 2)
+  })
+
+  /**
+   * 血量的指數吃的是「相對進度」而不是絕對波次，這是「傻 AI 中位數 ≈ 總波數一半」
+   * 能對每一關同時成立的機制來源。以下三條是它的完整契約。
+   */
+  it('血量曲線吃相對進度：同樣的進度百分比 → 同樣的血量', () => {
+    // 第 6/12 波 與 第 20/40 波 都是「走完一半」，血量必須相同
+    expect(enemyBaseHp(6, 12)).toBeCloseTo(enemyBaseHp(20, 40), 6)
+    expect(enemyBaseHp(3, 12)).toBeCloseTo(enemyBaseHp(10, 40), 6)
+  })
+
+  it('短關卡把同一條弧壓縮得更陡', () => {
+    // 同一個絕對波次，12 波的關卡遠比 40 波的關卡硬
+    expect(enemyBaseHp(6, 12)).toBeGreaterThan(enemyBaseHp(6, 40) * 5)
+  })
+
+  it('maxWave 預設為 WAVE_REF，省略時等同舊的絕對波次公式', () => {
+    expect(enemyBaseHp(7)).toBeCloseTo(enemyBaseHp(7, WAVE_REF), 6)
+    expect(enemyBaseHp(7)).toBeCloseTo(BASE_HP * Math.pow(HP_GROWTH, 7), 6)
+  })
+
+  it('buildWave 會把 maxWave 傳進血量計算（漏傳會讓短關卡整個變簡單）', () => {
+    const short = buildWave(6, mulberry32(1), 1, [], 12)
+    const long = buildWave(6, mulberry32(1), 1, [], 40)
+    expect(short[0].hp).toBeGreaterThan(long[0].hp * 5)
   })
 })
 

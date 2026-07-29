@@ -27,7 +27,8 @@
 
 | 任務 | 讀這頁 |
 |---|---|
-| 難度太難／太簡單 | [03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 → **改完必跑 `npm run sim`** |
+| 難度太難／太簡單 | [03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 → **改完必跑 `npm run sim`**（目標＝該關波數的一半） |
+| **糧太多／太少** | [modules/05](modules/05-economy-and-waves.md) 的經濟節 → **改完必跑 `npm run econ`**（目標＝一波征兵 1～2 次） |
 | 波次血量／數量成長 | [modules/05](modules/05-economy-and-waves.md)（`HP_GROWTH` 是最敏感的旋鈕） |
 | 經濟（徵兵花費、收入、退款） | [modules/05](modules/05-economy-and-waves.md) |
 | 射程／傷害／相剋 | [modules/04](modules/04-combat-and-skills.md)。⚠ 資料表的 `range` 不是實戰值 |
@@ -139,7 +140,9 @@ src/
   app.ts       ★ 唯一同時認識四層的檔案
   main.ts      啟動 + __dev 除錯掛載點
 tools/
-  autobalance.ts   npm run sim（在 Node 跑純模擬，難度儀表板）
+  dumb-ai.ts       傻 AI 的固定策略（sim 與 econ 共用，改它等於改難度量尺）
+  autobalance.ts   npm run sim（難度儀表板：陣亡中位數 vs 該關波數的一半）
+  econ-report.ts   npm run econ（經濟儀表板：逐波收入拆解與征兵次數）
   make-icons.html  用瀏覽器開啟即可重新產生 PWA 圖示
 public/
   manifest.webmanifest  PWA 資訊

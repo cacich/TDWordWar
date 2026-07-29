@@ -77,8 +77,8 @@
 | `critChance` | 0 | `crit` 奇兵秘計 | `sim/combat.ts:187` |
 | `critMul` | 1 | `crit`（同一個 `apply` 寫兩欄） | `sim/combat.ts:188` |
 | `extraLives` | 0 | `fortify` 鐵壁工事 | `sim/state.ts:159-160`（`lives` 與 `maxLives` 同時加） |
-| `costMul` | 1 | `thrift` 輕裝簡從 | `sim/economy.ts:12`（`recruitCost`）、`:102`（`rerollCost`） |
-| `familiarBoostMul` | 1 | `familiar` 廣結善緣 | `sim/actions.ts:43`／`:70` 塞進 `RollContext` → `sim/economy.ts:81` 乘在 `FAMILIAR_BOOST` 上 |
+| `costMul` | 1 | `thrift` 輕裝簡從 | `sim/economy.ts:23`（`recruitCost`）、`:102`（`rerollCost`） |
+| `familiarBoostMul` | 1 | `familiar` 廣結善緣 | `sim/actions.ts:43`／`:70` 塞進 `RollContext` → `sim/economy.ts:100` 乘在 `FAMILIAR_BOOST` 上 |
 | `leakBlockChance` | 0 | `leakshield` 回魂旗 | `sim/step.ts:162`（`stats.leaks` 照計，只擋扣命） |
 | `splashMul` | 1 | `splash` 烽火連城 | `sim/combat.ts:314`（pierce）、`:324`（splash） |
 | `bountyMul` | 1 | `bounty` 狩獵好手 | `sim/combat.ts:157`（`damageEnemy` 的死亡結算，`foodEarned` 也吃這個值） |

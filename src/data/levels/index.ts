@@ -5,8 +5,11 @@
  *
  * 有 `map` 就是固定地圖；有 `gen` 就是每局隨機生成（同種子 → 同地圖，見 sim/mapgen.ts）。
  *
- * 平衡基準：難度靠 hpMul／lives／maxWave 三者搭配，`npm run sim` 各關中位數應落在 12～20。
- * 前兩關是教學弧，傻 AI 打得完是刻意的。
+ * 平衡基準：**傻 AI 的陣亡中位數應落在該關 maxWave 的一半**（`npm run sim`，±20% 內算達標）。
+ * 這件事之所以能對每一關同時成立，是因為血量的指數吃「相對進度」而不是絕對波次
+ * （見 sim/waves.ts 的 WAVE_REF）——所以 `maxWave` 同時是「關卡長度」與「難度弧的陡度」。
+ * ⚠ 推論：**改 maxWave 會同時改難度**。把一關改短等於把同一條弧壓得更陡，不是只是少打幾波。
+ * hpMul 退居微調（整個 0.55～1.28 區間只值約 2 個參考波），lives 則是容錯度。
  */
 import type { EnemyTrait } from '../../sim/types'
 
@@ -53,7 +56,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 26,
     lives: 4,
     maxWave: 12,
-    hpMul: 0.85,
+    hpMul: 0.55,
     pool: { support: 2, generals: 3 },
     // 教學關不設偏好：先讓玩家認識最基本的賊與盾賊
     bias: [],
@@ -164,7 +167,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 28,
     lives: 2,
     maxWave: 40,
-    hpMul: 1.3,
+    hpMul: 1.1,
     pool: { support: 7, generals: 9 },
     // 妖道與高血敵人並存，考驗集火與持續輸出
     bias: ['healer', 'tanky'],

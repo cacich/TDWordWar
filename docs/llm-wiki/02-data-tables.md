@@ -26,8 +26,10 @@
 
 目前內容量：**71 字**（兵器 8／兵種 5／謀略 7／經濟 4／姓氏 20／名字 27）。
 
-**平衡基準**：兵器 rarity1「刀」= atk 12 / aps 1.0 / range 1.2。其他字都以它為尺。
-姓氏與名字字刻意壓到 atk 5（約 40%），製造「先放著等組將 vs 賣掉換糧」的張力——**這是核心設計，別隨手調高**。
+**平衡基準**：兵器 rarity1「刀」= atk 17 / aps 1.0 / range 1.2。其他字都以它為尺。
+⚠ 整張表的 `atk` 是**可以整批等比例縮放**的——它與敵人血量是一體兩面，
+上次經濟改版就整表 ×1.45 來補償「征兵變慢」。要調整體戰力請整批縮放，不要逐筆改。
+姓氏與名字字刻意壓到 atk 7（約 40%），製造「先放著等組將 vs 賣掉換糧」的張力——**這是核心設計，別隨手調高**。
 
 ### onHit 控場欄位
 
@@ -120,7 +122,8 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
   **易傷刻意無法免疫**，否則控場流會對 BOSS 完全失效
 - ⚠ **灼燒無視防禦**（走 `damageEnemy` 不經 `mitigate`），所以「高防」的解法是持續傷害；
   `burnImmune` 是唯一能封掉這條路、逼玩家改帶高單擊的手段
-- 實際血量 = `enemyBaseHp(wave) × hpMul`
+- 實際血量 = `enemyBaseHp(wave, maxWave) × hpMul`。⚠ **指數吃的是「走完關卡的百分比」**，
+  所以同一個 `hpMul` 在 12 波的關卡遠比 40 波的硬，見 [modules/05](modules/05-economy-and-waves.md)
 
 ### traits 與推薦手段
 
@@ -143,7 +146,8 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
 
 ```ts
 BASE_HP = 20         // 第 0 波基準
-HP_GROWTH = 1.23     // 每波 ×1.23（敵種擴充帶來回血／分裂／免疫後，從 1.25 往回讓一點）
+HP_GROWTH = 1.23     // 每波 ×1.23。⚠ 必須貼著玩家戰力成長率，不是自由參數
+WAVE_REF   = 40      // 血量指數 = wave × WAVE_REF / maxWave ← 吃「相對進度」不是絕對波次
 enemyCount(w) = 6 + floor(w × 1.4)
 PREP_SECONDS = 12    // 佈陣時間
 isBossWave(w) = w % 5 === 0
@@ -152,7 +156,9 @@ composition(w)       // 該波可出現的一般兵（依各敵人的 minWave �
 pickBoss(w, rng, bias)  // BOSS 波從合格 BOSS 中依 bias 加權隨機挑一隻
 ```
 
-**難度旋鈕的優先順序**：先動 `HP_GROWTH`（影響最劇烈）→ `enemyCount` → 各敵人的 `minWave`。
+**難度旋鈕的優先順序**：單關太硬／太軟先動該關的 `maxWave`（它同時是長度與弧的陡度）→
+全部關卡一起動才碰 `HP_GROWTH`（⚠ 它必須貼著玩家戰力的成長率，不是自由參數）→
+`enemyCount` → 各敵人的 `minWave` → 該關 `hpMul` 做最後 ±20% 微調。
 
 ⚠ `buildWave` 會**消耗 rng**（抽敵種與 BOSS）。要做「波次預覽」不能直接呼叫它，
 詳見 [06-roadmap.md](06-roadmap.md) §2。
@@ -160,8 +166,11 @@ pickBoss(w, rng, bias)  // BOSS 波從合格 BOSS 中依 bias 加權隨機挑一
 ## src/sim/economy.ts — 經濟
 
 ```ts
-recruitCost(state) = 8 + floor(wave × 1.6) + 2 × recruitsThisWave
-waveIncome(wave)   = 5 + floor(wave × 1.2)
+recruitCost(state) = 8 + floor(wave × 2.4) + RECRUIT_STEP(3) × recruitsThisWave
+waveIncome(wave)   = 4 + floor(wave × 0.6)
+// ★ 設計目標：一波只夠征兵 1～2 次。用 `npm run econ` 驗收。
+// 收入佔比 擊殺賞金≈65%／固定收入≈30%／場上產糧≈5%，主力旋鈕是 enemies.ts 的 bounty。
+// 真正的旋鈕是「收入 ÷ 花費」的比值，兩條斜率（0.6 與 2.4）是一組的，不要單獨調。
 SELL_RATIO = { glyph: 1.0, general: 0.3 }   // 鏟除武將只退 3 成
 ```
 
@@ -243,19 +252,19 @@ S 出兵口   C 大營   # 路   P 空地   . 障礙
 - 關卡順序與解鎖條件由 `LEVEL_ORDER` 決定（前一關通關才解鎖下一關）
 - 設計決定 #2：**障礙不阻擋射線**，`.` 只影響可放置性與視覺
 
-各關偏好與傻 AI 中位數（目標 12～20）：
+各關偏好與傻 AI 中位數（**目標 = 該關波數的一半**，±20% 內算達標）：
 
-| 關卡 | 波數 | hpMul | bias | 建議帶 | sim 中位數 |
-|---|---|---|---|---|---|
-| 黃巾之亂 | 12 | 0.85 | —（教學） | — | 12（滿關） |
-| 討伐董卓 | 18 | 1.00 | flying | 對空 | 18（滿關） |
-| 巨鹿 | 30 | 1.15 | swarm | 範圍、貫穿 | 20 |
-| 官渡 | 24 | 1.10 | fast | 控場 | 20 |
-| 赤壁 | 30 | 1.20 | armored | 持續傷害、單體高傷 | 17 |
-| 五丈原 | 40 | 1.30 | healer, tanky | 單體高傷、持續傷害 | 18 |
-| 襄陽 | 32 | 1.25 | swarm, splitter | 範圍、貫穿 | 19 |
-| 漢中 | 32 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 19 |
-| 洛陽 | 40 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 18 |
+| 關卡 | 波數 | hpMul | bias | 建議帶 | 目標 | sim 中位數 |
+|---|---|---|---|---|---|---|
+| 黃巾之亂 | 12 | 0.55 | —（教學） | — | 6 | 6 |
+| 討伐董卓 | 18 | 1.00 | flying | 對空 | 9 | 9 |
+| 巨鹿 | 30 | 1.15 | swarm | 範圍、貫穿 | 15 | 16 |
+| 官渡 | 24 | 1.10 | fast | 控場 | 12 | 13 |
+| 赤壁 | 30 | 1.20 | armored | 持續傷害、單體高傷 | 15 | 15 |
+| 五丈原 | 40 | 1.10 | healer, tanky | 單體高傷、持續傷害 | 20 | 20 |
+| 襄陽 | 32 | 1.25 | swarm, splitter | 範圍、貫穿 | 16 | 17 |
+| 漢中 | 32 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 16 | 16 |
+| 洛陽 | 40 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 20 | 20 |
 
 ## src/sim/mapgen.ts — 隨機地形
 

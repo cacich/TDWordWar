@@ -10,7 +10,7 @@
 >
 > **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:6-16；`EnemyTrait`，types.ts:182）、
 > `core/rng.ts`（`randInt`，mapgen.ts:20）。
-> `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:11），仍是純資料。
+> `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:14），仍是純資料。
 >
 > **下游使用者**：`sim/state.ts:132-133`（開局組裝）、`sim/state.ts:145`（`bias` 帶進 `GameState`）、
 > `sim/combat.ts:49-94`（射程與敵人座標）、
@@ -135,9 +135,9 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 1. **每一列長度必須等於 `cols`**（= `map[0].length`，board.ts:21,28-30）。
    少一個字元就拋 `地圖 X 第 N 列長度…`。測試：`core.test.ts:25-33` 解析所有固定地圖。
    注意 `cols` 取自第 0 列，所以第 0 列打錯會導致「其他每一列都報錯」。
-2. **`LevelDef.pool` 是必填欄位**（levels/index.ts:31）。舊版文件的範例漏了它，
+2. **`LevelDef.pool` 是必填欄位**（levels/index.ts:34）。舊版文件的範例漏了它，
    照抄會直接 TS 編譯失敗（`tsconfig` 嚴格 + `noUnusedLocals`）。
-   `bias` 型別上可省（levels/index.ts:40），但省掉等於「這關沒有偏好」，
+   `bias` 型別上可省（levels/index.ts:43），但省掉等於「這關沒有偏好」，
    選關卡片也就不會有「建議帶」標籤——除了教學關 `huangjin` 刻意寫 `bias: []`，其餘關卡都該填，
    `enemies-ext.test.ts:280-290` 會抓沒有推薦手段的關卡。
 3. **多個 `S` 或多個 `C` 不會報錯**：board.ts:36-37 是無條件覆寫，**最後出現的那個生效**，
@@ -158,7 +158,7 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 10. `sim/` 與 `data/` 不得 import render/ui/input（CLAUDE.md 鐵則）。`levels/index.ts` 目前零 import，
     請保持這樣——`ui/screens.ts` 是單向依賴它。
 
-## `LevelDef` 欄位（levels/index.ts:13-41）
+## `LevelDef` 欄位（levels/index.ts:16-44）
 
 | 欄位 | 必填 | 作用 |
 |---|---|---|
@@ -174,44 +174,46 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 ```
 level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:300)
    │                                            └→ weightOf(): 帶該特徵的敵人與 BOSS 權重 ×BIAS_WEIGHT
-   │                                               （waves.ts:44-45,57-59,75；BIAS_WEIGHT = 4，waves.ts:23）
-   └──→ countersFor(level.bias) (enemies.ts:174-180) ──→ 選關卡片的「建議帶」標籤（screens.ts:409-411,420）
+   │                                               （waves.ts:70-71,83-85,102；BIAS_WEIGHT = 4，waves.ts:30）
+   └──→ countersFor(level.bias) (enemies.ts:179-185) ──→ 選關卡片的「建議帶」標籤（screens.ts:409-411,420）
 ```
 
-推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:23-31）
-把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:33-40）給中文字。
+推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:28-36）
+把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:38-45）給中文字。
 **關卡資料裡不要再手寫一份推薦清單**，否則會出現兩份不同步的真相。
 合法特徵是 `EnemyTrait`（types.ts:182）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
-新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:42-50），
+新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:47-55），
 `enemies-ext.test.ts:131-139` 會抓漏。
 
-## 9 個關卡一覽（levels/index.ts:48-213）
+## 9 個關卡一覽（levels/index.ts:51-216）
 
 3 關固定地圖（教學弧 + 巨鹿）+ 6 關隨機地形。
 
-| 順序 | key | 名稱 | 地形 | 尺寸 | startFood | lives | maxWave | hpMul | pool (support/generals) | `bias` | 建議帶（推導結果） | sim 中位數 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `huangjin` | 黃巾之亂 | 固定 `map` | 9×11 | 26 | 4 | 12 | 0.85 | 2 / 3 | `[]` | 無（教學關刻意不給） | 12（滿關） |
-| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 1.00 | 3 / 4 | `flying` | 對空 | 18（滿關） |
-| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 20 |
-| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 1.10 | 5 / 6 | `fast` | 控場 | 20 |
-| 5 | `chibi` | 赤壁 | `gen` minPathLen 48, blockRate 0.13 | 9×15 | 26 | 3 | 30 | 1.20 | 6 / 7 | `armored` | 持續傷害、單體高傷 | 17 |
-| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 1.30 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 18 |
-| 7 | `xiangyang` | 襄陽 | `gen` minPathLen 50 | 9×15 | 28 | 3 | 32 | 1.25 | 7 / 8 | `swarm` `splitter` | 範圍攻擊、貫穿 | 19 |
-| 8 | `hanzhong` | 漢中 | `gen` minPathLen 54, blockRate 0.10 | 9×16 | 30 | 3 | 32 | 1.20 | 7 / 8 | `armored` `tanky` | 持續傷害、單體高傷 | 19 |
-| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 18 |
+| 順序 | key | 名稱 | 地形 | 尺寸 | startFood | lives | maxWave | hpMul | pool (support/generals) | `bias` | 建議帶（推導結果） | 目標(=半) | sim 中位數 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `huangjin` | 黃巾之亂 | 固定 `map` | 9×11 | 26 | 4 | 12 | 0.55 | 2 / 3 | `[]` | 無（教學關刻意不給） | 6 | 6 |
+| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 1.00 | 3 / 4 | `flying` | 對空 | 9 | 9 |
+| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 15 | 16 |
+| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 1.10 | 5 / 6 | `fast` | 控場 | 12 | 13 |
+| 5 | `chibi` | 赤壁 | `gen` minPathLen 48, blockRate 0.13 | 9×15 | 26 | 3 | 30 | 1.20 | 6 / 7 | `armored` | 持續傷害、單體高傷 | 15 | 15 |
+| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 1.10 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 20 | 20 |
+| 7 | `xiangyang` | 襄陽 | `gen` minPathLen 50 | 9×15 | 28 | 3 | 32 | 1.25 | 7 / 8 | `swarm` `splitter` | 範圍攻擊、貫穿 | 16 | 17 |
+| 8 | `hanzhong` | 漢中 | `gen` minPathLen 54, blockRate 0.10 | 9×16 | 30 | 3 | 32 | 1.20 | 7 / 8 | `armored` `tanky` | 持續傷害、單體高傷 | 16 | 16 |
+| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 20 | 20 |
 
 「建議帶」那一欄是 `countersFor(bias)` 的輸出，**不是資料表裡的欄位**——列在這裡只為了方便對照，
 改 `bias` 時不需要（也不該）另外改它。順序依 `TRAIT_COUNTERS` 的宣告順序去重。
 
-中位數＝傻 AI（`npm run sim`）的陣亡波次中位數，全部落在 12～20 的設計區間。前兩關是教學弧，
+中位數＝傻 AI（`npm run sim`）的陣亡波次中位數。**設計目標是該關 `maxWave` 的一半**（±20% 內達標）。
+⚠ **`maxWave` 同時是關卡長度與難度弧的陡度**：血量指數吃「相對進度」（`waves.ts` 的 `WAVE_REF`），
+所以把一關改短等於把同一條弧壓得更陡，不是只是少打幾波。舊註（前兩關是教學弧，
 傻 AI 打得完是刻意的。**改任何數值（含 `bias`——加權會改變敵種組成）後跑 `npm run sim 30 <key>` 對照這張表**，
 並同步更新 CLAUDE.md 的「難度儀表板」段落。
 
-後三關（levels/index.ts:174 的分隔註解起）的設計意圖是「每關針對一組特徵，把該帶什麼的答案收窄」，
+後三關（levels/index.ts:177 的分隔註解起）的設計意圖是「每關針對一組特徵，把該帶什麼的答案收窄」，
 所以它們的 `bias` 都是 2～3 個特徵，而不是難度單靠 `hpMul` 往上疊。
 
-`JULU = LEVELS.julu`（levels/index.ts:215）是測試與 `createGame()` 的預設關卡（state.ts:126）。
+`JULU = LEVELS.julu`（levels/index.ts:218）是測試與 `createGame()` 的預設關卡（state.ts:126）。
 
 ### 固定 `map` vs 隨機 `gen`：怎麼選
 
@@ -230,12 +232,12 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
 
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
-| 關卡難度（波數／血量倍率／初始糧／命） | `data/levels/index.ts` 對應關卡的 `maxWave`/`hpMul`/`startFood`/`lives` | 改完跑 `npm run sim 30 <key>`，對照上表中位數 |
+| 關卡難度 | ★ 先動 `maxWave`（同時是長度與弧的陡度，中位數目標會自動跟著變）；`hpMul`/`startFood`/`lives` 做微調 | 改完跑 `npm run sim 30 <key>`，工具會直接印出與「一半」的偏差 |
 | 本局字池大小 | 同檔 `pool: { support, generals }` | `generals` 是「幾組姓名配方」不是幾個字（pool.ts:63-66）；數字大＝變化多但難疊高 |
 | 隨機地形的路長／破碎度 | 同檔 `gen.minPathLen` / `gen.blockRate` | `minPathLen` 上限見〈契約與陷阱〉7；`blockRate` 只影響落點多寡，不影響射線 |
 | 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性 |
 | 這一關偏好哪些敵人／卡片上顯示什麼「建議帶」 | 同檔對應關卡的 `bias` | 一改兩動：敵種加權（×`BIAS_WEIGHT`）與 UI 標籤都跟著變；標籤是推導出來的，別另外手寫 |
-| 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:23-31） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
+| 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:28-36） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
 | 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:406）與過關後的下一關（app.ts:422-423）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
 | 新的地形種類 | `TileKind`（types.ts:6）→ `CHAR_TO_KIND`（board.ts:7-13）→ `WALKABLE`（board.ts:47）→ `drawTiles`（renderer.ts:127-175）→ 若可放置再改 `isPlot` | 四處都要改，漏一處會是「解析成功但畫不出來」或「敵人穿牆」 |
 | 生成演算法（走廊形狀） | `sim/mapgen.ts` 的 `carve()` | 必須維持 induced path 性質，否則 mapgen.test.ts:25-35 紅字；別忘了 rng 消耗次數（陷阱 5） |

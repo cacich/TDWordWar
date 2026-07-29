@@ -9,12 +9,12 @@
 **只改 `src/data/glyphs.ts`**，在對應的分類區塊裡加一列：
 
 ```ts
-{ char: '槍', category: 'weapon', rarity: 2, atk: 13, aps: 0.9, range: 1.8,
+{ char: '槍', category: 'weapon', rarity: 2, atk: 19, aps: 0.9, range: 1.8,
   shape: 'pierce', tags: ['兵器', '近戰'], desc: '長槍直取，可貫穿。' },
 ```
 
 新字自動進入抽卡池（權重由 `rarity` 決定）、自動出現在手牌與資訊面板。
-數值請對照「刀」= atk 12 / aps 1.0 / range 1.2 這把尺。
+數值請對照「刀」= atk 17 / aps 1.0 / range 1.2 這把尺。
 
 ## 2. 新增一名武將
 
@@ -50,7 +50,7 @@ g('關興', ['關', '興'], 'epic', 1.5, 'single', ['蜀', '將二代'], '關羽
 ```ts
 {
   key: 'myEnemy', char: '例', hpMul: 1.4, def: 20, speed: 0.9, flying: false,
-  bounty: 4, damage: 1, troop: '步',
+  bounty: 2, damage: 1, troop: '步',
   traits: ['armored'],     // ★ 必填：決定關卡加權與 UI 推薦標籤
   minWave: 8,              // 第 8 波才開始出現
   desc: '一句話說明它的難處與解法。',
@@ -62,7 +62,7 @@ BOSS（加 `boss: true`，慣例上都給 `ccImmune`）：
 ```ts
 {
   key: 'bossMine', char: '例', hpMul: 12, def: 60, speed: 0.7, flying: false,
-  bounty: 26, damage: 2, troop: '步',
+  bounty: 13, damage: 2, troop: '步',
   traits: ['tanky'], boss: true, ccImmune: true, minWave: 15,
   regen: 0.02,             // 選一個「必須改變打法」的鉤子
   desc: '…',
@@ -114,17 +114,21 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 
 | 想要的效果 | 改哪裡 |
 |---|---|
-| 整體變難／變簡單 | `sim/waves.ts` 的 `HP_GROWTH`（最有效，0.02 的差距就很明顯；目前 1.23） |
+| 整體變難／變簡單（全九關） | `sim/waves.ts` 的 `HP_GROWTH`（目前 1.23）。⚠ 它必須貼著玩家戰力的成長率，不是自由參數 |
 | 敵人變多 | `sim/waves.ts` 的 `enemyCount()` |
+| **某一關太硬／太軟** | 該關的 `maxWave`（`data/levels/index.ts`）→ 中位數目標是它的一半，會自動跟著走 |
+| **糧累積得太快／太慢** | `data/enemies.ts` 的 `bounty`（佔收入 65%）＋ `economy.ts` 的 `waveIncome`／`recruitCost` 斜率，用 `npm run econ` 驗收 |
+| 玩家整體戰力 | `data/glyphs.ts` 的 `atk` 欄等比例縮放 |
 | 某類敵人出現更頻繁 | 該關的 `bias`（`data/levels/index.ts`）或 `BIAS_WEIGHT`（`sim/waves.ts`，目前 4） |
 | 強力敵種太早出現 | 該敵人的 `minWave`（`data/enemies.ts`） |
-| 單關變難 | 該關的 `hpMul`／`lives`／`maxWave`（`data/levels/index.ts`） |
-| 前期太窮 | `sim/economy.ts` 的 `recruitCost()` 常數 8、`waveIncome()` |
+| 單關的最後微調 | 該關的 `hpMul`／`lives` | `hpMul` 整個區間只值約 2 個參考波，只拿來修 ±20% 以內的偏差 |
+| 前期太窮 | `sim/economy.ts` 的 `recruitCost()` 常數 8、`waveIncome()` 的常數 4 |
 | 抽不到好字 | `sim/economy.ts` 的 `RARITY_TABLE`（每列總和要 100） |
 | 佈陣時間 | `sim/waves.ts` 的 `PREP_SECONDS` |
 | 塔打得到的範圍 | `sim/combat.ts` 的 `RANGE_MUL`（全域射程倍率，越大越簡單）／`GENERAL_RANGE_BONUS`（武將額外）／`GLYPH_RANGE_MUL`（單個字的收斂倍率，越小越鼓勵組將） |
 
-改完跑 `npm run sim`：傻 AI 的陣亡中位數應落在 12～20 波。
+改完跑 `npm run sim`：**傻 AI 的陣亡中位數應落在該關 `maxWave` 的一半**（±20% 內算達標，
+工具會直接把偏差算給你看）。調到經濟數值時另外跑 `npm run econ` 看「征兵」欄是否還在 1～2。
 
 ## 7. 改視覺
 

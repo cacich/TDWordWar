@@ -82,7 +82,7 @@ r += maxOff                  （cells.length > 1 時：中心到最遠成員格�
 // combat.ts:96-101
 export function canHit(u: Unit, e: Enemy): boolean {
   if (!e.flying) return true
-  return u.baseRange >= ANTI_AIR_RANGE   // ANTI_AIR_RANGE = 2.0（data/enemies.ts:168）
+  return u.baseRange >= ANTI_AIR_RANGE   // ANTI_AIR_RANGE = 2.0（data/enemies.ts:173）
 }
 ```
 
@@ -274,7 +274,7 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:387）
 |---|---|---|
 | 整體射程手感 | `combat.ts:21-25` 的 `RANGE_MUL` / `GENERAL_RANGE_BONUS` / `GLYPH_RANGE_MUL` | `range.test.ts` 用常數本身斷言，不會因此壞掉；但 `npm run sim` 的中位數會整體位移，改完要重跑 |
 | 單字 vs 武將的射程差距 | 只動 `GLYPH_RANGE_MUL` | 這是「鼓勵組將」的旋鈕 |
-| 誰能打飛行 | `data/enemies.ts:168` 的 `ANTI_AIR_RANGE`，或個別字的 `range` | 判定用 `baseRange`；調 `RANGE_MUL` **不會**改變對空名單（刻意）。目前飛行敵人有飛賊與飛將兩種 |
+| 誰能打飛行 | `data/enemies.ts:173` 的 `ANTI_AIR_RANGE`，或個別字的 `range` | 判定用 `baseRange`；調 `RANGE_MUL` **不會**改變對空名單（刻意）。目前飛行敵人有飛賊與飛將兩種 |
 | 防禦曲線 | `combat.ts:14` `DEF_K` | `mitigate` 有 `max(1, …)` 地板，別移除 |
 | 相剋強度 | `combat.ts:17-18` `COUNTER_BONUS` / `COUNTER_PENALTY` | 相剋環定義在 `counterMul` 的 `beats` 表（騎→弓→步→騎） |
 | 減速／易傷幅度 | `combat.ts:15-16` `SLOW_FACTOR` / `VULN_MUL` | 減速幅度是全域固定值，資料表只能給**持續秒數** |

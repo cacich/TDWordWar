@@ -6,15 +6,34 @@ import { pickWeighted } from '../core/rng'
 import { GLYPHS } from '../data/glyphs'
 import type { GameState, GlyphDef } from './types'
 
-/** 征兵花費：隨波次與「本波已征兵次數」上升；輕裝簡從（costMul）打折 */
+/**
+ * 同一波內每多征一次兵，費用再加這個數。跨波歸零（`checkWaveEnd`）。
+ * 它的作用是壓掉「某一波突然爆糧就連征四次」的尖峰——經濟字堆起來之後很容易發生，
+ * 而一次征兵會填滿整個手牌，連征四次等於一口氣多出 20 張牌，節奏會整個垮掉。
+ */
+export const RECRUIT_STEP = 3
+
+/**
+ * 征兵花費：隨波次與「本波已征兵次數」上升；輕裝簡從（costMul）打折。
+ *
+ * ★ 波次斜率（2.4）與 `waveIncome` 的斜率（0.6）是一組的：**兩者的比值才是
+ * 「一波征幾次兵」的真正旋鈕**，單獨調任何一邊都會破壞設計目標（1～2 次／波）。
+ * 改完務必跑 `npm run econ` 看「征兵」欄。
+ */
 export function recruitCost(state: GameState): number {
-  const base = 8 + Math.floor(state.wave * 1.6) + 2 * state.recruitsThisWave
+  const base = 8 + Math.floor(state.wave * 2.4) + RECRUIT_STEP * state.recruitsThisWave
   return Math.max(1, Math.round(base * state.perks.costMul))
 }
 
-/** 每波結算的固定收入 */
+/**
+ * 每波結算的固定收入。
+ *
+ * ★ 經濟的設計目標是**一波只夠征兵 1～2 次**（`npm run econ` 的「征兵」欄）。
+ * 收入有三個來源，佔比差很多：擊殺賞金 ≈ 65%、固定收入 ≈ 30%、場上產糧 ≈ 5%。
+ * 所以要調整「糧累積得多快」，主力槓桿是 `data/enemies.ts` 的 `bounty`，這裡是輔助。
+ */
 export function waveIncome(wave: number): number {
-  return 5 + Math.floor(wave * 1.2)
+  return 4 + Math.floor(wave * 0.6)
 }
 
 /**

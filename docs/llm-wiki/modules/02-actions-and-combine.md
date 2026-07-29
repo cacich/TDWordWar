@@ -177,9 +177,9 @@ B 兩邊都算「移動」，所以兩邊的武將都解除、兩端都要重新
 | perk | 介入點 | 效果 |
 |---|---|---|
 | `recruitEliteChance`（精兵符） | `src/sim/actions.ts:49` | 每個抽到的字**獨立**擲一次 `state.rng()`，命中就直接是二階 |
-| `familiarBoostMul`（廣結善緣） | `src/sim/actions.ts:43,70` → 塞進 `RollContext` | 疊在 `FAMILIAR_BOOST` 上，`economy.ts:81` 相乘 |
+| `familiarBoostMul`（廣結善緣） | `src/sim/actions.ts:43,70` → 塞進 `RollContext` | 疊在 `FAMILIAR_BOOST` 上，`economy.ts:100` 相乘 |
 
-`costMul`（輕裝簡從）不在本檔，它在 `economy.ts` 的 `recruitCost()`／`rerollCost()` 裡（`economy.ts:12,102`），
+`costMul`（輕裝簡從）不在本檔，它在 `economy.ts` 的 `recruitCost()`／`rerollCost()` 裡（`economy.ts:23,121`），
 `actions.ts` 只是呼叫這兩個函式。**新增花費類 perk 請改 `economy.ts`，不要在 action 裡再乘一次倍率。**
 
 ## 契約與陷阱
@@ -269,9 +269,9 @@ findCombination (board, units, changedCell): CombineMatch|null ← 只給測試�
 - `rerollHand` 只重抽**非空**的格子（`:73`）且**把階級重設為 1**（`:74`）——刻意的：
   不然玩家可以拿高階字免費換高階字。空格不會被填滿，重抽不增加張數。
 - `smelt` 的 `state.smeltFreeLeft`（初始 3，`state.ts:168`）不是「免費次數」而是
-  **高退款次數**：有額度時退 20%（`:124`），沒額度時走 `smeltRefund()` 的 12%（`economy.ts:97`）。
+  **高退款次數**：有額度時退 20%（`:124`），沒額度時走 `smeltRefund()` 的 12%（`economy.ts:116`）。
 - `sellGlyph` 的退款公式在 `actions.ts:237`，成員字牌只退 `SELL_RATIO.general = 0.3`
-  （`economy.ts:106`，設計決定：拆將要有重量）。它**不走** `smeltRefund()`。
+  （`economy.ts:125`，設計決定：拆將要有重量）。它**不走** `smeltRefund()`。
 - `toggleWish` 會拒絕不在 `state.pool` 的字（`:91`）——池外的字許願無效果，所以直接擋下並說明。
 - 所有隨機都走 `state.rng`（`:47,49,74`），不變式 #1。`recruit` 的擲骰次數會隨空格數變動，
   改動抽卡流程會改變後續 rng 序列 → `npm run sim` 的數字會整體位移，這是預期的。

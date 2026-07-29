@@ -297,5 +297,5 @@ export function beginBattle(state: GameState): void {
   state.phase = 'battle'
   state.waveTime = 0
   state.prepTimer = 0
-  state.spawnQueue = buildWave(state.wave, state.rng, state.hpMul, state.bias)
+  state.spawnQueue = buildWave(state.wave, state.rng, state.hpMul, state.bias, state.maxWave)
 }

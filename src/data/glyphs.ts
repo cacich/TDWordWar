@@ -10,40 +10,40 @@ import type { GlyphDef } from '../sim/types'
 
 export const GLYPHS: GlyphDef[] = [
   // ── 兵器 ────────────────────────────────────────────
-  { char: '刀', category: 'weapon', rarity: 1, atk: 12, aps: 1.0, range: 1.2, shape: 'single', tags: ['兵器', '近戰', '步'], desc: '近身直劈，傷害高、射程短。', fx: 'blade' },
-  { char: '弓', category: 'weapon', rarity: 1, atk: 7, aps: 1.1, range: 3.5, shape: 'single', tags: ['兵器', '遠程', '弓'], desc: '遠射，可打飛行單位。', fx: 'arrow' },
-  { char: '矛', category: 'weapon', rarity: 2, atk: 10, aps: 0.8, range: 2.0, shape: 'pierce', tags: ['兵器', '步'], desc: '長刺穿透，一次貫穿路徑上多名敵人。', fx: 'thrust' },
-  { char: '劍', category: 'weapon', rarity: 2, atk: 15, aps: 1.1, range: 1.2, shape: 'single', tags: ['兵器', '近戰'], desc: '快且銳，單體輸出之最。', fx: 'blade' },
-  { char: '槍', category: 'weapon', rarity: 2, atk: 13, aps: 0.9, range: 1.9, shape: 'pierce', tags: ['兵器', '步'], desc: '長槍直取，貫穿且射程較長。', fx: 'thrust' },
-  { char: '戟', category: 'weapon', rarity: 3, atk: 19, aps: 0.7, range: 1.6, shape: 'splash', tags: ['兵器', '近戰'], desc: '大開大合，濺射周圍敵人。', fx: 'blade' },
-  { char: '弩', category: 'weapon', rarity: 3, atk: 12, aps: 1.4, range: 4.2, shape: 'single', tags: ['兵器', '遠程', '弓'], desc: '連發強弩，射程與攻速兼備。', fx: 'arrow' },
+  { char: '刀', category: 'weapon', rarity: 1, atk: 17, aps: 1.0, range: 1.2, shape: 'single', tags: ['兵器', '近戰', '步'], desc: '近身直劈，傷害高、射程短。', fx: 'blade' },
+  { char: '弓', category: 'weapon', rarity: 1, atk: 10, aps: 1.1, range: 3.5, shape: 'single', tags: ['兵器', '遠程', '弓'], desc: '遠射，可打飛行單位。', fx: 'arrow' },
+  { char: '矛', category: 'weapon', rarity: 2, atk: 14, aps: 0.8, range: 2.0, shape: 'pierce', tags: ['兵器', '步'], desc: '長刺穿透，一次貫穿路徑上多名敵人。', fx: 'thrust' },
+  { char: '劍', category: 'weapon', rarity: 2, atk: 22, aps: 1.1, range: 1.2, shape: 'single', tags: ['兵器', '近戰'], desc: '快且銳，單體輸出之最。', fx: 'blade' },
+  { char: '槍', category: 'weapon', rarity: 2, atk: 19, aps: 0.9, range: 1.9, shape: 'pierce', tags: ['兵器', '步'], desc: '長槍直取，貫穿且射程較長。', fx: 'thrust' },
+  { char: '戟', category: 'weapon', rarity: 3, atk: 28, aps: 0.7, range: 1.6, shape: 'splash', tags: ['兵器', '近戰'], desc: '大開大合，濺射周圍敵人。', fx: 'blade' },
+  { char: '弩', category: 'weapon', rarity: 3, atk: 17, aps: 1.4, range: 4.2, shape: 'single', tags: ['兵器', '遠程', '弓'], desc: '連發強弩，射程與攻速兼備。', fx: 'arrow' },
   {
-    char: '斧', category: 'weapon', rarity: 3, atk: 24, aps: 0.5, range: 1.3, shape: 'single', tags: ['兵器', '近戰'],
+    char: '斧', category: 'weapon', rarity: 3, atk: 35, aps: 0.5, range: 1.3, shape: 'single', tags: ['兵器', '近戰'],
     desc: '重斧劈砍，命中使敵人短暫定身。', onHit: { stunDur: 0.4 }, fx: 'blade' },
 
   // ── 兵種 ────────────────────────────────────────────
-  { char: '兵', category: 'troop', rarity: 1, atk: 4, aps: 1.0, range: 1.2, shape: 'single', tags: ['兵種', '步'], desc: '尋常兵卒。與兵器或兵種相鄰可組成部隊。', fx: 'charge' },
-  { char: '步', category: 'troop', rarity: 1, atk: 6, aps: 1.0, range: 1.5, shape: 'single', tags: ['兵種', '步'], desc: '步行陣列，穩健。', fx: 'charge' },
-  { char: '盾', category: 'troop', rarity: 1, atk: 3, aps: 0.6, range: 1.2, shape: 'single', tags: ['兵種', '步'], desc: '攻擊極弱，但是組成部隊的好材料。', fx: 'charge' },
-  { char: '騎', category: 'troop', rarity: 2, atk: 11, aps: 1.4, range: 1.2, shape: 'single', tags: ['兵種', '騎'], desc: '快馬衝擊，攻速優異。', fx: 'charge' },
-  { char: '車', category: 'troop', rarity: 3, atk: 20, aps: 0.5, range: 2.5, shape: 'splash', tags: ['兵種'], desc: '戰車碾壓，慢但範圍大。', fx: 'charge' },
+  { char: '兵', category: 'troop', rarity: 1, atk: 6, aps: 1.0, range: 1.2, shape: 'single', tags: ['兵種', '步'], desc: '尋常兵卒。與兵器或兵種相鄰可組成部隊。', fx: 'charge' },
+  { char: '步', category: 'troop', rarity: 1, atk: 9, aps: 1.0, range: 1.5, shape: 'single', tags: ['兵種', '步'], desc: '步行陣列，穩健。', fx: 'charge' },
+  { char: '盾', category: 'troop', rarity: 1, atk: 4, aps: 0.6, range: 1.2, shape: 'single', tags: ['兵種', '步'], desc: '攻擊極弱，但是組成部隊的好材料。', fx: 'charge' },
+  { char: '騎', category: 'troop', rarity: 2, atk: 16, aps: 1.4, range: 1.2, shape: 'single', tags: ['兵種', '騎'], desc: '快馬衝擊，攻速優異。', fx: 'charge' },
+  { char: '車', category: 'troop', rarity: 3, atk: 29, aps: 0.5, range: 2.5, shape: 'splash', tags: ['兵種'], desc: '戰車碾壓，慢但範圍大。', fx: 'charge' },
 
   // ── 謀略（控場與光環） ──────────────────────────────
   {
-    char: '火', category: 'strategy', rarity: 3, atk: 9, aps: 0.7, range: 3.0, shape: 'splash', tags: ['謀略'],
+    char: '火', category: 'strategy', rarity: 3, atk: 13, aps: 0.7, range: 3.0, shape: 'splash', tags: ['謀略'],
     desc: '火攻。範圍傷害並使敵人灼燒。', onHit: { burn: { mul: 0.5, dur: 3 } }, fx: 'fire',
   },
   {
-    char: '計', category: 'strategy', rarity: 2, atk: 5, aps: 0.6, range: 4.0, shape: 'single', tags: ['謀略'],
+    char: '計', category: 'strategy', rarity: 2, atk: 7, aps: 0.6, range: 4.0, shape: 'single', tags: ['謀略'],
     desc: '運籌帷幄。射程極遠，命中減速敵人。', onHit: { slowDur: 1.5 }, fx: 'plan' },
   {
-    char: '風', category: 'strategy', rarity: 2, atk: 6, aps: 0.8, range: 3.0, shape: 'single', tags: ['謀略'],
+    char: '風', category: 'strategy', rarity: 2, atk: 9, aps: 0.8, range: 3.0, shape: 'single', tags: ['謀略'],
     desc: '狂風。命中把敵人往後吹退。', onHit: { knock: 0.7 }, fx: 'gale' },
   {
-    char: '雷', category: 'strategy', rarity: 3, atk: 11, aps: 0.6, range: 3.2, shape: 'single', tags: ['謀略'],
+    char: '雷', category: 'strategy', rarity: 3, atk: 16, aps: 0.6, range: 3.2, shape: 'single', tags: ['謀略'],
     desc: '天雷。命中後連鎖擊中附近 2 名敵人。', onHit: { chain: 2 }, fx: 'bolt' },
   {
-    char: '毒', category: 'strategy', rarity: 2, atk: 4, aps: 0.9, range: 2.6, shape: 'single', tags: ['謀略'],
+    char: '毒', category: 'strategy', rarity: 2, atk: 6, aps: 0.9, range: 2.6, shape: 'single', tags: ['謀略'],
     desc: '下毒。傷害低但持續灼蝕，對高血量敵人有效。', onHit: { burn: { mul: 0.8, dur: 4 } }, fx: 'venom',
   },
   {
@@ -91,7 +91,7 @@ function surnames(chars: string[]): GlyphDef[] {
     char,
     category: 'surname' as const,
     rarity: 2 as const,
-    atk: 5,
+    atk: 7,
     aps: 0.9,
     range: 1.5,
     shape: 'single' as const,
@@ -105,7 +105,7 @@ function givens(chars: string[]): GlyphDef[] {
     char,
     category: 'given' as const,
     rarity: 3 as const,
-    atk: 5,
+    atk: 7,
     aps: 0.9,
     range: 1.5,
     shape: 'single' as const,
