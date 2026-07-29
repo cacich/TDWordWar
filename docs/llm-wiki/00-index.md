@@ -20,6 +20,7 @@
 | 加一個**敵人**／**BOSS** | [modules/05](modules/05-economy-and-waves.md)。⚠ `traits` 必填；分裂圖不可有環 |
 | 加一**關卡**／改關卡偏好 | [modules/03](modules/03-board-and-mapgen.md)（含可直接複製的完整範例） |
 | 加一個**商城道具**／兵書升級 | [modules/06](modules/06-meta-progression.md)。⚠ Perks 中性值不變量 |
+| 加一個**成就** | [modules/06](modules/06-meta-progression.md)。⚠ 只有 `progress()`＋`goal`，沒有布林條件 |
 | 加一個**主動技／控場狀態** | [modules/04](modules/04-combat-and-skills.md) |
 
 ### 我要調數值
@@ -81,7 +82,7 @@
 | [modules/03-board-and-mapgen.md](modules/03-board-and-mapgen.md) | `sim/board.ts` `sim/mapgen.ts` `data/levels/` — 棋盤、路徑、關卡 |
 | [modules/04-combat-and-skills.md](modules/04-combat-and-skills.md) | `sim/combat.ts` `sim/skills.ts` `sim/bonds.ts` `data/bonds.ts` — 戰鬥、技能、羈絆 |
 | [modules/05-economy-and-waves.md](modules/05-economy-and-waves.md) | `sim/economy.ts` `waves.ts` `pool.ts` `step.ts` `data/enemies.ts` — 經濟、波次、字池、tick |
-| [modules/06-meta-progression.md](modules/06-meta-progression.md) | `core/save.ts` `data/shop.ts` `upgrades.ts` `loadout.ts` `core/devtools.ts` — 局外進度 |
+| [modules/06-meta-progression.md](modules/06-meta-progression.md) | `core/save.ts` `data/shop.ts` `upgrades.ts` `loadout.ts` `achievements.ts` `core/devtools.ts` — 局外進度 |
 | [modules/07-presentation.md](modules/07-presentation.md) | `app.ts` `render/` `ui/` `input/` `core/loop.ts` `audio.ts` — 呈現與操作 |
 
 ---
@@ -98,7 +99,7 @@
 - 每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，並自動推導出選單的「建議帶」標籤。
 - 全部視覺由 Canvas 2D 繪製，**零外部圖片／字型資產**；音效由 Web Audio 即時合成，**零音檔**。
 - 抽卡有四層收斂：**編隊**（玩家手動指定）→ 每局字池 → 熟悉度加權 → 心願單。
-- 局外系統：圖鑑、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單。共用「聲望」貨幣。
+- 局外系統：圖鑑、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單、成就（24 個，共 2130 聲望）。共用「聲望」貨幣。
 - 內容量：**71 字／43 武將／13 羈絆／30 主動技／5 組合技／22 種敵人（10 一般＋12 BOSS）／9 關**。
 
 ---
@@ -115,6 +116,7 @@ src/
                upgrades.ts    兵書：4 種數值養成
                shop.ts        商城：16 種可升級被動道具 → Perks
                loadout.ts     編隊：手動挑選字池內容
+               achievements.ts 成就：24 個「計數器 >= 門檻」+ 一次性聲望
   sim/         types.ts       全部型別（含 GameState / Unit / Perks）
                state.ts       createGame / recalcUnits / 單位建立
                actions.ts     ★ 玩家操作的唯一入口
@@ -130,7 +132,7 @@ src/
                mapgen.ts      隨機地形生成
                events.ts      事件佇列（sim → app 的唯一出口）
   render/      renderer.ts  theme.ts  fx.ts（攻擊特效畫法）  particles.ts
-  ui/          hud.ts  screens.ts（六個全螢幕畫面）  wish.ts（心願單）
+  ui/          hud.ts  screens.ts（七個全螢幕畫面）  wish.ts（心願單）
   input/       pointer.ts
   core/        loop.ts（固定步長）  rng.ts（mulberry32）  save.ts（localStorage）
                audio.ts（Web Audio 合成）  pwa.ts（SW 註冊）  devtools.ts（開發密技）

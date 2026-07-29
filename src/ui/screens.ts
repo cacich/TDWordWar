@@ -1,8 +1,17 @@
 /**
- * 全螢幕畫面（六個）：選單 menu／圖鑑 codex／兵書 forge／商城 shop／編隊 loadout／開發密技 dev。
+ * 全螢幕畫面（七個）：選單 menu／圖鑑 codex／兵書 forge／商城 shop／編隊 loadout／
+ * 成就 achieve／開發密技 dev。
  * 由 show(ScreenName) 統一切換，一次只顯示一個；screen === null 代表回到對局畫面。
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
+import {
+  ACHIEVEMENTS,
+  GROUP_LABEL,
+  GROUP_ORDER,
+  TOTAL_ACHIEVE_RENOWN,
+  isUnlocked,
+  unlockedCount,
+} from '../data/achievements'
 import { BONDS } from '../data/bonds'
 import { COUNTER_LABEL, countersFor } from '../data/enemies'
 import { GENERALS } from '../data/generals'
@@ -17,10 +26,15 @@ import { COMBOS } from '../sim/skills'
 import { MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, type MetaProgress } from '../sim/state'
 import type { BondDef, GlyphCategory } from '../sim/types'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | null
+export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | 'achieve' | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
+  /**
+   * 成就進度快照（key → 目前計數）。由 app 層算好再交過來，
+   * 這樣本檔維持「完全不碰 GameState」的性質。
+   */
+  achieveProgress(): Record<string, number>
   startLevel(key: string): void
   show(screen: ScreenName): void
   buyUpgrade(key: string): void
@@ -73,6 +87,9 @@ export class Screens {
   private devBody = el('dev-body')
   private loadout = el('screen-loadout')
   private loadoutBody = el('loadout-body')
+  private achieve = el('screen-achieve')
+  private achieveBody = el('achieve-body')
+  private achieveCount = el('achieve-count')
   private renownCount = el('renown-count')
   private levelList = el('level-list')
   private codexBody = el('codex-body')
@@ -95,6 +112,8 @@ export class Screens {
     el('dev-back').addEventListener('click', () => this.host.show('menu'))
     el('btn-loadout').addEventListener('click', () => this.host.show('loadout'))
     el('loadout-back').addEventListener('click', () => this.host.show('menu'))
+    el('btn-achieve').addEventListener('click', () => this.host.show('achieve'))
+    el('achieve-back').addEventListener('click', () => this.host.show('menu'))
     el('menu-title').addEventListener('click', () => this.handleTitleTap())
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
@@ -120,12 +139,64 @@ export class Screens {
     this.shop.hidden = screen !== 'shop'
     this.dev.hidden = screen !== 'dev'
     this.loadout.hidden = screen !== 'loadout'
+    this.achieve.hidden = screen !== 'achieve'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
     if (screen === 'shop') this.renderShop()
     if (screen === 'dev') this.renderDev()
     if (screen === 'loadout') this.renderLoadout()
+    if (screen === 'achieve') this.renderAchieve()
+  }
+
+  /**
+   * 成就：依 group 分區列出，每一項都畫進度條。
+   * 進度與達成判定共用 def.progress()／def.goal，所以進度條不可能跟解鎖狀態說法不一致。
+   */
+  renderAchieve(): void {
+    const meta = this.host.getMeta()
+    const prog = this.host.achieveProgress()
+    const done = unlockedCount(meta)
+    const earned = ACHIEVEMENTS.filter((a) => isUnlocked(meta, a.key)).reduce((n, a) => n + a.renown, 0)
+    this.achieveCount.textContent = `${done}/${ACHIEVEMENTS.length}　聲望 ${earned}/${TOTAL_ACHIEVE_RENOWN}`
+    this.achieveBody.innerHTML = ''
+
+    for (const group of GROUP_ORDER) {
+      const list = ACHIEVEMENTS.filter((a) => a.group === group)
+      if (!list.length) continue
+      const head = document.createElement('div')
+      head.className = 'codex-section'
+      head.textContent = `${GROUP_LABEL[group]}（${list.filter((a) => isUnlocked(meta, a.key)).length}/${list.length}）`
+      this.achieveBody.appendChild(head)
+
+      for (const a of list) {
+        const got = isUnlocked(meta, a.key)
+        // 已解鎖就不必再算一次進度（有些 scope:'run' 的成就在選單裡會算出 0，會看起來像倒退）
+        const cur = got ? a.goal : Math.min(a.goal, Math.max(0, Math.floor(prog[a.key] ?? 0)))
+        const pctDone = Math.round((cur / a.goal) * 100)
+        const row = document.createElement('div')
+        row.className = `achieve-row${got ? ' done' : ''}`
+        const scopeTag = a.scope === 'run' ? '<span class="ac-scope">單局</span>' : ''
+        // 門檻為 1 的是「做到就解鎖」，畫成數字進度條只會看到 0/1，沒有資訊量
+        const counter = a.goal > 1 ? `<span class="ac-num">${cur}/${a.goal}</span>` : ''
+        row.innerHTML = `<div class="ac-mark">${got ? '✓' : '　'}</div>
+          <div class="ac-main">
+            <div class="ac-name">${a.name}${scopeTag}<span class="ac-renown">聲望 +${a.renown}</span></div>
+            <div class="fg-desc">${a.desc}</div>
+            <div class="ac-bar"><span style="width:${pctDone}%"></span></div>
+          </div>
+          ${counter}`
+        this.achieveBody.appendChild(row)
+      }
+    }
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '成就達成時<b>立即發放聲望</b>，每項只發一次。<br>' +
+      '<span class="muted">標「單局」的只看目前這一局；其餘會跨局累積，回到選單也看得到進度。' +
+      '「征途」類的局數與擊殺只計入<b>打完</b>的局（中途離開不算）。</span>'
+    this.achieveBody.appendChild(note)
   }
 
   /** 商城：花聲望買被動道具，每種最高 3 級，買一級生效一級 */

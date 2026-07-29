@@ -62,6 +62,8 @@
 | 敵人特徵 | `EnemyTrait` | 成群／重甲／飛行／高速／治療／分裂／高血。驅動關卡加權與 UI 推薦 |
 | 應對手段 | `CounterKind` | 範圍／貫穿／單體高傷／對空／控場／持續傷害。由 `TRAIT_COUNTERS` 推導 |
 | 關卡偏好 | `LevelDef.bias` | 該關偏好的敵人特徵，出現權重 ×`BIAS_WEIGHT` |
+| 成就／戰功 | `AchievementDef` | 「計數器 >= 門檻」的達成條件，解鎖時一次性發聲望 |
+| 跨局統計 | `MetaProgress.totals` | `RunTotals`：只在一局結束時累加的 runs／wins／kills／waves |
 | 回血光環 | `EnemyDef.healAura` | 妖道系：為半徑內其他敵人回血（比例／秒） |
 | 死亡分裂 | `EnemyDef.splitInto` | 只在 `cleanupDead()` 展開；分裂圖不可有環 |
 | 護衛 | `EnemyDef.escort` | BOSS 生成時一起帶出的小怪，在 `buildWave` 展開 |

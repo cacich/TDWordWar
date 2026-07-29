@@ -774,9 +774,27 @@ body {
 .screen-foot .wide .nav-label {
   font-size: calc(var(--ui) * 0.86);
   letter-spacing: calc(var(--ui) * 0.16);
+  white-space: nowrap;
 }
 
-/* 四個入口各自的色調，一眼就能分辨 */
+/* 五個入口塞在一列，窄螢幕上要能縮：標籤的字距先讓步，再讓字級縮 */
+@media (max-width: 400px) {
+  .screen-foot .wide .nav-label {
+    letter-spacing: 0;
+    font-size: calc(var(--ui) * 0.78);
+  }
+
+  .screen-foot .wide {
+    padding-left: calc(var(--ui) * 0.12);
+    padding-right: calc(var(--ui) * 0.12);
+  }
+
+  .screen-foot {
+    gap: calc(var(--ui) * 0.42);
+  }
+}
+
+/* 五個入口各自的色調，一眼就能分辨 */
 .screen-foot .nav-book {
   background: #8a5a3b;
 }
@@ -791,6 +809,10 @@ body {
 
 .screen-foot .nav-squad {
   background: #4a6a4a;
+}
+
+.screen-foot .nav-honor {
+  background: #7a3f4a;
 }
 
 /* ── 兵書（局外養成） ──────────────────────── */
@@ -834,6 +856,95 @@ body {
   background: #cfc4b0;
   color: #8d8474;
   cursor: not-allowed;
+}
+
+/* ── 戰功（成就） ─────────────────────────── */
+.achieve-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(var(--ui) * 0.5);
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  /* 未解鎖的用偏灰的底，一眼就能掃出哪些還沒拿到 */
+  background: #f2ece0;
+  padding: calc(var(--ui) * 0.5) calc(var(--ui) * 0.65);
+  margin-bottom: calc(var(--ui) * 0.5);
+}
+
+.achieve-row.done {
+  background: #fffdf4;
+}
+
+.achieve-row .ac-mark {
+  width: calc(var(--ui) * 1.2);
+  text-align: center;
+  font-size: calc(var(--ui) * 1.2);
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.achieve-row .ac-name {
+  font-size: calc(var(--ui) * 1.05);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.1);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.35);
+}
+
+/* 未解鎖時名稱壓暗，但描述維持可讀——玩家要靠描述知道怎麼拿 */
+.achieve-row:not(.done) .ac-name {
+  color: var(--ink-soft);
+}
+
+.achieve-row .ac-scope {
+  font-size: calc(var(--ui) * 0.66);
+  font-weight: 400;
+  letter-spacing: 0;
+  border: 1px solid var(--ink-soft);
+  border-radius: calc(var(--ui) * 0.3);
+  padding: 0 calc(var(--ui) * 0.22);
+  color: var(--ink-soft);
+}
+
+.achieve-row .ac-renown {
+  margin-left: auto;
+  font-size: calc(var(--ui) * 0.76);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--gold);
+}
+
+.achieve-row .fg-desc {
+  font-size: calc(var(--ui) * 0.82);
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.achieve-row .ac-bar {
+  margin-top: calc(var(--ui) * 0.3);
+  height: calc(var(--ui) * 0.3);
+  border: 1.5px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.2);
+  background: #e2d9c6;
+  overflow: hidden;
+}
+
+.achieve-row .ac-bar span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+}
+
+.achieve-row.done .ac-bar span {
+  background: #4a6a4a;
+}
+
+.achieve-row .ac-num {
+  font-size: calc(var(--ui) * 0.8);
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 /* ── 編隊：啟用開關 ────────────────────────── */
@@ -987,6 +1098,12 @@ body {
 
 .codex-detail b {
   letter-spacing: calc(var(--ui) * 0.14);
+}
+
+/* .muted 的 nowrap 是給狀態列短標籤用的；說明區塊裡是整段句子，必須能換行，
+   否則窄螢幕上整個 codex-body 會被撐出橫向捲軸 */
+.codex-detail .muted {
+  white-space: normal;
 }
 
 .bond-list {

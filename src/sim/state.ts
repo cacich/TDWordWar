@@ -21,8 +21,28 @@ import { PREP_SECONDS } from './waves'
 import type { Aura, FxKind, GameState, GeneralDef, GlyphDef, OnHit, Unit } from './types'
 
 /**
+ * 跨局累計統計，成就的「征途」類用它當計數器。
+ * 只在一局**真正結束**（勝或敗）時累加一次，中途離開回選單的那一局不計入——
+ * 否則同一局會在每次回選單時被重複累加。定義放在這裡（而不是 data/achievements.ts）
+ * 是為了讓 data → sim 維持單向：資料表只從 sim 取型別，不反過來。
+ */
+export interface RunTotals {
+  /** 打完的局數 */
+  runs: number
+  /** 通關的局數 */
+  wins: number
+  /** 累計擊殺 */
+  kills: number
+  /** 累計抵達波次（各局相加） */
+  waves: number
+}
+
+export const EMPTY_TOTALS: RunTotals = { runs: 0, wins: 0, kills: 0, waves: 0 }
+
+/**
  * 局外進度（設計決定 #4：手牌可由兵書擴充至 8）。
- * cleared、seenGlyphs、seenGenerals、best 是 M4 的關卡與圖鑑進度，由 app 層維護，sim 不讀。
+ * cleared、seenGlyphs、seenGenerals、best、achievements、totals 是關卡／圖鑑／成就進度，
+ * 由 app 層維護，sim 不讀。
  */
 export interface MetaProgress {
   handSize: number
@@ -56,6 +76,13 @@ export interface MetaProgress {
    * 見 data/loadout.ts 的 isGeneralUnlocked()。
    */
   loadoutGenerals: string[]
+  /**
+   * 成就：key → 解鎖序號（1 起算，0 或不存在＝未解鎖）。
+   * 存序號而不是時間戳，是為了讓 data/achievements.ts 維持純函式（不碰 Date）。
+   */
+  achievements: Record<string, number>
+  /** 跨局累計統計（成就用）。只在一局真正結束時累加，見 app.ts 的 syncProgress */
+  totals: RunTotals
 }
 
 export const DEFAULT_META: MetaProgress = {
@@ -72,6 +99,8 @@ export const DEFAULT_META: MetaProgress = {
   loadoutActive: false,
   loadoutGlyphs: [],
   loadoutGenerals: [],
+  achievements: {},
+  totals: { ...EMPTY_TOTALS },
 }
 export const MAX_HAND_SIZE = 8
 export const MAX_WISH_SLOTS = 3

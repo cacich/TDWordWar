@@ -12,13 +12,13 @@
 ## 內容量現況
 
 ```
-玩家側：71 字 · 43 武將 · 13 羈絆 · 30 主動技 · 16 商城道具 · 編隊
+玩家側：71 字 · 43 武將 · 13 羈絆 · 30 主動技 · 16 商城道具 · 編隊 · 24 成就
 敵人側：22 種敵人（10 一般 + 12 BOSS）· 9 關各有偏好特徵
 ```
 
 兩側已經平衡（2026-07-29 完成敵種擴充，見本頁最後的「已完成」）。
 下一個瓶頸是**關卡結構**：9 關的差異只在敵人偏好與地形形狀，
-戰術結構仍然都是「單一路徑 S→C」——見下面第 7、9 項。
+戰術結構仍然都是「單一路徑 S→C」——見下面第 5、7 項。
 
 ---
 
@@ -41,23 +41,9 @@
 
 ---
 
-### 2. 成就系統
-
-**為什麼**：成本極低——`state.stats`（`kills` / `foodEarned` / `leaks`）**已經在收集**，目前只用於聲望結算與結束橫幅（[`app.ts`](../../src/app.ts) 的 `syncProgress`、[`ui/hud.ts`](../../src/ui/hud.ts) 的 banner）。
-
-**切入點**
-- 新增 `src/data/achievements.ts`（比照 `data/shop.ts` 的資料表 + 純函式風格）
-- `MetaProgress` 加 `achievements: Record<string, number>`，並在 [`core/save.ts`](../../src/core/save.ts) 的 `loadMeta()` 補驗證
-- 判定寫在 `app.ts` 的 `syncProgress()`（已經每幀在跑）
-- UI 可直接沿用圖鑑畫面的 `codex-grid` 排版
-
-**陷阱**：獎勵若給聲望，要一起看 `data/shop.ts`（13590）與 `data/upgrades.ts`（1230）的總價平衡。
-
----
-
 ## 第二梯：高價值、中成本
 
-### 3. 每日挑戰
+### 2. 每日挑戰
 
 **為什麼**：**架構上是完美契合**——本專案已經保證「同種子 → 同一場對局」（`core/rng.ts` 的 mulberry32），
 用日期當種子就能讓所有玩家玩到同一局，這是多數遊戲要額外做很多工才有的性質。
@@ -72,7 +58,7 @@
 
 ---
 
-### 4. 局內續玩存檔
+### 3. 局內續玩存檔
 
 **為什麼**：對 PWA／手機來說這是目前最大的體驗缺口——一局 30 波很長，中斷就全沒了。
 
@@ -97,7 +83,7 @@ export function mulberry32(seed: number): () => number {
 
 ---
 
-### 5. 主動技手動施放
+### 4. 主動技手動施放
 
 **為什麼**：30 個技能目前**全部自動施放**（`sim/skills.ts` 的 `stepSkills`），
 玩家在戰鬥階段其實沒有操作。這是清單裡對「每分鐘參與感」影響最大的一項。
@@ -115,7 +101,7 @@ export function mulberry32(seed: number): () => number {
 
 ## 第三梯：結構性擴充
 
-### 6. 關卡修飾符（modifiers）
+### 5. 關卡修飾符（modifiers）
 
 **為什麼**：用很低的成本為既有 6 關加上重玩價值。例如「禁用弓系」「敵人 +30% 移速」「1 命但收入 ×2」。
 
@@ -125,16 +111,16 @@ export function mulberry32(seed: number): () => number {
 
 ---
 
-### 7. 無盡模式
+### 6. 無盡模式
 
 **切入點**：`maxWave → Infinity` + `hpMul` 隨波次遞增，沿用 `meta.best[]` 當高分榜。
-與成就、每日挑戰互補。
+與已完成的成就系統互補（`meta.totals` 已經在累積跨局戰績，無盡模式的高分可以沿用同一套）。
 
 **陷阱**：`checkWaveEnd`（`sim/step.ts`）目前用 `wave >= maxWave` 判定勝利，要處理 `Infinity` 的情況。
 
 ---
 
-### 8. 多路徑／雙出生點
+### 7. 多路徑／雙出生點
 
 **為什麼**：目前 6 關的地圖差異只有形狀，戰術結構完全相同（單一路徑 S→C）。
 
@@ -159,7 +145,7 @@ export function mulberry32(seed: number): () => number {
 ## 動任何數值後的必要驗證
 
 ```bash
-npm test         # 197 個單元測試
+npm test         # 220 個單元測試
 npm run typecheck
 npm run sim      # 難度儀表板，改數值後務必跑
 npm run sim 24 luoyang   # 指定局數與關卡
@@ -177,6 +163,11 @@ npm run sim 24 luoyang   # 指定局數與關卡
 - 2026-07-29 編隊系統（手動挑選字池內容）
 - 2026-07-29 商城 16 種可升級被動道具（Perks 機制）
 - 2026-07-29 內容擴充至 71 字／43 武將／13 羈絆
+- 2026-07-29 **成就系統**：24 個成就（戰陣 7／布陣 8／圖鑑 4／征途 5），達成即發聲望共 2130
+  （夾在兵書 1230 與商城 13590 之間）。每個成就都是「`progress()` >= `goal`」的計數器，
+  判定與 UI 進度條共用同一份數字。新增 `data/achievements.ts`、
+  `MetaProgress.achievements`（key → 解鎖序號）與 `MetaProgress.totals`（`RunTotals` 跨局統計）、
+  「戰功」畫面。新增 `achievements.test.ts`（23 個測試）。
 - 2026-07-29 **敵種擴充**：5 → 22 種敵人（10 一般 + 12 BOSS）。
   新機制：回血光環（`healAura`）、自我再生（`regen`）、死亡分裂（`splitInto`）、
   護衛（`escort`）、灼燒／減速免疫。BOSS 波改為從合格 BOSS 中依關卡偏好隨機挑選。

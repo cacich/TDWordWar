@@ -15,7 +15,7 @@
 
 ```bash
 npm run dev             # 開發伺服器（http://localhost:5188）
-npm test                # 197 個單元測試，改完務必跑
+npm test                # 220 個單元測試，改完務必跑
 npm run typecheck       # tsc --noEmit
 npm run sim             # 自動平衡：傻 AI 跑 30 局，印出陣亡波次分佈
 npm run sim 16 guandu   # 指定局數與關卡
@@ -86,7 +86,8 @@ M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 
 （3 關固定地圖 + 6 關隨機地形）。每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，
 並自動推導出選單上的「建議帶」標籤——見 `data/enemies.ts` 的 `TRAIT_COUNTERS`。
 局外：圖鑑、兵書（4 種永久升級 + 聲望）、商城（16 種聲望購買的被動道具，每種最高 3 級，見 `data/shop.ts`）、
-編隊（從已解鎖的字／武將手動挑選字池內容，見 `data/loadout.ts`）、心願單。音效與粒子皆由 sim 事件佇列驅動。
+編隊（從已解鎖的字／武將手動挑選字池內容，見 `data/loadout.ts`）、心願單、
+成就（24 個，達成即發聲望共 2130，見 `data/achievements.ts`）。音效與粒子皆由 sim 事件佇列驅動。
 開發密技面板（選單標題連點 7 下）供測試用，見 `core/devtools.ts`。
 
 未實作項目與已知陷阱列在 [docs/llm-wiki/04-invariants.md](docs/llm-wiki/04-invariants.md)。

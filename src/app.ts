@@ -14,6 +14,7 @@ import {
 } from './core/devtools'
 import { startLoop, type LoopHandle } from './core/loop'
 import { saveMeta } from './core/save'
+import { ACHIEVEMENTS, claimAchievements } from './data/achievements'
 import { LEVEL_ORDER } from './data/levels'
 import { setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from './data/loadout'
 import { buyUpgrade } from './data/upgrades'
@@ -51,6 +52,8 @@ export class App implements HudHost, PointerHost, ScreensHost {
   private saveTimer = 0
   /** 本局是否已結算聲望，避免每幀重複加 */
   private renownPaid = false
+  /** 成就檢查倒數：24 個成就要掃場上單位，不必每幀跑 */
+  private achieveTimer = 0
 
   constructor(canvas: HTMLCanvasElement, private meta: MetaProgress) {
     this.state = createGame('huangjin', newSeed(), meta)
@@ -156,10 +159,25 @@ export class App implements HudHost, PointerHost, ScreensHost {
     const over = this.state.phase === 'won' || this.state.phase === 'lost'
     if (over && !this.renownPaid) {
       this.renownPaid = true
-      const gain = renownFor(this.state.wave, this.state.stats.kills, this.state.phase === 'won')
+      const won = this.state.phase === 'won'
+      const gain = renownFor(this.state.wave, this.state.stats.kills, won)
       meta.renown += gain
+      // 跨局累計只在這裡加一次（中途離開回選單的那一局不算，否則同一局會被重複累加）
+      meta.totals.runs++
+      if (won) meta.totals.wins++
+      meta.totals.kills += this.state.stats.kills
+      meta.totals.waves += this.state.wave
       this.metaDirty = true
       this.hud.toast(`獲得聲望 +${gain}（兵書可花用）`)
+      // 「通關且沒掉命」這類成就只有結束的這一刻成立，不能等下一次輪詢
+      this.checkAchievements()
+    }
+
+    // 成就輪詢：0.5 秒一次就足夠即時，又不必每幀掃全場單位
+    this.achieveTimer -= dt
+    if (this.achieveTimer <= 0) {
+      this.achieveTimer = 0.5
+      this.checkAchievements()
     }
 
     // 存檔節流：最多每 2 秒寫一次 localStorage
@@ -169,6 +187,26 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.saveTimer = 2
     this.metaDirty = false
     saveMeta(meta)
+  }
+
+  /**
+   * 檢查成就並發放獎勵。解鎖是**立即存檔**的——成就多半在一局結束的那一刻達成，
+   * 而玩家常常馬上回選單，等 2 秒的節流會來不及寫入。
+   */
+  private checkAchievements(): void {
+    const got = claimAchievements(this.meta, this.state)
+    if (!got.length) return
+    saveMeta(this.meta)
+    this.metaDirty = false
+    this.audio.play('combineBig')
+    // toast 只有一格、後蓋前（見 ui/hud.ts），所以一次解鎖多項要合併成一則，
+    // 否則玩家只會看到最後一項，前面幾項像是沒發生過
+    const gain = got.reduce((n, a) => n + a.renown, 0)
+    this.hud.toast(
+      got.length === 1
+        ? `成就達成：${got[0].name}（聲望 +${gain}）`
+        : `成就達成 ${got.length} 項：${got.map((a) => a.name).join('、')}（聲望 +${gain}）`,
+    )
   }
 
   /**
@@ -283,6 +321,12 @@ export class App implements HudHost, PointerHost, ScreensHost {
   getMeta(): MetaProgress {
     return this.meta
   }
+  /** 成就畫面的進度條資料。在這裡算好，ui/screens.ts 就不必認識 GameState */
+  achieveProgress(): Record<string, number> {
+    const out: Record<string, number> = {}
+    for (const a of ACHIEVEMENTS) out[a.key] = a.progress(this.state, this.meta)
+    return out
+  }
   buyUpgrade(key: string): void {
     const res = buyUpgrade(this.meta, key)
     this.audio.play(res.ok ? 'combine' : 'deny')
@@ -352,6 +396,9 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.hud.toast(res.msg)
   }
   show(screen: ScreenName): void {
+    // syncProgress 在選單畫面會早退，所以「在選單裡才達成」的成就（例如把兵書買滿）
+    // 只能靠切換畫面時補檢查一次。放在 screens.show 之前，剛解鎖的項目當場就畫得出來。
+    this.checkAchievements()
     this.screens.show(screen)
     this.loop.setPaused(screen !== null)
   }

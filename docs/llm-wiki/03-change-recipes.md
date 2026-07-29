@@ -309,6 +309,46 @@ export const SKILLS: Record<string, SkillFn> = {
    `isGeneralUnlocked()` 重新過濾 `loadoutGlyphs` / `loadoutGenerals`，
    否則規則改了但舊存檔裡不合規的項目不會被清掉。
 
+## 10f4. 加一個成就
+
+**九成的情況只要在 `data/achievements.ts` 的 `ACHIEVEMENTS` 加一筆就完成了**——
+UI、存檔清洗、聲望發放、進度條全部是資料驅動的，不需要碰其他檔案。
+
+```ts
+{
+  key: 'noSell',                 // 不可與既有 key 重複（有測試把關）
+  name: '滴水不漏',
+  desc: '通關一局，且全程沒有任何敵人抵達大營',
+  group: 'battle',               // battle 戰陣／build 布陣／collect 圖鑑／journey 征途
+  scope: 'run',                  // 'run' 只看這一局／'career' 看跨局累積
+  goal: 1,                       // 判定一律是 progress() >= goal
+  renown: 80,
+  progress: (s) => (s && s.phase === 'won' && s.stats.leaks === 0 ? 1 : 0),
+}
+```
+
+**設計原則：沒有布林條件，每個成就都是「計數器 >= 門檻」。**
+`progress()` 同時餵給達成判定與 UI 進度條，所以兩者不可能不一致。
+做不到計數的（例如「通關且沒掉命」）就回傳 0 或 1、`goal` 寫 1。
+
+四個容易踩的地方：
+
+1. **`scope: 'run'` 的 `progress()` 在 `state === null` 時必須回 0。**
+   玩家在選單畫面時沒有局內狀態，回傳非 0 會直接誤判成達成。
+   `achievements.test.ts` 有一個測試逐項掃過這條。
+2. **門檻不要寫死可推導的數字。** 全收集類請寫 `GLYPHS.length`／`GENERALS.length`／
+   `LEVEL_ORDER.length`，這樣加內容時成就會自動跟上（也有測試把關）。
+3. **獎勵總額是平衡數字。** 目前 24 個成就共 2130 聲望，刻意夾在兵書買滿 1230 與
+   商城買滿 13590 之間。加成就會把總額往上推，超出區間測試會紅——
+   那是提醒你回頭看這三個數字的關係，不是叫你改測試。
+4. **要新的跨局計數器**（例如「累計徵兵次數」）才需要動別的檔案：
+   `RunTotals`（`sim/state.ts`）加欄位 → `EMPTY_TOTALS` → `core/save.ts` 的 `totals()` →
+   `app.ts` 的累加。⚠ 累加**只能**寫在 `renownPaid` 那個區塊裡，否則同一局會被重複計入。
+
+新的分區要同時加進 `AchieveGroup`、`GROUP_LABEL` 與 `GROUP_ORDER`；
+前兩者是 `Record<AchieveGroup, …>`，漏填 tsc 會擋，但**漏加 `GROUP_ORDER` 不會報錯，
+那一整區會安靜地不被畫出來**——所以有一個測試專門檢查這件事。
+
 ## 10g. 改 PWA（圖示、名稱、離線快取）
 
 | 想改什麼 | 動哪裡 |
