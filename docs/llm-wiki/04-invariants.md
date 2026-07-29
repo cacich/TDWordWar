@@ -24,9 +24,13 @@ CSS 裡任何元件自己的 `display: grid/flex` 會蓋掉 HTML 的 `hidden` �
 `ui/hud.ts` 用 `card.dataset.sig`（`'字:等級'`）避免每幀重建 DOM。
 清空格子時**必須 `delete card.dataset.sig`**，否則下次抽到同字同級會被誤判為「沒變動」而不重繪 → 手牌看起來是空的，但 state 裡有字。
 
-### GameState 不可 `JSON.stringify`
-`state.rng` 是閉包。要做局內存檔必須改成存 `{ seed, rngCallCount }`，載入時重播 rng 到同一個位置。
-目前 `core/save.ts` **只存局外 meta 進度**，這是刻意的。
+### GameState 不可直接 `JSON.stringify`
+`state.rng` 是閉包，`JSON.stringify` 會**靜默**把它丟掉。
+局內存檔（續玩）因此不是逐欄序列化，而是走 `sim/persist.ts` 的
+「`snapshotRun` 挑出可變欄位 → `restoreRun` 重建骨架再蓋回去」：
+`board` 由 (關卡, 種子) 重建不必存，衍生值一律 `recalcUnits` 重算不必存，
+`rng` 只存 `getState()` 那**一個 uint32**。
+⚠ 新增 `GameState` 的**可變**欄位時要一併加進 `RunSnapshot`，否則續玩會靜默遺失它。
 
 ### canvas 需要 ResizeObserver
 只監聽 `window.resize` 不夠——浮層、瀏覽器工具列、軟鍵盤都會改變 canvas 的 CSS 尺寸而不觸發 window resize，
@@ -176,7 +180,7 @@ CSS 裡任何元件自己的 `display: grid/flex` 會蓋掉 HTML 的 `hidden` �
 | 項目 | 現況 | 規劃 |
 |---|---|---|
 | 藏書閣（解鎖新字） | **刻意不做**。每局字池已從另一個方向解決字太發散的問題，再加一層解鎖只會讓前期更貧乏 | — |
-| 局內存檔續玩 | 只存局外進度。⚠ 舊說法「rng 閉包不可序列化」高估了成本——`mulberry32` 的狀態其實只是**單一個 uint32**（`core/rng.ts`），只要讓它可讀寫 state 就夠了 | 見 [06-roadmap.md](06-roadmap.md) §5 |
+| 局內存檔續玩 | **已實作**（`sim/persist.ts` + `core/save.ts` 的 `tdwordwar.run.v1`）。每波開始與頁面隱藏時各存一次 | — |
 | 背景音樂 | 只有音效，沒有 BGM。若要做，同樣用 Web Audio 合成 | 視需要 |
 | PWA 的 512px PNG 圖示 | 只有 `icon.svg`（可縮放）與 `icon-192.png`。Android 的啟動畫面會把 192 放大，略糊 | 用 `tools/make-icons.html` 產生 512 後補進 manifest |
 | 更新提示 | SW 用 skipWaiting + clients.claim，下次開啟自動套用新版，但不會主動提示「有新版本」 | 視需要 |
@@ -197,7 +201,7 @@ safe-area 內距。實測關掉伺服器後重新整理仍可完整遊玩。
 
 ## 測試涵蓋範圍
 
-`npm test` 目前 224 個測試（**請以 `npm test` 的輸出為準，不要用 grep 數 `it(`**——
+`npm test` 目前 238 個測試（**請以 `npm test` 的輸出為準，不要用 grep 數 `it(`**——
 `shop.test.ts` 與 `roster-ext.test.ts` 用迴圈產生案例，靜態計數會少算約 29 個）：
 
 - `combine.test.ts` — 組詞：橫向、縱向、逆序不成立、不相鄰不成立、階級優先、武將不參與
@@ -231,6 +235,10 @@ safe-area 內距。實測關掉伺服器後重新整理仍可完整遊玩。
 
 - `core.test.ts`（波次曲線段）— **血量指數吃「相對進度」**：同樣的進度百分比得到同樣血量、
   短關卡把同一條弧壓得更陡、`maxWave` 省略時等同舊的絕對波次公式、`buildWave` 有把 `maxWave` 傳下去
+- `persist.test.ts` — **續玩還原後繼續跑，會走出跟沒中斷過完全相同的一局**（最重要的一條）、
+  棋盤不進快照而是由 (關卡, 種子) 重建、字牌與武將的雙向指標還原後接得上、
+  衍生值是重算而非讀存檔、版本不符或關卡消失時回傳 null、快照是深拷貝；
+  每日挑戰的日期→挑戰是決定性的、一年內每一關都會輪到、`dateKeyOf` 用當地時區
 - `achievements.test.ts` — 成就資料表完整性（key 不重複、`group` 都在 `GROUP_ORDER` 裡、全收集類的 `goal` 跟著資料表走）、
   **`scope:"run"` 的成就在沒有局內狀態時一律 0**（否則選單畫面會誤判）、進度不為 NaN／負數、
   同一個成就只發一次獎勵、解鎖序號遞增、**獎勵總額夾在兵書與商城總價之間（平衡守護）**、

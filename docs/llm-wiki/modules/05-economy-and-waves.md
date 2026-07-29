@@ -15,10 +15,10 @@
 > `data/levels/index.ts`（`LevelDef.pool` / `hpMul` / `maxWave` / **`bias`**）、
 > `sim/combat.ts`（`damageEnemy` / `enemyPos` / `stepCombat` / `SLOW_FACTOR`）、
 > `sim/skills.ts`、`sim/bonds.ts`、`sim/events.ts`、`sim/types.ts`（`Perks` / `SpawnEntry` / `EnemyTrait`）。
-> **下游使用者**：`core/loop.ts`（唯一呼叫 `stepGame` 的地方，固定 1/60）、`app.ts:88`、
+> **下游使用者**：`core/loop.ts`（唯一呼叫 `stepGame` 的地方，固定 1/60）、`app.ts:102`、
 > `tools/autobalance.ts:79`（`npm run sim`）、`sim/actions.ts:300`（`beginBattle` 建波次）、
-> `sim/state.ts:137,145`（`createGame` 建字池、注入 `bias`）、`ui/hud.ts:193,196`（顯示花費）、
-> `ui/screens.ts:410`（`countersFor(level.bias)` 推導關卡卡片的「建議帶」標籤）。
+> `sim/state.ts:143,151`（`createGame` 建字池、注入 `bias`）、`ui/hud.ts:193,196`（顯示花費）、
+> `ui/screens.ts:500`（`countersFor(level.bias)` 推導關卡卡片的「建議帶」標籤）。
 
 ## 這個模組解決什麼問題
 
@@ -172,15 +172,15 @@
 
 ### 關卡偏好（`bias`）與推薦標籤
 
-`LevelDef.bias: EnemyTrait[]`（`data/levels/index.ts:35-43`）→ `createGame` 抄進 `state.bias`（`state.ts:145`）
+`LevelDef.bias: EnemyTrait[]`（`data/levels/index.ts:35-43`）→ `createGame` 抄進 `state.bias`（`state.ts:151`）
 → `beginBattle` 傳給 `buildWave` 第 4 參數（`actions.ts:300`）。加權在 `weightOf`（`waves.ts:70-72`）：
 敵人的 `traits` 只要**命中任一個** bias 特徵，權重就是 `BIAS_WEIGHT`(4)，否則 1。同一份權重也用在 `pickBoss`。
 
 例：襄陽 `bias: ['swarm', 'splitter']`，第 20 波池子 10 種，蟻賊與分裂賊各 4 分、其餘 8 種各 1 分
 → 總權重 16，那兩種各 25%（無偏好時只有 10%）。
 
-`EnemyTrait` 共 7 種（`types.ts:182`）。同一份 `traits` 經 `TRAIT_COUNTERS`（`enemies.ts:28-36`）
-推導出關卡卡片上的「建議帶」標籤（`countersFor()`，`enemies.ts:179-185`；顯示在 `ui/screens.ts:410-411`）：
+`EnemyTrait` 共 7 種（`types.ts:196`）。同一份 `traits` 經 `TRAIT_COUNTERS`（`enemies.ts:28-36`）
+推導出關卡卡片上的「建議帶」標籤（`countersFor()`，`enemies.ts:179-185`；顯示在 `ui/screens.ts:500-501`）：
 
 | `EnemyTrait` | `TRAIT_LABEL` | 推導出的 `CounterKind` |
 |---|---|---|
@@ -290,7 +290,7 @@ weight = rarityWeights(wave)[g.rarity - 1]
 
 ### 編隊模式（`buildLoadoutPool`，`pool.ts:75-93`）
 
-`meta.loadoutActive` 為真時，`createGame`（`state.ts:133-137`）傳入 `LoadoutConfig`，
+`meta.loadoutActive` 為真時，`createGame`（`state.ts:139-143`）傳入 `LoadoutConfig`，
 `buildGlyphPool` **第一行就 return，完全跳過隨機抽樣**（`pool.ts:59`）。組成規則：
 
 ```
@@ -420,7 +420,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 
 ### `stepMeteor`（`step.ts:45-69`）
 
-`perks.meteorInterval <= 0` 直接 return（未購買時零成本）。倒數 `meteorTimer` 初值＝間隔（`state.ts:178`），
+`perks.meteorInterval <= 0` 直接 return（未購買時零成本）。倒數 `meteorTimer` 初值＝間隔（`state.ts:184`），
 歸零時用 `+=` 補回間隔（不是重設）以避免長期漂移。目標是 `dist` 最大（最前方）那隻，
 對其周圍 **1.5 格**內全體造成 `0.7 × enemyBaseHp(wave) × hpMul` 傷害，並施加 3 秒、dps 為傷害 12% 的灼燒。
 
@@ -460,7 +460,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
    否則會**靜默地**重複計算（沒有測試會抓到）：
    - 產糧：`src/sim/economy.ts:45`
    - 攻擊：`src/sim/combat.ts:250`
-   - 光環投射：`src/sim/state.ts:409`
+   - 光環投射：`src/sim/state.ts:415`
 
    第四個聚合（例如「全場攻擊力總和」的 UI、或新的每波結算項目）必須自己加上同樣的判斷。
 
@@ -469,7 +469,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
    `REGULARS`／`BOSSES` 又是從 `ENEMIES` 過濾出來的（`enemies.ts:167,170`）——
    **所以新增敵種只要改 `data/enemies.ts`，不需要動 `waves.ts`**（這與擴充前的規則相反，舊文件說要改兩處）。
    要注意的反而是這幾點：
-   - `traits` 是**必填**欄位（`types.ts:202`）。填空陣列（像 `thief`）代表「不受任何 `bias` 加權」；填錯會讓關卡卡片的推薦標籤撒謊。
+   - `traits` 是**必填**欄位（`types.ts:216`）。填空陣列（像 `thief`）代表「不受任何 `bias` 加權」；填錯會讓關卡卡片的推薦標籤撒謊。
    - `minWave` 太高會讓敵種在短關卡永遠不出現（黃巾只到 12 波，`stone` 的 `minWave` 12 只趕上最後一波）。
    - `eligible()` 有一道防呆：全部被 `minWave` 擋掉時退回 `pool[0]`（`waves.ts:67`）。
      這依賴 `ENEMIES` 的**宣告順序**——第一筆一般兵必須是 `thief`、第一筆 BOSS 必須是 `boss`，別隨意重排表格頂端。
@@ -482,11 +482,11 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 
 9. **`rollGlyph` 的 pool 過濾是 `ctx.pool.includes(g.char)`**（`economy.ts:97`）：
    池子裡出現不在 `GLYPHS` 的字會被**靜默忽略**；`ctx.pool` 為空陣列時退回全表（`?.length` 的短路）。
-   `pickWeighted` 在總權重為 0 時會回傳**最後一個**候選（`core/rng.ts:16-25`），不會拋錯——
+   `pickWeighted` 在總權重為 0 時會回傳**最後一個**候選（`core/rng.ts:31-40`），不會拋錯——
    新增 rarity 時別讓某一波的所有權重同時為 0。同一個 `pickWeighted` 也用在敵種抽取，
    所以 `weightOf` 也不能回傳 0（目前最小是 1，安全）。
 
-10. **perks 的介入點清單**（`Perks` 定義在 `types.ts:328`，由 `data/shop.ts` 的 `perksFrom()` 推導，`createGame` 注入一次、整局固定）。
+10. **perks 的介入點清單**（`Perks` 定義在 `types.ts:342`，由 `data/shop.ts` 的 `perksFrom()` 推導，`createGame` 注入一次、整局固定）。
     本模組只碰這幾個，其餘（`atkMul`／`apsMul`／`critChance`／`splashMul`／`bountyMul`／`rangeMul`／`cdMul`）在 combat／state 那一層：
 
     | perk | 介入點 | 中性值 |
@@ -499,7 +499,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
     | `enemySpeedMul` | `moveEnemies`（`step.ts:155`） | 1 |
     | `leakBlockChance` | `moveEnemies`（`step.ts:162`） | 0 |
     | `meteorInterval` | `stepMeteor`（`step.ts:46-49`） | 0 |
-    | `extraLives` | `createGame`（`state.ts:159-160`） | 0 |
+    | `extraLives` | `createGame`（`state.ts:165-166`） | 0 |
 
     **新增 perk 的鐵則**：中性值必須讓行為與「沒有這個 perk」逐位元相同（倍率 1／機率 0／間隔 0），
     否則 `npm run sim` 的難度基準與所有既有種子都會漂移。
@@ -532,10 +532,10 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 | BOSS 強度／組成 | `data/enemies.ts` 的 BOSS 那一段（`enemies.ts:99-159`） | 現在是**隨機挑一隻**，所以「BOSS 有多強」是分布而非單值。調某一隻只影響它出現的那些波 |
 | **新增敵種（一般兵）** | 只改 `data/enemies.ts` 的 `ENEMIES`（一般兵區段） | **不用改 `waves.ts`**——`REGULARS` 自動收（`enemies.ts:167`）。`traits` 必填、設好 `minWave`；`troop` 決定相剋；`flying` 需要 `baseRange >= 2` 才打得到 |
 | **新增 BOSS** | 同一張表，加 `boss: true` + `minWave` | `BOSSES` 自動收（`enemies.ts:170`）。基準：`hpMul` 8～22、`ccImmune: true`、`damage` 2+。**請給它一個機制鉤子**（免疫／光環／分裂／護衛），只加血量等於沒加內容 |
-| **調整關卡偏好** | `data/levels/index.ts` 的 `bias` | 同時改變敵種比重**與**關卡卡片的「建議帶」標籤（`ui/screens.ts:410`）——不要另外手寫推薦清單 |
+| **調整關卡偏好** | `data/levels/index.ts` 的 `bias` | 同時改變敵種比重**與**關卡卡片的「建議帶」標籤（`ui/screens.ts:500`）——不要另外手寫推薦清單 |
 | 偏好的強度 | `BIAS_WEIGHT`（`waves.ts:30`） | 4 的意思是「帶該特徵的敵人比重 ×4」。調高會讓關卡個性更鮮明但變化更少 |
-| 新增 `EnemyTrait` | `types.ts:182` ＋ `TRAIT_COUNTERS`（`enemies.ts:28-36`）＋ `TRAIT_LABEL`（`enemies.ts:47-55`） | 後兩者是 `Record<EnemyTrait, …>`，漏填 tsc 會擋下來（這是刻意的） |
-| 新增 `CounterKind`（推薦手段） | `types.ts:185` ＋ `COUNTER_LABEL`（`enemies.ts:38-45`） | 只影響 UI 文案，不影響模擬 |
+| 新增 `EnemyTrait` | `types.ts:196` ＋ `TRAIT_COUNTERS`（`enemies.ts:28-36`）＋ `TRAIT_LABEL`（`enemies.ts:47-55`） | 後兩者是 `Record<EnemyTrait, …>`，漏填 tsc 會擋下來（這是刻意的） |
+| 新增 `CounterKind`（推薦手段） | `types.ts:199` ＋ `COUNTER_LABEL`（`enemies.ts:38-45`） | 只影響 UI 文案，不影響模擬 |
 | 敵種的解鎖時程 | 各敵人的 `minWave` | 短關卡（黃巾 12 波）看不到高 `minWave` 的敵種；別把第一筆 `thief`／`boss` 加上 `minWave`（`eligible` 的防呆依賴它們） |
 | 回血／再生強度 | `healAura.hps`、`regen`（`data/enemies.ts`） | 兩者都是「每秒最大血量比例」，等於直接對玩家 dps 設門檻。刻意沒有反制的 perk |
 | 死亡分裂 | `splitInto`（`data/enemies.ts`） | ⚠ **不能形成環**（`enemies-ext.test.ts:103` 會擋）。子代血量由母體反推（`step.ts:199`），不要另外乘 `hpMul` |
@@ -546,7 +546,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 | 征兵／重抽花費 | `economy.ts:43-49`、`economy.ts:120-122` | 一次征兵填滿所有空格，改花費等於改「手牌大小的價值」 |
 | **一波能征幾次兵** | `waveIncome` 的斜率（`economy.ts:60-65`）與 `recruitCost` 的斜率（`economy.ts:43-49`）**成對調** | ★ 設計目標 1～2 次，用 `npm run econ` 驗收。單獨調一邊會破壞比值 |
 | 擊殺獎勵的份量 | `data/enemies.ts` 的 `bounty` | 佔總收入約 65%，是「滾雪球速度」的主力旋鈕 |
-| 每波收入／產糧 | `waveIncome`（`economy.ts:60-65`）、字表的 `income`（`data/glyphs.ts`）、`屯田` 的 `income`（`generals.ts:80`） | 經濟字產出是 `income × 品質階級`（線性，`state.ts:236`），不是指數 |
+| 每波收入／產糧 | `waveIncome`（`economy.ts:60-65`）、字表的 `income`（`data/glyphs.ts`）、`屯田` 的 `income`（`generals.ts:80`） | 經濟字產出是 `income × 品質階級`（線性，`state.ts:242`），不是指數 |
 | 抽卡稀有度曲線 | `RARITY_TABLE`（`economy.ts:60-65`） | 每列合計必須是 100（有測試）。第 4 欄無效 |
 | 抽卡收斂強度 | `FAMILIAR_BOOST`（`economy.ts:76`）、`WISH_BOOST`（`economy.ts:82`） | 兩者相乘。調高會讓對局更容易滾雪球 |
 | 每局字池大小 | `data/levels/index.ts` 的 `pool: { support, generals }` | `generals` 是「幾組配方」，不是幾個字（一組 2～3 字） |

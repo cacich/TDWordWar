@@ -97,21 +97,25 @@
           <p class="tagline">一字一兵，成詞成將</p>
         </div>
         <div id="level-list" class="level-list"></div>
-        <div class="screen-foot">
+        <!-- 六個入口排成 3×2；五個擠一列在窄螢幕上標籤會黏在一起 -->
+        <div class="screen-foot nav-grid">
           <button id="btn-codex" class="wide nav-book">
-            <span class="nav-icon">卷</span><span class="nav-label">圖　鑑</span>
+            <span class="nav-icon">卷</span><span class="nav-label">圖鑑</span>
           </button>
           <button id="btn-forge" class="wide nav-strategy">
-            <span class="nav-icon">策</span><span class="nav-label">兵　書</span>
+            <span class="nav-icon">策</span><span class="nav-label">兵書</span>
           </button>
           <button id="btn-shop" class="wide nav-shop">
-            <span class="nav-icon">貝</span><span class="nav-label">商　城</span>
+            <span class="nav-icon">貝</span><span class="nav-label">商城</span>
           </button>
           <button id="btn-loadout" class="wide nav-squad">
-            <span class="nav-icon">陣</span><span class="nav-label">編　隊</span>
+            <span class="nav-icon">陣</span><span class="nav-label">編隊</span>
           </button>
           <button id="btn-achieve" class="wide nav-honor">
-            <span class="nav-icon">功</span><span class="nav-label">戰　功</span>
+            <span class="nav-icon">功</span><span class="nav-label">戰功</span>
+          </button>
+          <button id="btn-daily" class="wide nav-daily">
+            <span class="nav-icon">曆</span><span class="nav-label">每日</span>
           </button>
         </div>
         <div class="screen-foot thin">
@@ -149,6 +153,16 @@
         <div id="loadout-body" class="codex-body"></div>
       </section>
 
+      <!-- ── 每日挑戰：日期即種子，所有人同一局 ───────── -->
+      <section id="screen-daily" class="screen" hidden>
+        <div class="screen-head row">
+          <button id="daily-back" class="icon-btn">←</button>
+          <h2>每日挑戰</h2>
+          <span id="daily-date" class="muted"></span>
+        </div>
+        <div id="daily-body" class="codex-body"></div>
+      </section>
+
       <!-- ── 戰功（成就）：達成即發聲望 ─────────────── -->
       <section id="screen-achieve" class="screen" hidden>
         <div class="screen-head row">
@@ -176,6 +190,7 @@
           <div class="tabs">
             <button id="tab-glyph" class="tab active">字</button>
             <button id="tab-general" class="tab">武將</button>
+            <button id="tab-enemy" class="tab">敵人</button>
           </div>
         </div>
         <div id="codex-body" class="codex-body"></div>

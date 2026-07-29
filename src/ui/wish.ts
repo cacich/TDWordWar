@@ -3,7 +3,7 @@
  * 列出本局字池（不是全字表）——只有池內的字許願才有意義，見 sim/pool.ts。
  */
 import { GLYPH_BY_CHAR } from '../data/glyphs'
-import { GENERALS } from '../data/generals'
+import { generalsUsing } from '../data/generals'
 import { FX_COLOR } from '../render/fx'
 import type { GameState } from '../sim/types'
 
@@ -61,9 +61,7 @@ export class WishPanel {
       const cell = document.createElement('div')
       cell.className = `codex-cell${wished ? ' wished' : ''}`
       const color = def.fx && def.fx !== 'none' ? FX_COLOR[def.fx] : '#2b2b2b'
-      const uses = GENERALS.filter(
-        (g) => g.recipe.includes(ch) && g.recipe.every((c) => s.pool.includes(c)),
-      ).map((g) => g.name)
+      const uses = generalsUsing(ch, s.pool).map((g) => g.name)
       cell.innerHTML =
         `<div class="cx-char" style="color:${color}">${wished ? '★' : ''}${ch}</div>` +
         `<div class="cx-name">${uses.length ? uses.slice(0, 2).join('・') : def.atk > 0 ? `攻${def.atk}` : '輔助'}</div>`

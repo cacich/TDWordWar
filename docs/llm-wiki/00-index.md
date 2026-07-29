@@ -43,6 +43,7 @@
 | 改**單位屬性怎麼算** | [modules/01](modules/01-state-and-units.md)。⚠ 改 `recomputeForm` 不是 `makeGeneralUnit` |
 | 改**棋盤／路徑／地形生成** | [modules/03](modules/03-board-and-mapgen.md) |
 | 改**局外進度／存檔** | [modules/06](modules/06-meta-progression.md) |
+| 改**每日挑戰／續玩存檔** | [modules/06](modules/06-meta-progression.md)。⚠ 每日挑戰必須用中性 meta，否則無法重現 |
 | 改 **UI／畫面／渲染／音效** | [modules/07](modules/07-presentation.md) |
 | 加**音效或粒子**觸發 | [modules/07](modules/07-presentation.md) 的事件佇列機制 |
 | 改 **PWA／離線** | [03-change-recipes.md](03-change-recipes.md) §10g |
@@ -100,7 +101,8 @@
 - 每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，並自動推導出選單的「建議帶」標籤。
 - 全部視覺由 Canvas 2D 繪製，**零外部圖片／字型資產**；音效由 Web Audio 即時合成，**零音檔**。
 - 抽卡有四層收斂：**編隊**（玩家手動指定）→ 每局字池 → 熟悉度加權 → 心願單。
-- 局外系統：圖鑑、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單、成就（24 個，共 2130 聲望）。共用「聲望」貨幣。
+- 局外系統：圖鑑（字／武將／敵人三頁）、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單、
+  成就（24 個，共 2130 聲望）、每日挑戰（日期即種子）、局內續玩存檔。共用「聲望」貨幣。
 - 內容量：**71 字／43 武將／13 羈絆／30 主動技／5 組合技／22 種敵人（10 一般＋12 BOSS）／9 關**。
 
 ---
@@ -117,6 +119,7 @@ src/
                upgrades.ts    兵書：4 種數值養成
                shop.ts        商城：16 種可升級被動道具 → Perks
                loadout.ts     編隊：手動挑選字池內容
+               daily.ts       每日挑戰：日期 → 關卡與種子（純函式）
                achievements.ts 成就：24 個「計數器 >= 門檻」+ 一次性聲望
   sim/         types.ts       全部型別（含 GameState / Unit / Perks）
                state.ts       createGame / recalcUnits / 單位建立
@@ -132,6 +135,7 @@ src/
                board.ts       棋盤解析與路徑
                mapgen.ts      隨機地形生成
                events.ts      事件佇列（sim → app 的唯一出口）
+               persist.ts     局內存檔的快照與還原（續玩）
   render/      renderer.ts  theme.ts  fx.ts（攻擊特效畫法）  particles.ts
   ui/          hud.ts  screens.ts（七個全螢幕畫面）  wish.ts（心願單）
   input/       pointer.ts

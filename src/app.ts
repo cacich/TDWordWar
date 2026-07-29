@@ -13,9 +13,10 @@ import {
   devUnlockCodex,
 } from './core/devtools'
 import { startLoop, type LoopHandle } from './core/loop'
-import { saveMeta } from './core/save'
+import { clearRun, loadRun, saveMeta, saveRun } from './core/save'
 import { ACHIEVEMENTS, claimAchievements } from './data/achievements'
-import { LEVEL_ORDER } from './data/levels'
+import { dailyChallenge, dateKeyOf, type DailyChallenge } from './data/daily'
+import { LEVELS, LEVEL_ORDER } from './data/levels'
 import { setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from './data/loadout'
 import { buyUpgrade } from './data/upgrades'
 import { buyItem } from './data/shop'
@@ -23,7 +24,8 @@ import { Input } from './input/pointer'
 import { Renderer } from './render/renderer'
 import { qualityColor } from './render/theme'
 import { recruit, rerollHand, sellGlyph, smelt, startWaveNow, toggleWish } from './sim/actions'
-import { createGame, formsAt, glyphAt, recalcUnits, renownFor, type MetaProgress } from './sim/state'
+import { restoreRun, snapshotRun } from './sim/persist'
+import { DEFAULT_META, createGame, formsAt, glyphAt, recalcUnits, renownFor, type MetaProgress } from './sim/state'
 import { stepGame } from './sim/step'
 import type { FxKind, GameState, Unit } from './sim/types'
 import { Hud, type HudHost, type Mode } from './ui/hud'
@@ -54,9 +56,16 @@ export class App implements HudHost, PointerHost, ScreensHost {
   private renownPaid = false
   /** 成就檢查倒數：24 個成就要掃場上單位，不必每幀跑 */
   private achieveTimer = 0
+  /** 本局的種子。續玩存檔要靠它重建棋盤，所以必須跟著 state 一起記住 */
+  private seed = 0
+  /** 本局若是每日挑戰，記下它的 dateKey；一般對局為 null */
+  private dailyKey: string | null = null
+  /** 上一次寫局內存檔時的波次，用來做到「一波只存一次」 */
+  private savedWave = -1
 
   constructor(canvas: HTMLCanvasElement, private meta: MetaProgress) {
-    this.state = createGame('huangjin', newSeed(), meta)
+    this.seed = newSeed()
+    this.state = createGame('huangjin', this.seed, meta)
     recalcUnits(this.state)
     this.renderer = new Renderer(canvas)
     this.renderer.resize(this.state)
@@ -76,6 +85,11 @@ export class App implements HudHost, PointerHost, ScreensHost {
     }
     window.addEventListener('resize', onResize)
     window.addEventListener('orientationchange', onResize)
+    // 手機切到背景／關分頁時不會有 unload，pagehide 才是可靠的最後一刻
+    window.addEventListener('pagehide', () => this.persistRun())
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.persistRun()
+    })
     // canvas 的 CSS 尺寸會因為浮層／鍵盤／瀏覽器工具列而改變，光靠 window resize 不夠
     new ResizeObserver(onResize).observe(canvas)
     const appEl = document.getElementById('app')
@@ -142,6 +156,13 @@ export class App implements HudHost, PointerHost, ScreensHost {
         this.metaDirty = true
       }
     }
+    // 敵人圖鑑：只要在場上出現過就算見過（不必打死，否則被漏過的敵種永遠不會登錄）
+    for (const e of this.state.enemies) {
+      if (!meta.seenEnemies.includes(e.defKey)) {
+        meta.seenEnemies.push(e.defKey)
+        this.metaDirty = true
+      }
+    }
 
     const key = this.state.levelKey
     const reached = this.state.wave
@@ -149,6 +170,18 @@ export class App implements HudHost, PointerHost, ScreensHost {
     if (reached > 1 && (meta.best[key] ?? 0) < reached) {
       meta.best[key] = reached
       this.metaDirty = true
+    }
+    // 每日挑戰的成績記在自己的欄位，不跟一般對局的 best 混在一起
+    if (this.dailyKey && reached > 1 && (meta.daily[this.dailyKey] ?? 0) < reached) {
+      meta.daily[this.dailyKey] = reached
+      this.metaDirty = true
+    }
+
+    // 局內存檔：每波開始時寫一次。放在佈陣階段是因為那是天然的檢查點
+    // （戰鬥中途存檔也能還原，但每幀寫 localStorage 太貴）
+    if (this.state.phase === 'prep' && this.state.wave !== this.savedWave) {
+      this.savedWave = this.state.wave
+      this.persistRun()
     }
     if (this.state.phase === 'won' && !meta.cleared.includes(key)) {
       meta.cleared.push(key)
@@ -402,9 +435,95 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.screens.show(screen)
     this.loop.setPaused(screen !== null)
   }
-  startLevel(key: string): void {
-    this.state = createGame(key, newSeed(), this.meta)
+  // ── 續玩存檔 ────────────────────────────────────────
+  /**
+   * 把目前這一局寫進 localStorage。已分出勝負就改成清掉存檔——
+   * 打完的局沒有續玩的必要，留著只會讓選單一直顯示「繼續上一局」。
+   */
+  private persistRun(): void {
+    const p = this.state.phase
+    if (p === 'won' || p === 'lost') {
+      clearRun()
+      return
+    }
+    saveRun(snapshotRun(this.state, this.seed, this.dailyKey ?? undefined))
+  }
+
+  /** 有沒有可以續玩的存檔（給選單決定要不要顯示續玩卡片） */
+  savedRun(): { levelName: string; wave: number; maxWave: number; daily: boolean } | null {
+    const snap = loadRun()
+    if (!snap) return null
+    const lv = LEVELS[snap.levelKey]
+    if (!lv) return null
+    return { levelName: lv.name, wave: snap.wave, maxWave: lv.maxWave, daily: !!snap.dailyKey }
+  }
+
+  /** 放棄存檔。清掉之後重繪選單，續玩卡片才會消失 */
+  dropRun(): void {
+    clearRun()
+    this.savedWave = -1
+    this.audio.play('ui')
+    this.screens.show('menu')
+    this.hud.toast('已放棄上一局的存檔')
+  }
+
+  /** 續玩。存檔壞掉或關卡已不存在時，誠實告訴玩家並清掉，不要靜默跳回選單 */
+  resumeRun(): void {
+    const snap = loadRun()
+    const restored = snap && restoreRun(snap, this.meta)
+    if (!snap || !restored) {
+      clearRun()
+      this.screens.show('menu')
+      this.hud.toast('存檔已失效，無法續玩')
+      return
+    }
+    this.state = restored
+    this.seed = snap.seed
+    this.dailyKey = snap.dailyKey ?? null
+    this.savedWave = this.state.wave
+    this.afterRunStart()
+    this.hud.toast(`續玩：${this.state.levelName} 第 ${this.state.wave} 波`)
+  }
+
+  // ── 每日挑戰 ────────────────────────────────────────
+  /** 今天的挑戰。日期在 app 層取（sim 與 data 都不碰 Date） */
+  todayChallenge(): DailyChallenge {
+    return dailyChallenge(dateKeyOf(new Date()))
+  }
+
+  /**
+   * 開始每日挑戰。**一律用中性 meta**（不吃兵書／商城／編隊）——
+   * 這不只是公平，更是重現性的必要條件：手牌格數與精兵符都會改變 rng 的消耗量，
+   * 任何一項不同，同一顆種子就會長出不同的對局（見 data/daily.ts 的檔頭）。
+   */
+  startDaily(): void {
+    const c = this.todayChallenge()
+    this.seed = c.seed
+    this.dailyKey = c.dateKey
+    this.savedWave = -1
+    this.state = createGame(c.levelKey, c.seed, DEFAULT_META)
     recalcUnits(this.state)
+    this.afterRunStart()
+    this.hud.toast(`每日挑戰 ${c.dateKey}：${this.state.levelName}`)
+  }
+
+  startLevel(key: string): void {
+    this.seed = newSeed()
+    this.dailyKey = null
+    this.savedWave = -1
+    this.state = createGame(key, this.seed, this.meta)
+    recalcUnits(this.state)
+    this.afterRunStart()
+    // 讓玩家知道這一局的字池能湊出什麼，抽卡才有方向感
+    const list = this.state.poolGenerals.filter((n) => n.length > 1).slice(0, 4)
+    if (list.length) this.hud.toast(`本局可湊：${list.join('、')}…`)
+  }
+
+  /**
+   * 換上一局新的 `state` 之後共通的收尾。開新局、每日挑戰與續玩三條路徑共用，
+   * 漏掉任何一項都會留下上一局的殘留（選取框、粒子、心願面板、畫布尺寸）。
+   */
+  private afterRunStart(): void {
     this.selectedCell = null
     this.mode = 'normal'
     this.renownPaid = false
@@ -413,9 +532,6 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.hud.onLevelChanged()
     this.renderer.resize(this.state)
     this.show(null)
-    // 讓玩家知道這一局的字池能湊出什麼，抽卡才有方向感
-    const list = this.state.poolGenerals.filter((n) => n.length > 1).slice(0, 4)
-    if (list.length) this.hud.toast(`本局可湊：${list.join('、')}…`)
   }
   /** 目前關卡在流程中的下一關（沒有就回傳 null） */
   nextLevelKey(): string | null {

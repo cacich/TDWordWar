@@ -777,21 +777,31 @@ body {
   white-space: nowrap;
 }
 
-/* 五個入口塞在一列，窄螢幕上要能縮：標籤的字距先讓步，再讓字級縮 */
-@media (max-width: 400px) {
-  .screen-foot .wide .nav-label {
-    letter-spacing: 0;
-    font-size: calc(var(--ui) * 0.78);
-  }
+/**
+ * 六個入口排成 3×2 網格。
+ * 一列六個在手機上每格只剩約 55px，圖示與標籤會擠成一團；分兩列之後
+ * 每格寬度加倍，也留出將來再加一個入口的位置（第 6 格就是每日挑戰）。
+ */
+.screen-foot.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--ui) * 0.5);
+}
 
-  .screen-foot .wide {
-    padding-left: calc(var(--ui) * 0.12);
-    padding-right: calc(var(--ui) * 0.12);
-  }
+.screen-foot.nav-grid .wide {
+  /* grid 已經決定寬度，flex:1 會讓按鈕在某些瀏覽器上被拉長 */
+  flex: none;
+  flex-direction: row;
+  gap: calc(var(--ui) * 0.32);
+  padding: calc(var(--ui) * 0.42) calc(var(--ui) * 0.2);
+}
 
-  .screen-foot {
-    gap: calc(var(--ui) * 0.42);
-  }
+.screen-foot.nav-grid .nav-icon {
+  font-size: calc(var(--ui) * 1.1);
+}
+
+.screen-foot.nav-grid .nav-label {
+  letter-spacing: calc(var(--ui) * 0.06);
 }
 
 /* 五個入口各自的色調，一眼就能分辨 */
@@ -813,6 +823,57 @@ body {
 
 .screen-foot .nav-honor {
   background: #7a3f4a;
+}
+
+.screen-foot .nav-daily {
+  background: #4a4a7a;
+}
+
+/* ── 續玩卡片：只在有局內存檔時出現，放在關卡列表最上方 ── */
+.resume-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: calc(var(--ui) * 0.55);
+  width: 100%;
+  border: 2px solid var(--ink);
+  border-radius: calc(var(--ui) * 0.7);
+  background: #3d5a73;
+  color: #fff8e8;
+  padding: calc(var(--ui) * 0.6) calc(var(--ui) * 0.8);
+  margin-bottom: calc(var(--ui) * 0.6);
+  font-family: var(--font);
+  cursor: pointer;
+  text-align: left;
+}
+
+.resume-card .rs-title {
+  font-size: calc(var(--ui) * 1.1);
+  font-weight: 700;
+  letter-spacing: calc(var(--ui) * 0.12);
+}
+
+.resume-card .rs-sub {
+  font-size: calc(var(--ui) * 0.82);
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.resume-card .rs-go {
+  font-size: calc(var(--ui) * 1.4);
+}
+
+/* 放棄續玩：小字，不要跟主要動作搶注意力 */
+.resume-drop {
+  display: block;
+  margin: calc(var(--ui) * -0.3) 0 calc(var(--ui) * 0.6);
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-family: var(--font);
+  font-size: calc(var(--ui) * 0.8);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* ── 兵書（局外養成） ──────────────────────── */

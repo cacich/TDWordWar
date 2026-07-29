@@ -2,6 +2,20 @@
  * 全專案共用型別。此檔不可 import 任何 render/DOM 相關模組。
  */
 
+/**
+ * 亂數產生器（實作在 core/rng.ts 的 mulberry32）。
+ * 型別放在這裡而不是 core/rng.ts，是為了維持「types.ts 不 import 任何東西」這條鐵則——
+ * 反過來由 core/rng.ts `import type` 這個介面，型別 import 編譯後會被抹除，不產生執行期相依。
+ *
+ * `getState`／`setState` 存取的是**整個產生器的唯一狀態**（一個 uint32），
+ * 局內存檔靠它精確續存，不必重播整局。
+ */
+export interface Rng {
+  (): number
+  getState(): number
+  setState(a: number): void
+}
+
 // ── 棋盤 ──────────────────────────────────────────────
 export type TileKind = 'plot' | 'path' | 'block' | 'spawn' | 'camp'
 
@@ -380,7 +394,11 @@ export interface GameState {
   /** 本關的敵人偏好（見 data/levels），buildWave 依它加權敵種與 BOSS 的出現率 */
   bias: EnemyTrait[]
   board: Board
-  rng: () => number
+  /**
+   * 本局的亂數產生器。⚠ 它是**閉包**，`JSON.stringify` 會靜默丟掉它——
+   * 局內存檔靠 `rng.getState()` 存那一個 uint32、載入時 `setState` 還原（見 core/save.ts）。
+   */
+  rng: Rng
   /** 本局字池（見 sim/pool.ts）。征兵只會抽到這些字 */
   pool: string[]
   /** 這個字池可以組出的武將名稱，供 UI 顯示「本局可湊」 */

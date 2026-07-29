@@ -73,6 +73,8 @@
 | `data/shop.ts` / `upgrades.ts` | [modules/06](modules/06-meta-progression.md)，若改價格要更新總價與局數估算 |
 | `data/achievements.ts`（成就） | [modules/06](modules/06-meta-progression.md) 的成就節、[00-index](00-index.md) 的內容量、`docs/game-design.md` §8.2 的分區表；**改獎勵要重算總額**（目前 2130，須夾在兵書 1230 與商城 13590 之間，有守護測試） |
 | `data/loadout.ts` | [modules/06](modules/06-meta-progression.md) |
+| `data/daily.ts`（每日挑戰） | [modules/06](modules/06-meta-progression.md) 的每日挑戰節、`docs/game-design.md` §8.2 |
+| `sim/persist.ts` 的 `RunSnapshot` | [modules/06](modules/06-meta-progression.md) 的續玩節、[04-invariants](04-invariants.md)。⚠ **新增 `GameState` 可變欄位時要一併加進快照**，漏了會靜默遺失 |
 | `sim/skills.ts`（技能／組合技） | [modules/04](modules/04-combat-and-skills.md) 的原型清單與註冊表數量、[02](02-data-tables.md) |
 | `sim/combat.ts` 的常數 | [modules/04](modules/04-combat-and-skills.md)、[02](02-data-tables.md) 的公式區、[03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 |
 | `sim/waves.ts`（`HP_GROWTH` 等） | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §7.5，**並更新各關 sim 中位數** |
@@ -106,7 +108,7 @@
 | **平衡註解沒重算** | 商城總價註解寫 9000，實際 13590（漏算每級成長項） |
 | **修好的 bug 還被寫成現存陷阱** | 組合技 cdMax 少乘 `perks.cdMul` 修好後，模組頁仍把它列為待修陷阱。**修 bug 時要一起搜尋文件裡對它的描述** |
 | **自己的修正讓行號位移** | 改 `sim/bonds.ts` 後，模組頁 9 處 `bonds.ts:NN` 全部失效。動過的檔案要回頭校對引用它的頁面 |
-| **只回寫「主場」頁面，忘了旁邊四頁** | 敵種擴充只動了 `data/enemies.ts` 與 `sim/waves.ts` 的**內容**，但順手在 `state.ts:145` 插了一行 `bias`、在 `types.ts` 插了 33 行——結果 modules/01・04・06・07 共約 90 個 `檔案:行號` 全部位移一格到三十三格，全部指到錯的地方。**回寫時先問「我增減了哪些檔案的行數」，再問「誰引用了那些檔案」** |
+| **只回寫「主場」頁面，忘了旁邊四頁** | 敵種擴充只動了 `data/enemies.ts` 與 `sim/waves.ts` 的**內容**，但順手在 `state.ts:151` 插了一行 `bias`、在 `types.ts` 插了 33 行——結果 modules/01・04・06・07 共約 90 個 `檔案:行號` 全部位移一格到三十三格，全部指到錯的地方。**回寫時先問「我增減了哪些檔案的行數」，再問「誰引用了那些檔案」** |
 
 **共通模式**：出錯的幾乎都是「數字」與「函式名」。回寫時優先檢查這兩類。
 
@@ -179,6 +181,8 @@ grep -o -E '(state|types|step|combat|actions|waves|economy|pool|skills|bonds)\.t
 | 血量指數吃「相對進度」：同進度百分比 → 同血量 | `core.test.ts` |
 | `buildWave` 有把 `maxWave` 傳進血量計算 | `core.test.ts` |
 | 同種子產生同一場對局 | `core.test.ts` / `enemies-ext.test.ts` |
+| 續玩還原後走出完全相同的一局 | `persist.test.ts` |
+| 每日挑戰的日期 → 挑戰是決定性的 | `persist.test.ts` |
 
 **新增機制時請一併補測試**——尤其是 `sim/` 裡的純函式，它們是本專案最便宜的保險，
 也讓文件不必承擔「記住所有規則」的責任。

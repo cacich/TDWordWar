@@ -8,22 +8,22 @@
 > | `src/sim/mapgen.ts` | 109 行 | `generateMap()`：由構造保證合法的蛇形走廊隨機地圖 |
 > | `src/data/levels/index.ts` | 215 行 | `LevelDef` 型別 + 9 個關卡的難度旋鈕與 `bias` + `LEVEL_ORDER` |
 >
-> **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:6-16；`EnemyTrait`，types.ts:182）、
+> **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:20-30；`EnemyTrait`，types.ts:196）、
 > `core/rng.ts`（`randInt`，mapgen.ts:20）。
 > `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:14），仍是純資料。
 >
-> **下游使用者**：`sim/state.ts:132-133`（開局組裝）、`sim/state.ts:145`（`bias` 帶進 `GameState`）、
+> **下游使用者**：`sim/state.ts:138-139`（開局組裝）、`sim/state.ts:151`（`bias` 帶進 `GameState`）、
 > `sim/combat.ts:49-94`（射程與敵人座標）、
 > `sim/step.ts:115-139`（敵人前進與漏怪）、`sim/combine.ts:33-56`（相鄰判定）、
 > `sim/actions.ts:137,189`（落點合法性）、`sim/actions.ts:300`（`bias` → `buildWave`）、
 > `input/pointer.ts:243`、`render/renderer.ts:82-175`、
-> `ui/screens.ts:402-427`（選關卡片，含「建議帶」標籤）、`tools/autobalance.ts:22-34`。
+> `ui/screens.ts:492-517`（選關卡片，含「建議帶」標籤）、`tools/autobalance.ts:22-34`。
 
 ## 這個模組解決什麼問題
 
 1. 把人類可讀的地圖字串轉成執行期資料結構，**並在轉換時就強制驗證**（列長、字元合法、S→C 連通）。
 2. 把「敵人怎麼走」壓縮成一維：`board.path` 是 cell 索引陣列，敵人只有一個純量 `Enemy.dist`
-   （types.ts:205-206，單位＝路徑段數，float）。執行期**不做任何尋路**，效能可預測、可重現。
+   （types.ts:219-220，單位＝路徑段數，float）。執行期**不做任何尋路**，效能可預測、可重現。
 3. 提供「每局地形都不同」的關卡，且**不可能生出死路**——因為路徑是先畫出來的，不是事後檢查的。
 
 ## 核心概念
@@ -40,7 +40,7 @@
 
 未列出的字元 → `parseMap` 直接拋 `未知地形字元`（board.ts:33）。
 
-### `Board`（types.ts:8-16）
+### `Board`（types.ts:22-30）
 
 ```ts
 { cols, rows, tiles: TileKind[] /* 長度 cols*rows，索引 = r*cols+c */,
@@ -72,7 +72,7 @@
 
 ## 主要流程
 
-### 開局（state.ts:131-137）
+### 開局（state.ts:137-143）
 
 ```
 mulberry32(seed) ─┬─→ generateMap(rng, level.gen)   ← 只有 gen 關卡會走
@@ -84,7 +84,7 @@ mulberry32(seed) ─┬─→ generateMap(rng, level.gen)   ← 只有 gen 關�
 固定地圖關卡跳過 `generateMap`，所以 **`rng` 在進入 `buildGlyphPool` 時的位置不同**。
 → 陷阱：任何改動 `generateMap` 抽 rng 的**次數**，都會連帶改掉隨機關卡的字池結果（見下）。
 
-同一支 `createGame()` 還把關卡的敵人偏好搬進 state：`bias: level.bias ?? []`（state.ts:145），
+同一支 `createGame()` 還把關卡的敵人偏好搬進 state：`bias: level.bias ?? []`（state.ts:151），
 `beginBattle()` 再交給波次生成器 `buildWave(wave, rng, hpMul, state.bias)`（actions.ts:300）。
 地形與敵種因此是兩條互不相干的旋鈕——改 `bias` 不會動到地圖，改 `gen` 不會動到敵種。
 
@@ -143,9 +143,9 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 3. **多個 `S` 或多個 `C` 不會報錯**：board.ts:36-37 是無條件覆寫，**最後出現的那個生效**，
    前面的變成無主的可走格 → 立刻破壞「可走格數 == 路徑長度」。手寫地圖時自己數。
 4. **禁用 `Math.random()`**：`generateMap` 必須吃傳入的 `rng`（mapgen.ts:35）。
-   `randInt(rng, min, max)` 是**兩端閉區間**（rng.ts:27-29）。
+   `randInt(rng, min, max)` 是**兩端閉區間**（rng.ts:42-44）。
 5. **不要改動 `generateMap` 消耗 rng 的次數**，除非你接受隨機關卡的字池結果一起變動
-   （state.ts:131-137 共用同一個 rng 實例）。純粹調 `blockRate` 這種「抽的次數不變」的改動是安全的。
+   （state.ts:137-143 共用同一個 rng 實例）。純粹調 `blockRate` 這種「抽的次數不變」的改動是安全的。
 6. **`gen.cols` 至少要 5**：`MIN_RUN = 4`，`room = cols-1-col`，`cols <= 4` 時橫走永遠不成立，
    路會退化成一條直落的垂直線。
 7. **新增 `gen` 關卡會自動被 60 個種子掃過**（mapgen.test.ts:8 的 `GEN_LEVELS` 取所有
@@ -162,8 +162,8 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 
 | 欄位 | 必填 | 作用 |
 |---|---|---|
-| `key` / `name` / `subtitle` | ✓ | `key` 必須與 `LEVELS` 的物件鍵一致（`state.levelKey` 由它回填，state.ts:142） |
-| `map?: string[]` | 二選一 | 固定地圖。優先於 `gen`（state.ts:132） |
+| `key` / `name` / `subtitle` | ✓ | `key` 必須與 `LEVELS` 的物件鍵一致（`state.levelKey` 由它回填，state.ts:148） |
+| `map?: string[]` | 二選一 | 固定地圖。優先於 `gen`（state.ts:138） |
 | `gen?: { cols, rows, minPathLen, blockRate? }` | 二選一 | 隨機地形參數，`blockRate` 預設 0.07 |
 | `startFood` / `lives` / `maxWave` / `hpMul` | ✓ | 難度四旋鈕 |
 | `pool: { support, generals }` | ✓ | 本局字池大小（pool.ts:63-66）；漏填直接 TS 編譯失敗 |
@@ -172,16 +172,16 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 ### `bias` 一個欄位驅動兩件事
 
 ```
-level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:300)
+level.bias ──→ state.bias (state.ts:151) ──→ buildWave (actions.ts:300)
    │                                            └→ weightOf(): 帶該特徵的敵人與 BOSS 權重 ×BIAS_WEIGHT
    │                                               （waves.ts:70-71,83-85,102；BIAS_WEIGHT = 4，waves.ts:30）
-   └──→ countersFor(level.bias) (enemies.ts:179-185) ──→ 選關卡片的「建議帶」標籤（screens.ts:409-411,420）
+   └──→ countersFor(level.bias) (enemies.ts:179-185) ──→ 選關卡片的「建議帶」標籤（screens.ts:499-501,510）
 ```
 
 推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:28-36）
 把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:38-45）給中文字。
 **關卡資料裡不要再手寫一份推薦清單**，否則會出現兩份不同步的真相。
-合法特徵是 `EnemyTrait`（types.ts:182）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
+合法特徵是 `EnemyTrait`（types.ts:196）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
 新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:47-55），
 `enemies-ext.test.ts:131-139` 會抓漏。
 
@@ -213,7 +213,7 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
 後三關（levels/index.ts:177 的分隔註解起）的設計意圖是「每關針對一組特徵，把該帶什麼的答案收窄」，
 所以它們的 `bias` 都是 2～3 個特徵，而不是難度單靠 `hpMul` 往上疊。
 
-`JULU = LEVELS.julu`（levels/index.ts:218）是測試與 `createGame()` 的預設關卡（state.ts:126）。
+`JULU = LEVELS.julu`（levels/index.ts:218）是測試與 `createGame()` 的預設關卡（state.ts:132）。
 
 ### 固定 `map` vs 隨機 `gen`：怎麼選
 
@@ -224,8 +224,8 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
 | 風險 | 手寫容易列長對不齊 | 每次改生成器都要重跑 60 種子測試 |
 
 兩者互斥且至少要有一個：`core.test.ts:35-41` 斷言 `Boolean(map) || Boolean(gen)`。
-`state.ts:132` 用 `level.map ?? generateMap(rng, level.gen!)`——`map` 優先，兩個都給 `gen` 會被忽略。
-`ui/screens.ts:414` 用 `level.gen` 決定選關卡片是否加上 `random` 樣式（`subtitle` 自己寫「★ 隨機地形」）。
+`state.ts:138` 用 `level.map ?? generateMap(rng, level.gen!)`——`map` 優先，兩個都給 `gen` 會被忽略。
+`ui/screens.ts:504` 用 `level.gen` 決定選關卡片是否加上 `random` 樣式（`subtitle` 自己寫「★ 隨機地形」）。
 目前的分配是前 3 關固定（教得動的教學弧）、後 6 關隨機（重玩性）。
 
 ## 我想改 X → 動哪裡
@@ -238,8 +238,8 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
 | 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性 |
 | 這一關偏好哪些敵人／卡片上顯示什麼「建議帶」 | 同檔對應關卡的 `bias` | 一改兩動：敵種加權（×`BIAS_WEIGHT`）與 UI 標籤都跟著變；標籤是推導出來的，別另外手寫 |
 | 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:28-36） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
-| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:406）與過關後的下一關（app.ts:422-423）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
-| 新的地形種類 | `TileKind`（types.ts:6）→ `CHAR_TO_KIND`（board.ts:7-13）→ `WALKABLE`（board.ts:47）→ `drawTiles`（renderer.ts:127-175）→ 若可放置再改 `isPlot` | 四處都要改，漏一處會是「解析成功但畫不出來」或「敵人穿牆」 |
+| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:496）與過關後的下一關（app.ts:538-539）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
+| 新的地形種類 | `TileKind`（types.ts:20）→ `CHAR_TO_KIND`（board.ts:7-13）→ `WALKABLE`（board.ts:47）→ `drawTiles`（renderer.ts:127-175）→ 若可放置再改 `isPlot` | 四處都要改，漏一處會是「解析成功但畫不出來」或「敵人穿牆」 |
 | 生成演算法（走廊形狀） | `sim/mapgen.ts` 的 `carve()` | 必須維持 induced path 性質，否則 mapgen.test.ts:25-35 紅字；別忘了 rng 消耗次數（陷阱 5） |
 | 讓障礙阻擋射線 | `sim/combat.ts` 的 `pickTarget`／`effectiveRange` | 這是刻意的設計決定 #2，改動等於改遊戲手感，先確認需求 |
 
@@ -248,7 +248,7 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
 ```ts
 // src/data/levels/index.ts —— 加進 LEVELS，並把 key 加到 LEVEL_ORDER
   hefei: {
-    key: 'hefei',              // 必須與物件的 key 一致（state.ts:142 用它回填 state.levelKey）
+    key: 'hefei',              // 必須與物件的 key 一致（state.ts:148 用它回填 state.levelKey）
     name: '合肥',
     subtitle: '★ 隨機地形。窄路久攻，快賊繞不完',
     startFood: 30,
@@ -261,7 +261,7 @@ level.bias ──→ state.bias (state.ts:145) ──→ buildWave (actions.ts:3
   },
 ```
 
-`bias` 只填 `EnemyTrait`（types.ts:182）；上例會自動推出「控場／範圍攻擊／貫穿」三個標籤，
+`bias` 只填 `EnemyTrait`（types.ts:196）；上例會自動推出「控場／範圍攻擊／貫穿」三個標籤，
 **不要**再補一個推薦欄位。教學性質的關卡才寫 `bias: []`。
 
 固定地圖版本把 `gen:` 那一行整個換成 `map:`（`cols`/`rows` 由陣列本身決定，每列長度必須一致）：
@@ -301,8 +301,8 @@ export const LEVEL_ORDER = [
 
 | 位置 | 假設內容 |
 |---|---|
-| `src/sim/types.ts:12-15` | `Board.path: number[]`（單一陣列）、`spawn: number`、`camp: number`（單值） |
-| `src/sim/types.ts:205-206` | `Enemy.dist` 是「沿 path 的段數」，沒有 pathId 欄位 |
+| `src/sim/types.ts:26-29` | `Board.path: number[]`（單一陣列）、`spawn: number`、`camp: number`（單值） |
+| `src/sim/types.ts:219-220` | `Enemy.dist` 是「沿 path 的段數」，沒有 pathId 欄位 |
 | `src/sim/board.ts:23-24,36-37,40` | 掃描時只記一個 spawn／camp，重複的 `S`/`C` 被靜默覆寫 |
 | `src/sim/board.ts:42-43,49-74` | `parseMap` 只算一條 BFS 路徑並塞進 `board.path` |
 | `src/sim/mapgen.ts:99-100` | `paint()` 只寫一個 `S`、一個 `C` |
@@ -314,7 +314,7 @@ export const LEVEL_ORDER = [
 | `src/sim/skills.ts:101-128` | `lineStrike` 以 `dist` 區間取範圍 |
 | `src/sim/skills.ts:130-145` | `charge` 用 `dist` 排序取「最前方」 |
 | `src/sim/step.ts:50-58` | `stepMeteor` 先用 `dist` 挑最前方敵人（之後才轉歐氏距離） |
-| `src/app.ts:254-255,261-263` | `combo`／`leak` 粒子座標直接用 `board.camp` 當發生地點 |
+| `src/app.ts:287-288,294-296` | `combo`／`leak` 粒子座標直接用 `board.camp` 當發生地點 |
 | `tools/autobalance.ts:22-34` | 傻 AI 的落點評分只算「到 `b.path` 的最近距離」 |
 | `src/sim/__tests__/mapgen.test.ts:25-35` | 「可走格數 == path 長度」的不變量在多路徑下必須改寫 |
 

@@ -1,9 +1,13 @@
 /**
- * 局外進度存檔（localStorage）。
- * 注意：只存局外 meta 進度，不存局內狀態（GameState 內含 rng 閉包，不可直接序列化）。
- * 若要做局內續玩，需改為存 { seed, rngCallCount } 並在載入時重播 —— 見 docs/llm-wiki/04-invariants.md
+ * 存檔（localStorage）。兩份彼此獨立的資料：
+ *   `tdwordwar.meta.v3` 局外進度（圖鑑、兵書、商城、編隊、成就、每日成績）
+ *   `tdwordwar.run.v1`  進行到一半的對局（續玩用，快照格式見 sim/persist.ts）
+ *
+ * 本檔只負責「讀寫與清洗」，不含任何遊戲邏輯。
  */
 import { ACHIEVEMENT_BY_KEY } from '../data/achievements'
+import { RUN_SAVE_VERSION, type RunSnapshot } from '../sim/persist'
+import { ENEMY_BY_KEY } from '../data/enemies'
 import { isGeneralUnlocked, isLoadoutableGlyph } from '../data/loadout'
 import { SHOP_BY_KEY } from '../data/shop'
 import {
@@ -29,7 +33,9 @@ export const EMPTY_META: MetaProgress = {
   cleared: [],
   seenGlyphs: [],
   seenGenerals: [],
+  seenEnemies: [],
   best: {},
+  daily: {},
   items: {},
   loadoutActive: false,
   loadoutGlyphs: [],
@@ -58,7 +64,10 @@ export function loadMeta(): MetaProgress {
       cleared: arr(p.cleared),
       seenGlyphs,
       seenGenerals,
+      // 只留仍存在於敵表的 key：刪掉或改名某個敵人時舊存檔自動清乾淨
+      seenEnemies: arr(p.seenEnemies).filter((k) => ENEMY_BY_KEY[k]),
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
+      daily: typeof p.daily === 'object' && p.daily ? { ...p.daily } : {},
       items: items(p.items),
       loadoutActive: typeof p.loadoutActive === 'boolean' ? p.loadoutActive : false,
       // 只保留仍然「已解鎖」且可選的項目，並夾在上限內——避免存檔被手動改壞、
@@ -126,6 +135,44 @@ export function saveMeta(meta: MetaProgress): void {
     localStorage.setItem(KEY, JSON.stringify(meta))
   } catch {
     /* 隱私模式下 localStorage 可能不可用，忽略 */
+  }
+}
+
+// ── 局內存檔（續玩） ────────────────────────────────────
+/**
+ * 進行到一半的對局。與 meta 分開存成另一個 key，理由有二：
+ *   1. meta 每 2 秒就可能寫一次，局內存檔只在每波開始與離開頁面時寫，兩者節奏不同
+ *   2. 局內存檔壞掉或格式改版時可以單獨丟掉，不會連累局外進度
+ * 快照的產生與還原是純函式，在 sim/persist.ts。
+ */
+const RUN_KEY = 'tdwordwar.run.v1'
+
+export function saveRun(snap: RunSnapshot): void {
+  try {
+    localStorage.setItem(RUN_KEY, JSON.stringify(snap))
+  } catch {
+    /* 隱私模式或容量不足，忽略——續玩是加分功能，不該讓它擋住遊戲 */
+  }
+}
+
+/** 讀局內存檔。**只做格式檢查**，能不能還原成對局由 `restoreRun` 判斷 */
+export function loadRun(): RunSnapshot | null {
+  try {
+    const raw = localStorage.getItem(RUN_KEY)
+    if (!raw) return null
+    const snap = JSON.parse(raw) as RunSnapshot
+    if (!snap || snap.v !== RUN_SAVE_VERSION || typeof snap.levelKey !== 'string') return null
+    return snap
+  } catch {
+    return null
+  }
+}
+
+export function clearRun(): void {
+  try {
+    localStorage.removeItem(RUN_KEY)
+  } catch {
+    /* 同上 */
   }
 }
 

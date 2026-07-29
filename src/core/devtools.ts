@@ -3,6 +3,7 @@
  * 只給開發者用（選單標題連點 7 下開啟面板，見 ui/screens.ts），不是玩家操作，
  * 所以不受「玩家操作一律經由 actions.ts」那條規則約束——跟 main.ts 的 __dev console 同等級。
  */
+import { ENEMIES } from '../data/enemies'
 import { GENERALS } from '../data/generals'
 import { GLYPH_BY_CHAR, GLYPHS } from '../data/glyphs'
 import type { MetaProgress } from '../sim/state'
@@ -37,6 +38,7 @@ export function devClearEnemies(state: GameState): void {
 export function devUnlockCodex(meta: MetaProgress): void {
   meta.seenGlyphs = GLYPHS.map((g) => g.char)
   meta.seenGenerals = GENERALS.map((g) => g.name)
+  meta.seenEnemies = ENEMIES.map((e) => e.key)
 }
 
 export interface DevResult {

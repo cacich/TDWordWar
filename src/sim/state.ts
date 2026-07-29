@@ -58,8 +58,12 @@ export interface MetaProgress {
   seenGlyphs: string[]
   /** 圖鑑：組出過的武將 */
   seenGenerals: string[]
+  /** 圖鑑：遭遇過的敵人 key（見 data/enemies.ts） */
+  seenEnemies: string[]
   /** 每關的最佳波數 */
   best: Record<string, number>
+  /** 每日挑戰成績：dateKey('YYYY-MM-DD') → 抵達波次。見 data/daily.ts */
+  daily: Record<string, number>
   /** 商城已購買的道具等級（key → 目前等級，0 或不存在＝未購買，見 data/shop.ts） */
   items: Record<string, number>
   /**
@@ -94,7 +98,9 @@ export const DEFAULT_META: MetaProgress = {
   cleared: [],
   seenGlyphs: [],
   seenGenerals: [],
+  seenEnemies: [],
   best: {},
+  daily: {},
   items: {},
   loadoutActive: false,
   loadoutGlyphs: [],

@@ -13,8 +13,8 @@ import {
   unlockedCount,
 } from '../data/achievements'
 import { BONDS } from '../data/bonds'
-import { COUNTER_LABEL, countersFor } from '../data/enemies'
-import { GENERALS } from '../data/generals'
+import { BOSSES, COUNTER_LABEL, ENEMY_BY_KEY, REGULARS, TRAIT_LABEL, countersFor } from '../data/enemies'
+import { GENERALS, generalsUsing } from '../data/generals'
 import { GLYPHS, qualityName } from '../data/glyphs'
 import { LEVELS, LEVEL_ORDER } from '../data/levels'
 import { isGeneralUnlocked } from '../data/loadout'
@@ -26,7 +26,9 @@ import { COMBOS } from '../sim/skills'
 import { MAX_LOADOUT_GENERALS, MAX_LOADOUT_GLYPHS, type MetaProgress } from '../sim/state'
 import type { BondDef, GlyphCategory } from '../sim/types'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | 'achieve' | null
+type CodexTab = 'glyph' | 'general' | 'enemy'
+
+export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | 'achieve' | 'daily' | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
@@ -36,6 +38,14 @@ export interface ScreensHost {
    */
   achieveProgress(): Record<string, number>
   startLevel(key: string): void
+  // ── 每日挑戰與續玩（見 data/daily.ts、sim/persist.ts） ──
+  /** 今天的挑戰內容（關卡與種子由日期推導） */
+  todayChallenge(): { dateKey: string; levelKey: string; seed: number }
+  startDaily(): void
+  /** 目前有沒有可續玩的局內存檔；沒有回傳 null */
+  savedRun(): { levelName: string; wave: number; maxWave: number; daily: boolean } | null
+  resumeRun(): void
+  dropRun(): void
   show(screen: ScreenName): void
   buyUpgrade(key: string): void
   buyItem(key: string): void
@@ -87,6 +97,9 @@ export class Screens {
   private devBody = el('dev-body')
   private loadout = el('screen-loadout')
   private loadoutBody = el('loadout-body')
+  private daily = el('screen-daily')
+  private dailyBody = el('daily-body')
+  private dailyDate = el('daily-date')
   private achieve = el('screen-achieve')
   private achieveBody = el('achieve-body')
   private achieveCount = el('achieve-count')
@@ -96,7 +109,8 @@ export class Screens {
   private codexCount = el('codex-count')
   private tabGlyph = el('tab-glyph')
   private tabGeneral = el('tab-general')
-  private tab: 'glyph' | 'general' = 'glyph'
+  private tabEnemy = el('tab-enemy')
+  private tab: CodexTab = 'glyph'
   private current: ScreenName = null
   /** 選單標題連點次數，用來偷偷打開開發密技面板 */
   private titleTaps = 0
@@ -114,9 +128,12 @@ export class Screens {
     el('loadout-back').addEventListener('click', () => this.host.show('menu'))
     el('btn-achieve').addEventListener('click', () => this.host.show('achieve'))
     el('achieve-back').addEventListener('click', () => this.host.show('menu'))
+    el('btn-daily').addEventListener('click', () => this.host.show('daily'))
+    el('daily-back').addEventListener('click', () => this.host.show('menu'))
     el('menu-title').addEventListener('click', () => this.handleTitleTap())
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
+    this.tabEnemy.addEventListener('click', () => this.setTab('enemy'))
   }
 
   /** 開發密技彩蛋：選單標題在 2.5 秒內連點 7 下開啟面板（Android 開發者選項的老把戲） */
@@ -140,6 +157,7 @@ export class Screens {
     this.dev.hidden = screen !== 'dev'
     this.loadout.hidden = screen !== 'loadout'
     this.achieve.hidden = screen !== 'achieve'
+    this.daily.hidden = screen !== 'daily'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
@@ -147,6 +165,7 @@ export class Screens {
     if (screen === 'dev') this.renderDev()
     if (screen === 'loadout') this.renderLoadout()
     if (screen === 'achieve') this.renderAchieve()
+    if (screen === 'daily') this.renderDaily()
   }
 
   /**
@@ -197,6 +216,56 @@ export class Screens {
       '<span class="muted">標「單局」的只看目前這一局；其餘會跨局累積，回到選單也看得到進度。' +
       '「征途」類的局數與擊殺只計入<b>打完</b>的局（中途離開不算）。</span>'
     this.achieveBody.appendChild(note)
+  }
+
+  /**
+   * 每日挑戰：關卡與種子都由日期推導，所以同一天全世界玩到同一局。
+   * 這一頁的重點是把「為什麼不套用養成」講清楚——否則玩家會以為道具壞掉了。
+   */
+  private renderDaily(): void {
+    const meta = this.host.getMeta()
+    const c = this.host.todayChallenge()
+    const lv = LEVELS[c.levelKey]
+    const best = meta.daily[c.dateKey] ?? 0
+    this.dailyDate.textContent = c.dateKey
+    this.dailyBody.innerHTML = ''
+
+    const card = document.createElement('button')
+    card.className = 'level-card'
+    card.innerHTML = `<div>
+        <div class="lv-name">${lv.name}</div>
+        <div class="lv-sub">${lv.subtitle}</div>
+        <div class="lv-tips"><span class="lv-tip-label">建議帶</span>${countersFor(lv.bias)
+          .map((x) => `<span class="lv-tip">${COUNTER_LABEL[x]}</span>`)
+          .join('')}</div>
+      </div>
+      <div class="lv-meta">
+        ${best ? `<div class="lv-best">今日最佳 ${best} 波</div>` : '<div class="lv-best">尚未挑戰</div>'}
+        <div class="lv-wave">${lv.maxWave} 波</div>
+      </div>`
+    card.addEventListener('click', () => this.host.startDaily())
+    this.dailyBody.appendChild(card)
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '每天換一關與一顆種子，<b>同一天所有人玩到的是完全相同的一局</b>——地圖、字池、出怪順序全都一樣。<br>' +
+      '<span class="muted">⚠ 每日挑戰<b>不套用</b>兵書、商城道具與編隊。這不只是公平：手牌格數與精兵符都會' +
+      '改變亂數的消耗量，任何一項不同，同一顆種子就會長出不同的一局。</span>'
+    this.dailyBody.appendChild(note)
+
+    // 最近幾天的成績，讓玩家看得出自己有沒有進步
+    const past = Object.entries(meta.daily)
+      .filter(([d]) => d !== c.dateKey)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 7)
+    if (past.length) {
+      this.dailyBody.appendChild(section('過往成績'))
+      const list = document.createElement('div')
+      list.className = 'bond-list'
+      list.innerHTML = past.map(([d, w]) => `<div class="bond-row">${d}　<b>${w}</b> 波</div>`).join('')
+      this.dailyBody.appendChild(list)
+    }
   }
 
   /** 商城：花聲望買被動道具，每種最高 3 級，買一級生效一級 */
@@ -399,6 +468,27 @@ export class Screens {
     const meta = this.host.getMeta()
     this.levelList.innerHTML = ''
 
+    // 續玩卡片放在最上面：有沒打完的局時，那幾乎一定是玩家最想做的事
+    const run = this.host.savedRun()
+    if (run) {
+      const card = document.createElement('button')
+      card.className = 'resume-card'
+      card.innerHTML = `<div>
+          <div class="rs-title">繼續上一局</div>
+          <div class="rs-sub">${run.daily ? '每日挑戰・' : ''}${run.levelName}　第 ${run.wave} / ${run.maxWave} 波</div>
+        </div>
+        <div class="rs-go">▶</div>`
+      card.addEventListener('click', () => this.host.resumeRun())
+      this.levelList.appendChild(card)
+
+      // 明確給一個放棄的出口，否則玩家想重開同一關會不知道怎麼擺脫這張卡
+      const drop = document.createElement('button')
+      drop.className = 'resume-drop'
+      drop.textContent = '放棄這局存檔'
+      drop.addEventListener('click', () => this.host.dropRun())
+      this.levelList.appendChild(drop)
+    }
+
     LEVEL_ORDER.forEach((key, i) => {
       const level = LEVELS[key]
       const cleared = meta.cleared.includes(key)
@@ -435,10 +525,11 @@ export class Screens {
   }
 
   // ── 圖鑑 ──────────────────────────────────────────
-  private setTab(tab: 'glyph' | 'general'): void {
+  private setTab(tab: CodexTab): void {
     this.tab = tab
     this.tabGlyph.classList.toggle('active', tab === 'glyph')
     this.tabGeneral.classList.toggle('active', tab === 'general')
+    this.tabEnemy.classList.toggle('active', tab === 'enemy')
     this.renderCodex()
   }
 
@@ -468,7 +559,7 @@ export class Screens {
         }
         this.codexBody.appendChild(grid)
       }
-    } else {
+    } else if (this.tab === 'general') {
       const seen = new Set(meta.seenGenerals)
       for (const tier of TIER_DISPLAY_ORDER) {
         const list = GENERALS.filter((g) => g.tier === tier)
@@ -491,6 +582,75 @@ export class Screens {
         this.codexBody.appendChild(grid)
       }
     }
+
+    if (this.tab === 'enemy') this.renderEnemyCodex(new Set(meta.seenEnemies))
+  }
+
+  /**
+   * 敵人圖鑑。分「一般兵」與「BOSS」兩區，各自依 `minWave`（登場順序）排列，
+   * 讓玩家看得出「還有什麼在後面等著」。
+   * 已遭遇過的才顯示內容——`seenEnemies` 在 `app.ts` 的 `syncProgress` 記錄，
+   * 只要在場上出現過就算（不必打死，否則被漏過的敵種永遠登錄不了）。
+   */
+  private renderEnemyCodex(seen: Set<string>): void {
+    for (const [title, list] of [
+      ['一般兵', REGULARS],
+      ['BOSS', BOSSES],
+    ] as const) {
+      const sorted = [...list].sort((a, b) => (a.minWave ?? 0) - (b.minWave ?? 0))
+      const got = sorted.filter((e) => seen.has(e.key)).length
+      this.codexBody.appendChild(section(`${title}　${got}/${sorted.length}`))
+      const grid = document.createElement('div')
+      grid.className = 'codex-grid'
+      for (const e of sorted) {
+        const ok = seen.has(e.key)
+        const cell = document.createElement('div')
+        cell.className = `codex-cell${ok ? '' : ' unseen'}`
+        cell.innerHTML = `<div class="cx-char" ${ok ? `style="color:${e.boss ? '#a8321e' : '#2b2b2b'}"` : ''}>${
+          ok ? e.char : '？'
+        }</div>
+          <div class="cx-name">${ok ? (e.minWave ? `${e.minWave} 波起` : '第 1 波') : '未遭遇'}</div>`
+        if (ok) cell.addEventListener('click', () => this.showEnemyDetail(e.key))
+        grid.appendChild(cell)
+      }
+      this.codexBody.appendChild(grid)
+    }
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '敵人只要在戰場上<b>出現過</b>就會登錄，不必擊殺。<br>' +
+      '<span class="muted">「特徵」決定關卡的敵人偏好與選關畫面的「建議帶」標籤；' +
+      '血量倍率是相對於基準雜兵「賊」的倍數。</span>'
+    this.codexBody.appendChild(note)
+  }
+
+  private showEnemyDetail(key: string): void {
+    const e = ENEMY_BY_KEY[key]
+    if (!e) return
+    const traits = e.traits.map((t) => TRAIT_LABEL[t]).join('・') || '（無特別特徵）'
+    // 免疫與特殊機制是玩家最需要知道的事，沒有就整段不出現，避免一堆「無」
+    const immune = [
+      e.ccImmune ? '定身／擊退' : '',
+      e.slowImmune ? '減速' : '',
+      e.burnImmune ? '灼燒' : '',
+    ].filter(Boolean)
+    const hooks = [
+      e.flying ? '<b>飛行</b>：只有射程 ≥2 的單位打得到' : '',
+      e.healAura ? `<b>回血光環</b>：每秒為半徑 ${e.healAura.radius} 內的敵人回復最大血量的 ${Math.round(e.healAura.hps * 100)}%` : '',
+      e.regen ? `<b>自我再生</b>：每秒回復自身最大血量的 ${Math.round(e.regen * 100)}%` : '',
+      e.splitInto ? `<b>死亡分裂</b>：死亡時裂成 ${e.splitInto.count} 隻「${ENEMY_BY_KEY[e.splitInto.key]?.char ?? '？'}」` : '',
+      e.escort ? `<b>護衛</b>：出場時帶 ${e.escort.count} 隻「${ENEMY_BY_KEY[e.escort.key]?.char ?? '？'}」` : '',
+      e.damage > 1 ? `<b>漏過扣 ${e.damage} 點生命</b>（一般敵人只扣 1）` : '',
+    ].filter(Boolean)
+    // 這一段是「怎麼打」的直接建議，由 traits 推導，與選關畫面同一份真相
+    const counters = countersFor(e.traits).map((c) => COUNTER_LABEL[c])
+    this.appendDetail(`<b>${e.char}</b>　${e.boss ? 'BOSS' : '一般兵'}　${e.troop} 兵
+      <br>血量 ×${e.hpMul}　防禦 ${e.def}　移速 ${e.speed}　賞金 ${e.bounty}
+      <br>${e.desc}
+      <br>特徵：${traits}${counters.length ? `　→ 建議帶 <b>${counters.join('、')}</b>` : ''}
+      ${immune.length ? `<br>免疫：${immune.join('、')}` : ''}
+      ${hooks.length ? `<div class="bond-list">${hooks.map((h) => `<div class="bond-row">${h}</div>`).join('')}</div>` : ''}`)
   }
 
   private showGlyphDetail(char: string): void {
@@ -499,7 +659,33 @@ export class Screens {
     this.appendDetail(`<b>${g.char}</b>　${CATEGORY_TITLE[g.category]}　稀有度 ${g.rarity}<br>
       ${g.atk > 0 ? `攻擊 ${g.atk}　攻速 ${g.aps}/s　射程 ${g.range}` : '不攻擊'}
       ${g.income ? `　每波產糧 ${g.income}` : ''}<br>${g.desc}<br>
-      <span class="muted">兩個同字同階可疊合升為${qualityName(2)}</span>`)
+      <span class="muted">兩個同字同階可疊合升為${qualityName(2)}</span>
+      ${this.recipesHtml(char)}`)
+  }
+
+  /**
+   * 這個字能組成哪些武將。姓名字單獨戰力很低，「留著等隊友」的價值全在這份名單上，
+   * 所以圖鑑一定要看得到——否則玩家只會覺得抽到姓氏是廢牌。
+   *
+   * 已組出過的用該階級的顏色標示，沒組過的壓灰當成待完成清單。
+   * 配方欄位把**該字本身**標出來，讓玩家一眼看出還缺哪幾個字。
+   */
+  private recipesHtml(char: string): string {
+    const uses = generalsUsing(char)
+    if (!uses.length) return ''
+    const seen = new Set(this.host.getMeta().seenGenerals)
+    const rows = uses
+      .map((g) => {
+        const ok = seen.has(g.name)
+        const recipe = g.recipe.map((c) => (c === char ? `<b>${c}</b>` : c)).join('＋')
+        return `<div class="bond-row"${ok ? '' : ' style="opacity:.62"'}>
+          <span style="color:${ok ? TIER_COLOR[g.tier] : 'inherit'}">${g.name}</span>
+          <span class="muted">　${TIER_LABEL[g.tier]}　${recipe}</span>
+        </div>`
+      })
+      .join('')
+    return `<div class="codex-section" style="margin-top:6px">可組成（${uses.filter((g) => seen.has(g.name)).length}/${uses.length}）</div>
+      <div class="bond-list">${rows}</div>`
   }
 
   private showGeneralDetail(name: string): void {

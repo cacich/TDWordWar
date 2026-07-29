@@ -253,3 +253,32 @@ export const TIER_ORDER: Record<Tier, number> = {
 
 /** 配方中最長的字數，組詞掃描時作為上界 */
 export const MAX_RECIPE_LEN = GENERALS.reduce((m, x) => Math.max(m, x.recipe.length), 0)
+
+/**
+ * 「這個字能組出哪些武將」的反向索引（`char` → 用到它的配方）。
+ * 建成常數而不是每次 filter，是因為圖鑑與心願面板都要逐字查一次，
+ * 71 字 × 43 武將的線性掃描會在每次開面板時重跑。
+ *
+ * ⚠ 這是**全表**的反向索引。心願面板要的是「本局字池湊得出來的」，
+ * 所以那裡還要再用 `pool` 過濾一次（見 `usableWith`）。
+ */
+export const GENERALS_USING: Map<string, GeneralDef[]> = (() => {
+  const m = new Map<string, GeneralDef[]>()
+  for (const g of GENERALS) {
+    for (const ch of new Set(g.recipe)) {
+      const list = m.get(ch)
+      if (list) list.push(g)
+      else m.set(ch, [g])
+    }
+  }
+  // 稀有度高的排前面，UI 截斷時才會留下最值得看的
+  for (const list of m.values()) list.sort((a, b) => TIER_ORDER[b.tier] - TIER_ORDER[a.tier])
+  return m
+})()
+
+/** 用到 `char` 的武將。`available` 有給的話，只回傳「配方字全都拿得到」的那些 */
+export function generalsUsing(char: string, available?: readonly string[]): GeneralDef[] {
+  const all = GENERALS_USING.get(char) ?? []
+  if (!available) return all
+  return all.filter((g) => g.recipe.every((c) => available.includes(c)))
+}
