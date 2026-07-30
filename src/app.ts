@@ -24,6 +24,7 @@ import { Input } from './input/pointer'
 import { Renderer } from './render/renderer'
 import { qualityColor } from './render/theme'
 import { recruit, rerollHand, sellGlyph, smelt, startWaveNow, toggleWish } from './sim/actions'
+import { createBrain, stepAuto, type AutoBrain } from './sim/autoplay'
 import { restoreRun, snapshotRun } from './sim/persist'
 import { DEFAULT_META, createGame, formsAt, glyphAt, recalcUnits, renownFor, type MetaProgress } from './sim/state'
 import { stepGame } from './sim/step'
@@ -68,6 +69,9 @@ export class App implements HudHost, PointerHost, ScreensHost {
   private dailyKey: string | null = null
   /** 上一次寫局內存檔時的波次，用來做到「一波只存一次」 */
   private savedWave = -1
+  /** AI 代管：開啟後每個模擬步先讓 AI 出手（見 sim/autoplay.ts） */
+  private auto = false
+  private brain: AutoBrain = createBrain()
 
   constructor(canvas: HTMLCanvasElement, private meta: MetaProgress) {
     this.seed = newSeed()
@@ -105,6 +109,9 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.loop = startLoop(
       (dt) => {
         if (this.screens.visible) return // 開著選單／圖鑑時凍結模擬
+        // AI 代管：在推進模擬之前先讓 AI 做完這一步的操作（征兵／組將／佈陣）。
+        // 它本身有節流（THINK_INTERVAL），這裡每步呼叫沒問題。
+        if (this.auto) stepAuto(this.brain, this.state, dt)
         stepGame(this.state, dt)
       },
       () => {
@@ -359,6 +366,18 @@ export class App implements HudHost, PointerHost, ScreensHost {
     if (!this.audio.muted) this.audio.play('ui')
   }
 
+  // ── AI 代管 ─────────────────────────────────────────
+  isAuto(): boolean {
+    return this.auto
+  }
+  toggleAuto(): void {
+    this.auto = !this.auto
+    this.audio.play('ui')
+    // 開啟時若正暫停就自動繼續，否則玩家會以為代管沒反應
+    if (this.auto && this.loop.paused) this.loop.setPaused(false)
+    this.hud.toast(this.auto ? 'AI 代管已開啟：交給電腦自動遊玩' : 'AI 代管已關閉')
+  }
+
   // ── ScreensHost ─────────────────────────────────────
   getMeta(): MetaProgress {
     return this.meta
@@ -554,6 +573,8 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.select(null)
     this.mode = 'normal'
     this.renownPaid = false
+    // 新的一局換了棋盤與字池，AI 的快取（幾何、配方）要重來
+    this.brain = createBrain()
     this.renderer.particles.clear()
     this.wishPanel.hide()
     this.hud.onLevelChanged()

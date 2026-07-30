@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "sim": "tsx tools/autobalance.ts",
-    "econ": "tsx tools/econ-report.ts"
+    "econ": "tsx tools/econ-report.ts",
+    "ai": "tsx tools/ai-report.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

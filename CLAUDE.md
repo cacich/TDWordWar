@@ -20,6 +20,8 @@ npm run typecheck       # tsc --noEmit
 npm run sim             # 難度儀表板：傻 AI 跑 30 局，印陣亡波次中位數與「目標的偏差」
 npm run econ            # 經濟儀表板：逐波印收入拆解與征兵次數（設計目標 1～2 次/波）
 npm run sim 16 guandu   # 指定局數與關卡（無盡變體：npm run sim 20 endless_guandu）
+npm run ai              # AI 代管成績：強 AI 跑主線九關，印通關率與陣亡波次中位數
+npm run ai 8 guandu     # 指定局數與關卡
 npm run build           # typecheck + 靜態打包到 dist/（含 PWA 的 sw.js）
 npm run preview         # 用正式版模式預覽（測 PWA／離線只能用這個，dev 模式不註冊 SW）
 ```
@@ -102,6 +104,10 @@ M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 
 ⚠ 難度弧退回 `WAVE_REF`，與原關波數無關；成績記在 `meta.endless` 而非 `meta.best`）、
 局內續玩存檔（見 `sim/persist.ts`）。音效與粒子皆由 sim 事件佇列驅動。
 開發密技面板（選單標題連點 7 下）供測試用，見 `core/devtools.ts`。
+**AI 代管**（局內頂列「代管」鈕）：開啟後電腦自動征兵／組將／疊高／佈陣／許願，見 `sim/autoplay.ts`
+（純 sim 層，與 `npm run ai` 跑同一份程式碼）。它是估值驅動的貪婪策略，打得比難度量尺（`tools/dumb-ai.ts`）
+深得多，但**不保證通關**——末段指數難度需要人類級的長線規劃，逐拍貪婪跨不過（旋鈕與誠實說明見檔頭 `TUNE`）。
+⚠ 這份是**強** AI，`tools/dumb-ai.ts` 是**難度量尺**，兩者刻意分開，不可互相取代。
 
 未實作項目與已知陷阱列在 [docs/llm-wiki/04-invariants.md](docs/llm-wiki/04-invariants.md)。
 新增技能／控場狀態的步驟在 [03-change-recipes.md](docs/llm-wiki/03-change-recipes.md) §10、§10b。

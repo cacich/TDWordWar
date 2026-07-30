@@ -123,6 +123,13 @@ body {
   color: var(--ink);
 }
 
+/* AI 代管開啟時的高亮：金底白字，一眼看得出電腦正在接手 */
+.icon-btn.active {
+  background: var(--gold);
+  color: #fff;
+  border-color: var(--gold);
+}
+
 /* ── 棋盤區 ────────────────────────────────── */
 #stage {
   position: relative;

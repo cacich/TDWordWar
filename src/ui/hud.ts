@@ -27,6 +27,10 @@ export interface HudHost {
   toggleWish(char: string): void
   isMuted(): boolean
   toggleMute(): void
+  /** AI 代管是否開啟 */
+  isAuto(): boolean
+  /** 切換 AI 代管 */
+  toggleAuto(): void
   /** 目前處於「點選待放置」的手牌索引（手機友善的放置方式） */
   getArmedHand(): number | null
   startWave(): void
@@ -95,6 +99,7 @@ export class Hud {
   private shovelBtn = el<HTMLButtonElement>('btn-shovel')
   private speedBtn = el('btn-speed')
   private pauseBtn = el('btn-pause')
+  private autoBtn = el('btn-auto')
 
   private cards: HTMLElement[] = []
   private toastTimer = 0
@@ -152,6 +157,7 @@ export class Hud {
     this.rerollBtn.addEventListener('click', () => this.host.reroll())
     el('btn-start').addEventListener('click', () => this.host.startWave())
     this.pauseBtn.addEventListener('click', () => this.host.togglePause())
+    this.autoBtn.addEventListener('click', () => this.host.toggleAuto())
     this.speedBtn.addEventListener('click', () => this.host.cycleSpeed())
     el('btn-restart').addEventListener('click', () => this.host.restart())
     el('btn-tomenu').addEventListener('click', () => this.host.openMenu())
@@ -201,6 +207,7 @@ export class Hud {
     this.smeltBtn.classList.toggle('active', mode === 'smelt')
     this.shovelBtn.classList.toggle('active', mode === 'shovel')
     this.pauseBtn.textContent = this.host.isPaused() ? '▶' : '❚❚'
+    this.autoBtn.classList.toggle('active', this.host.isAuto())
     this.speedBtn.textContent = `${this.host.getSpeed()}×`
     this.muteBtn.textContent = this.host.isMuted() ? '♪̸' : '♪'
 
