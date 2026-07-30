@@ -15,19 +15,20 @@
 
 ```bash
 npm run dev             # 開發伺服器（http://localhost:5188）
-npm test                # 238 個單元測試，改完務必跑
+npm test                # 250 個單元測試，改完務必跑
 npm run typecheck       # tsc --noEmit
 npm run sim             # 難度儀表板：傻 AI 跑 30 局，印陣亡波次中位數與「目標的偏差」
 npm run econ            # 經濟儀表板：逐波印收入拆解與征兵次數（設計目標 1～2 次/波）
-npm run sim 16 guandu   # 指定局數與關卡
+npm run sim 16 guandu   # 指定局數與關卡（無盡變體：npm run sim 20 endless_guandu）
 npm run build           # typecheck + 靜態打包到 dist/（含 PWA 的 sw.js）
 npm run preview         # 用正式版模式預覽（測 PWA／離線只能用這個，dev 模式不註冊 SW）
 ```
 
 `npm run sim` 是本專案的難度儀表板。改任何數值後跑一次。
 **難度目標：傻 AI 的陣亡中位數 ≈ 該關 `maxWave` 的一半**（±20% 內算達標，工具會直接印偏差）。
-現況：黃巾 6／12・董卓 9／18・巨鹿 16／30・官渡 13／24・赤壁 15／30・五丈原 20／40・
-襄陽 17／32・漢中 16／32・洛陽 20／40。
+現況：黃巾 6／12・董卓 9／18・巨鹿 15／30・官渡 12／24・赤壁 14／30・五丈原 20／40・
+襄陽 17／32・漢中 15／32・洛陽 19／40。
+**無盡變體**（`endless_<key>`，`maxWave: Infinity`）沒有總波數，目標改成 `WAVE_REF/2 = 20`：黃巾 22・巨鹿 21・洛陽 19。
 這件事能對每一關同時成立，是因為血量的指數吃「相對進度」而不是絕對波次（`sim/waves.ts` 的 `WAVE_REF`），
 所以 **`maxWave` 同時是關卡長度與難度弧的陡度**——改短一關等於把同一條弧壓得更陡。
 
@@ -89,7 +90,7 @@ M0 骨架 ✅　M1 可玩核心 ✅　M2 組詞與經濟 ✅　M3 技能與深�
 M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 pwaPlugin() 產生）
 
 內容量：**71 字／69 武將（26 姓名配方＋43 字組合）／13 羈絆／33 個主動技／5 個組合技／22 種敵人（10 一般＋12 BOSS）／9 關**
-（3 關固定地圖 + 6 關隨機地形）。每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，
+（3 關固定地圖 + 6 關隨機地形，每關通關後另開放一個**無盡變體**）。每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，
 並自動推導出選單上的「建議帶」標籤——見 `data/enemies.ts` 的 `TRAIT_COUNTERS`。
 **每個非姓名字都有 2～13 種組合**（車→車騎／車兵／雷車／輜重、陣→風陣／計陣／陣令／雷陣…），
 所以不必等姓名字也能經營構築；謀略組合大多**不宣告 `onHit`**，靠 `mergeOnHit` 自動繼承成員效果。
@@ -97,6 +98,8 @@ M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 
 編隊（從已解鎖的字／武將手動挑選字池內容，見 `data/loadout.ts`）、心願單、
 成就（24 個，達成即發聲望共 2130，見 `data/achievements.ts`）、
 每日挑戰（日期即種子，全世界同一局，見 `data/daily.ts`；⚠ 一律用中性 meta，否則無法重現）、
+無盡模式（9 關各一個推導變體，`maxWave: Infinity`，見 `data/levels/index.ts` 末段；
+⚠ 難度弧退回 `WAVE_REF`，與原關波數無關；成績記在 `meta.endless` 而非 `meta.best`）、
 局內續玩存檔（見 `sim/persist.ts`）。音效與粒子皆由 sim 事件佇列驅動。
 開發密技面板（選單標題連點 7 下）供測試用，見 `core/devtools.ts`。
 

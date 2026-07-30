@@ -4,8 +4,8 @@
 >
 > | 檔案 | 規模 | 職責 |
 > |---|---|---|
-> | `src/sim/step.ts` | 235 行 | `stepGame` 主迴圈：生成／狀態／敵方支援／移動／戰鬥／技能／流星／清屍與死亡分裂／波次結算 |
-> | `src/sim/waves.ts` | 95 行 | 血量曲線（`HP_GROWTH`）、數量、`minWave` 開放、`bias` 加權、`pickBoss`、`buildWave` |
+> | `src/sim/step.ts` | 245 行 | `stepGame` 主迴圈：生成／狀態／敵方支援／移動／戰鬥／技能／流星／清屍與死亡分裂／波次結算 |
+> | `src/sim/waves.ts` | 141 行 | 血量曲線（`HP_GROWTH`）、數量與其上限、`minWave` 開放、`bias` 加權、`pickBoss`、`buildWave` |
 > | `src/sim/economy.ts` | 106 行 | 征兵／重抽花費、每波收入、抽字權重（稀有度＋熟悉度＋心願）、退款 |
 > | `src/sim/pool.ts` | 99 行 | 每局字池（隨機抽樣 / 編隊兩種模式） |
 > | `src/data/enemies.ts` | 180 行 | 22 種敵人（10 一般兵 + 12 BOSS）、`TRAIT_COUNTERS`／`TRAIT_LABEL`／`COUNTER_LABEL`、`REGULARS`／`BOSSES`、`countersFor()`、`ANTI_AIR_RANGE` |
@@ -17,8 +17,8 @@
 > `sim/skills.ts`、`sim/bonds.ts`、`sim/events.ts`、`sim/types.ts`（`Perks` / `SpawnEntry` / `EnemyTrait`）。
 > **下游使用者**：`core/loop.ts`（唯一呼叫 `stepGame` 的地方，固定 1/60）、`app.ts:108`、
 > `tools/autobalance.ts:79`（`npm run sim`）、`sim/actions.ts:300`（`beginBattle` 建波次）、
-> `sim/state.ts:143,151`（`createGame` 建字池、注入 `bias`）、`ui/hud.ts:193,196`（顯示花費）、
-> `ui/screens.ts:500`（`countersFor(level.bias)` 推導關卡卡片的「建議帶」標籤）。
+> `sim/state.ts:152,151`（`createGame` 建字池、注入 `bias`）、`ui/hud.ts:194,196`（顯示花費）、
+> `ui/screens.ts:569`（`countersFor(level.bias)` 推導關卡卡片的「建議帶」標籤）。
 
 ## 這個模組解決什麼問題
 
@@ -38,18 +38,19 @@
 
 | 常數 | 值 | 位置 | 意義 |
 |---|---|---|---|
-| `BASE_HP` | **32** | `waves.ts:24` | 第 0 波的基準血量。**線性項**：整條曲線等比例上下移，所以它是抵銷「玩家整體戰力變了」的對應旋鈕（`HP_GROWTH` 管成長率、它管水位） |
+| `BASE_HP` | **32** | `waves.ts:18` | 第 0 波的基準血量。**線性項**：整條曲線等比例上下移，所以它是抵銷「玩家整體戰力變了」的對應旋鈕（`HP_GROWTH` 管成長率、它管水位） |
 | `HP_GROWTH` | **1.23** | `waves.ts:32` | 每波血量倍率。**全專案最敏感的旋鈕**，必須貼著玩家戰力的成長率 |
-| `WAVE_REF` | **40** | `waves.ts:69` | 難度弧的參考長度。血量指數 = `wave × WAVE_REF / maxWave`，**短關卡因此把同一條弧壓得更陡** |
+| `WAVE_REF` | **40** | `waves.ts:51` | 難度弧的參考長度。血量指數 = `wave × WAVE_REF / maxWave`，**短關卡因此把同一條弧壓得更陡**；`maxWave` 非有限（無盡）時它就是實際弧長 |
 | `PREP_SECONDS` | 12 | `waves.ts:33` | 佈陣秒數，`createGame` 與 `checkWaveEnd` 共用 |
 | `BIAS_WEIGHT` | 4 | `waves.ts:36` | 帶關卡偏好特徵的敵人／BOSS，抽取權重乘這個倍率 |
-| `enemyCount` | `6 + ⌊wave×1.4⌋` | `waves.ts:61-63` | 每波敵數（wave 1→7、10→20、20→34、30→48、40→62），**不含 BOSS 與護衛** |
-| `gap` | 0.75 秒 | `waves.ts:105` | 出怪間隔，**寫死在 `buildWave` 內的區域變數**，不是匯出常數 |
-| `isBossWave` | `wave % 5 === 0` | `waves.ts:65-67` | BOSS 在第 `n×0.75 + 2` 秒追加一隻 |
+| `enemyCount` | `min(6 + ⌊wave×1.4⌋, 90)` | `waves.ts:74-76` | 每波敵數（wave 1→7、10→20、20→34、30→48、40→62），**不含 BOSS 與護衛** |
+| `MAX_WAVE_ENEMIES` | 90 | `waves.ts:72` | 單波敵數上限。**只為無盡模式存在**（有限關卡最多 62 隻，碰不到），到頂後成長全交給血量指數 |
+| `gap` | 0.75 秒 | `waves.ts:118` | 出怪間隔，**寫死在 `buildWave` 內的區域變數**，不是匯出常數 |
+| `isBossWave` | `wave % 5 === 0` | `waves.ts:78-80` | BOSS 在第 `n×0.75 + 2` 秒追加一隻 |
 | `minWave` | 0～25 | `data/enemies.ts` 各筆 | 該敵種／BOSS 最早可以出現的波次 |
 | `level.hpMul` | 0.55～1.28 | `data/levels/index.ts` | 關卡難度**微調**，乘在 `buildWave` 內，**不在 `enemyBaseHp` 裡**。整個區間只值約 2 個參考波，真正決定難度弧的是 `maxWave` |
-| `level.maxWave` | 12～40 | `data/levels/index.ts` | **同時是關卡長度與難度弧的陡度**（見 `WAVE_REF`）。改短一關 = 把同一條弧壓陡，不是只是少打幾波 |
-| `level.bias` | `EnemyTrait[]` | `data/levels/index.ts:43` | 關卡偏好；同時決定敵種比重與 UI 的推薦標籤 |
+| `level.maxWave` | 12～40 或 `Infinity` | `data/levels/index.ts` | **同時是關卡長度與難度弧的陡度**（見 `WAVE_REF`）。改短一關 = 把同一條弧壓陡，不是只是少打幾波。`Infinity` = 無盡變體，弧長退回 `WAVE_REF` |
+| `level.bias` | `EnemyTrait[]` | `data/levels/index.ts:54` | 關卡偏好；同時決定敵種比重與 UI 的推薦標籤 |
 
 `enemyBaseHp(wave, maxWave) = 32 × 1.23^(wave × 40/maxWave)`。
 **指數吃的是「走完關卡的百分比」，不是絕對波次**，所以：
@@ -63,6 +64,11 @@
 同一個進度百分比 → 同一個血量（`core.test.ts` 有測試鎖住）。這就是
 **「傻 AI 中位數 ≈ 總波數一半」能對九關同時成立**的機制：陣亡點大約落在弧上的
 第 20 個參考波，換算回去就是 `maxWave × 20/40` = 一半。
+
+⚠ **`maxWave = Infinity`（無盡模式）是這條公式的邊界情況**：相對進度會恆等於 0，
+血量永遠停在第 0 波。`enemyBaseHp` 因此對非有限的 `maxWave` 退回 `WAVE_REF`（`waves.ts:62`），
+無盡走的就是 `32 × 1.23^wave` 這條原始曲線。`endless.test.ts` 有測試鎖住這件事
+（若退回機制沒了，「第 20 波與第 40 波血量相同」會被抓到）。
 
 ### ★ 為什麼難度目標不能靠 `hpMul` 達成（踩過的坑）
 
@@ -95,16 +101,18 @@
 調經濟數值則跑 **`npm run econ`**（`tools/econ-report.ts`：逐波印收入拆解與征兵次數）。
 
 **目標是「該關 maxWave 的一半」而不是固定波次**，`autobalance.ts` 會直接把偏差算給你看。
-現況基準（25 局）：
+現況基準（30 局）：
 
 | 關卡 | 黃巾 | 董卓 | 巨鹿 | 官渡 | 赤壁 | 五丈原 | 襄陽 | 漢中 | 洛陽 |
 |---|---|---|---|---|---|---|---|---|---|
 | 總波數 | 12 | 18 | 30 | 24 | 30 | 40 | 32 | 32 | 40 |
 | 目標（一半） | 6 | 9 | 15 | 12 | 15 | 20 | 16 | 16 | 20 |
-| 傻 AI 中位數 | 6 | 9 | 15 | 13 | 15 | 20 | 17 | 15 | 19 |
-| 偏差 | +0% | +0% | +0% | +8% | +0% | +0% | +6% | -6% | -5% |
+| 傻 AI 中位數 | 6 | 9 | 15 | 12 | 14 | 20 | 17 | 15 | 19 |
+| 偏差 | +0% | +0% | +0% | +0% | -7% | +0% | +6% | -6% | -5% |
 
 偏差 ±20% 內算達標。`npm run sim 16 guandu` 可指定局數與關卡。
+**無盡變體**（`npm run sim 20 endless_julu`）沒有總波數，目標改成 `WAVE_REF/2 = 20`：
+黃巾 22・巨鹿 21・洛陽 19。所有無盡版走同一條 40 波的弧，差異只在 `hpMul`／`lives`／字池。
 ⚠ **教學關不再是「傻 AI 打得完」**：黃巾現在也照同一條規則，中位數 6／12 波。
 `npm run sim` 用預設 meta（無商城道具）→ 全中性 `Perks`，所以**商城道具永遠不影響難度基準**。
 
@@ -127,7 +135,7 @@
 | `gale` | 疾 | 0.7 | 0 | 2.4 | – | 2 | 騎 | 10 | `fast` | 全場最快的一般兵，且 `slowImmune`（只能定身或爆發） |
 | `stone` | 磐 | 4.5 | 30 | 0.4 | – | 4 | 步 | 12 | `tanky` | 極慢極厚，考驗持續輸出總量 |
 
-一般兵 `damage` 全部是 1。**開放時程**（`eligible()`，`waves.ts:70-74`）：
+一般兵 `damage` 全部是 1。**開放時程**（`eligible()`，`waves.ts:83-87`）：
 
 | 波次 | 新開放 | 一般兵池大小 | 無偏好時每種機率 |
 |---|---|---|---|
@@ -160,7 +168,7 @@
 | `bossShadow` | 影 | 8 | 25 | **2.0** | 2 | 騎 | 20 | `slowImmune` + `burnImmune`：疾風將還能靠灼燒磨，這隻只能純爆發攔 |
 | `bossWarlord` | 霸 | 18 | 80 | 0.7 | **3** | 騎 | 25 | 高血 + 高防 + 不慢 + 3 傷，後期的綜合考驗 |
 
-**BOSS 候選數隨波次成長**（`pickBoss`，`waves.ts:89-92`）：
+**BOSS 候選數隨波次成長**（`pickBoss`，`waves.ts:102-105`）：
 
 | BOSS 波 | 新加入 | 候選數 |
 |---|---|---|
@@ -172,15 +180,15 @@
 
 ### 關卡偏好（`bias`）與推薦標籤
 
-`LevelDef.bias: EnemyTrait[]`（`data/levels/index.ts:35-43`）→ `createGame` 抄進 `state.bias`（`state.ts:151`）
-→ `beginBattle` 傳給 `buildWave` 第 4 參數（`actions.ts:300`）。加權在 `weightOf`（`waves.ts:76-78`）：
+`LevelDef.bias: EnemyTrait[]`（`data/levels/index.ts:46-54`）→ `createGame` 抄進 `state.bias`（`state.ts:160`）
+→ `beginBattle` 傳給 `buildWave` 第 4 參數（`actions.ts:300`）。加權在 `weightOf`（`waves.ts:89-91`）：
 敵人的 `traits` 只要**命中任一個** bias 特徵，權重就是 `BIAS_WEIGHT`(4)，否則 1。同一份權重也用在 `pickBoss`。
 
 例：襄陽 `bias: ['swarm', 'splitter']`，第 20 波池子 10 種，蟻賊與分裂賊各 4 分、其餘 8 種各 1 分
 → 總權重 16，那兩種各 25%（無偏好時只有 10%）。
 
 `EnemyTrait` 共 7 種（`types.ts:203`）。同一份 `traits` 經 `TRAIT_COUNTERS`（`enemies.ts:28-36`）
-推導出關卡卡片上的「建議帶」標籤（`countersFor()`，`enemies.ts:179-185`；顯示在 `ui/screens.ts:500-501`）：
+推導出關卡卡片上的「建議帶」標籤（`countersFor()`，`enemies.ts:179-185`；顯示在 `ui/screens.ts:569-570`）：
 
 | `EnemyTrait` | `TRAIT_LABEL` | 推導出的 `CounterKind` |
 |---|---|---|
@@ -218,7 +226,7 @@
 | 項目 | 公式 | 位置 |
 |---|---|---|
 | 征兵花費 | `max(1, round((8 + ⌊wave×2.4⌋ + 3×recruitsThisWave) × costMul))` | `economy.ts:43-49` |
-| 每波固定收入 | `4 + ⌊wave×0.6⌋`，再 ×`incomeMul` | `economy.ts:60-65`／`step.ts:213` |
+| 每波固定收入 | `4 + ⌊wave×0.6⌋`，再 ×`incomeMul` | `economy.ts:60-65`／`step.ts:220` |
 | 場上產糧 | Σ`u.income`（跳過已組將的字牌），四捨五入 | `economy.ts:43-49` |
 | 擊殺賞金 | `round(e.bounty × bountyMul)` | `combat.ts:157` |
 | 熔爐重抽 | `max(1, round((4 + ⌊wave/2⌋) × costMul))` | `economy.ts:120-122` |
@@ -244,7 +252,7 @@
 
 關鍵設計點：**一次征兵費用固定，但會填滿所有空手牌格**（`actions.ts:45-52`）——
 手牌越大（兵書可到 8）每次征兵越划算，這是兵書 `handSize` 的真實價值所在。
-`recruitsThisWave` 在 `checkWaveEnd`（`step.ts:232`）歸零，所以「同一波連續征兵」會越來越貴（每次 +`RECRUIT_STEP`＝3），跨波則重置。
+`recruitsThisWave` 在 `checkWaveEnd`（`step.ts:242`）歸零，所以「同一波連續征兵」會越來越貴（每次 +`RECRUIT_STEP`＝3），跨波則重置。
 那個遞增項的用途是**壓掉「某一波突然爆糧就連征四次」的尖峰**——一次征兵填滿整個手牌，連征四次等於一口氣多 20 張牌，節奏會垮。
 
 `bounty` 從 1（蟻賊）到 17（霸將），而蟻賊與分裂物是**免費多出來的擊殺數**
@@ -290,7 +298,7 @@ weight = rarityWeights(wave)[g.rarity - 1]
 
 ### 編隊模式（`buildLoadoutPool`，`pool.ts:75-93`）
 
-`meta.loadoutActive` 為真時，`createGame`（`state.ts:139-143`）傳入 `LoadoutConfig`，
+`meta.loadoutActive` 為真時，`createGame`（`state.ts:148-152`）傳入 `LoadoutConfig`，
 `buildGlyphPool` **第一行就 return，完全跳過隨機抽樣**（`pool.ts:59`）。組成規則：
 
 ```
@@ -325,7 +333,7 @@ weight = rarityWeights(wave)[g.rarity - 1]
 | 12 | 35 | `stepMeteor`（`step.ts:45-69`） | 局外道具的傷害源，最後補刀 |
 | 13 | 36 | `stepEffects` | 特效壽命衰減，放在所有 `pushEffect` 之後，新特效才有完整一幀壽命 |
 | 14 | 37 | `cleanupDead`（`step.ts:187-207`） | 移除 `hp <= 0`（含漏過的敵人，它們被設成 `hp = 0`），**並在此處理死亡分裂**——見下節 |
-| 15 | 38 | `checkWaveEnd`（`step.ts:209-235`） | **必須在 `cleanupDead` 之後**：條件是 `spawnQueue.length === 0 && enemies.length === 0`，屍體沒清掉波次永遠不會結束；分裂出的小怪也是在這之前才進場，否則波次會提早結束 |
+| 15 | 38 | `checkWaveEnd`（`step.ts:209-245`） | **必須在 `cleanupDead` 之後**：條件是 `spawnQueue.length === 0 && enemies.length === 0`，屍體沒清掉波次永遠不會結束；分裂出的小怪也是在這之前才進場，否則波次會提早結束 |
 
 ### 敵種機制的實作位置與陷阱
 
@@ -337,7 +345,7 @@ weight = rarityWeights(wave)[g.rarity - 1]
 | 回血光環 | `healAura: { radius, hps }` | `stepEnemySupport`（`step.ts:120-128`） |
 | 自我再生 | `regen`（每秒比例） | `stepEnemySupport`（`step.ts:116-118`） |
 | 死亡分裂 | `splitInto: { key, count }` | `cleanupDead`（`step.ts:187-207`） |
-| 護衛 | `escort: { key, count }` | `buildWave`（`waves.ts:117-124`），**生成期展開，不是 runtime** |
+| 護衛 | `escort: { key, count }` | `buildWave`（`waves.ts:130-137`），**生成期展開，不是 runtime** |
 | 免疫 | `burnImmune` / `slowImmune` / `ccImmune` | `makeEnemy` 複製（`step.ts:86-88`）→ `applyStatus`（`combat.ts:214-238`） |
 
 **1. 回血與再生一律是「最大血量的比例」，不是絕對值。**
@@ -389,21 +397,29 @@ weight = rarityWeights(wave)[g.rarity - 1]
 新增一種免疫要**同時**改三處：`types.ts` 的 `EnemyDef`、`types.ts` 的 `Enemy`、`makeEnemy`。
 漏了 `makeEnemy` 那一行會**靜默失效**（欄位是 `undefined`，`!e.xxxImmune` 恆為真）。
 
-**5. `escort` 是生成期展開，不是 runtime 行為**（`waves.ts:117-124`）。護衛只是被塞進 `spawnQueue` 的普通條目，
+**5. `escort` 是生成期展開，不是 runtime 行為**（`waves.ts:130-137`）。護衛只是被塞進 `spawnQueue` 的普通條目，
 血量用「該波 base × 護衛自己的 `hpMul`」，出場時間 `at + 0.15 × i` 錯開。兩個推論：
 護衛**不消耗額外 rng**；護衛**不受 `minWave` 限制**（`bossSwarm` 的 `minWave` 15 > 蟻賊的 7，
 目前不會出事，但將來若讓早期 BOSS 帶後期護衛就會繞過開放時程）。
 
-### `checkWaveEnd`（`step.ts:209-235`）的結算順序
+### `checkWaveEnd`（`step.ts:209-245`）的結算順序
 
 ```
+0. 若 phase 已經是 'lost' → 直接 return                 ← 見下方「為什麼需要第 0 步」
 1. 若 spawnQueue 或 enemies 非空 → 直接 return
 2. lastIncome = { base: waveIncome(wave) × incomeMul, units: unitIncome(state) }（供 UI 顯示）
 3. food += base + units
 4. wave >= maxWave → phase='won'、emit('won')、return   ← 通關那一波不觸發回血
+                                                          無盡的 maxWave 是 Infinity → 永遠不成立
 5. 杏林春暖：wave % healEveryWaves === 0 且 lives < maxLives → lives+1（用**遞增前**的 wave 判定）
 6. emit('waveClear')、wave++、recruitsThisWave=0、phase='prep'、prepTimer=PREP_SECONDS
 ```
+
+**為什麼需要第 0 步**（`step.ts:216`，2026-07-30 修）：`moveEnemies` 在同一幀就可能把 phase 設成
+`'lost'`，而「最後一隻敵人漏過大營並打光生命」會讓 `spawnQueue` 與 `enemies` 同時清空——
+於是第 6 步把 `'lost'` 覆寫回 `'prep'`，玩家在 0 生命的狀態下繼續打，結算畫面與聲望都不出現。
+修掉之後 5 關的傻 AI 中位數各降 1 波（那些局本來是死了還在打），已反映在上面的基準表。
+⚠ 這個縫隙對無盡模式是致命的：那裡沒有通關出口，落敗是唯一的結束方式。
 
 ### `moveEnemies`（`step.ts:148-172`）的漏怪處理
 
@@ -420,7 +436,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 
 ### `stepMeteor`（`step.ts:45-69`）
 
-`perks.meteorInterval <= 0` 直接 return（未購買時零成本）。倒數 `meteorTimer` 初值＝間隔（`state.ts:184`），
+`perks.meteorInterval <= 0` 直接 return（未購買時零成本）。倒數 `meteorTimer` 初值＝間隔（`state.ts:193`），
 歸零時用 `+=` 補回間隔（不是重設）以避免長期漂移。目標是 `dist` 最大（最前方）那隻，
 對其周圍 **1.5 格**內全體造成 `0.7 × enemyBaseHp(wave) × hpMul` 傷害，並施加 3 秒、dps 為傷害 12% 的灼燒。
 
@@ -438,7 +454,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
    **`sim/` 內不可讀 `performance.now()`／`Date.now()`**（只有 `core/loop.ts` 可以）——否則 `npm run sim` 與單元測試（都是直接 for 迴圈呼叫 `stepGame`）會失真。
    另外掉幀保護會丟棄累加器（`loop.ts:37`），所以 `sim/` 也不可假設真實時間連續。
 
-2. **`buildWave` 會消耗 `rng`：每波 `enemyCount(wave)` 抽（每隻敵人一抽，`waves.ts:108`），BOSS 波再多 1 抽（`pickBoss`，`waves.ts:113`）**。
+2. **`buildWave` 會消耗 `rng`：每波 `enemyCount(wave)` 抽（每隻敵人一抽，`waves.ts:121`），BOSS 波再多 1 抽（`pickBoss`，`waves.ts:126`）**。
    ⚠ **這與敵種擴充前不同**（舊版是「每波恰好 `enemyCount` 抽、BOSS 不抽」），所以**所有舊種子的對局內容都變了**——
    引用歷史 `npm run sim` 數字時要注意這道斷點。第 5 波即使只有賊將一個候選，`pickBoss` 仍然照抽 1 次（`pickWeighted` 無條件呼叫 `rng()`）。
    護衛的展開**不消耗** rng。
@@ -460,23 +476,23 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
    否則會**靜默地**重複計算（沒有測試會抓到）：
    - 產糧：`src/sim/economy.ts:45`
    - 攻擊：`src/sim/combat.ts:250`
-   - 光環投射：`src/sim/state.ts:415`
+   - 光環投射：`src/sim/state.ts:424`
 
    第四個聚合（例如「全場攻擊力總和」的 UI、或新的每波結算項目）必須自己加上同樣的判斷。
 
-6. **敵種開放由各敵人的 `minWave` 決定，不是硬編碼的時程表**（`eligible()`，`waves.ts:70-74`）。
-   `composition(wave)` 現在只是 `eligible(REGULARS, wave)` 的薄包裝（`waves.ts:84-86`），
+6. **敵種開放由各敵人的 `minWave` 決定，不是硬編碼的時程表**（`eligible()`，`waves.ts:83-87`）。
+   `composition(wave)` 現在只是 `eligible(REGULARS, wave)` 的薄包裝（`waves.ts:97-99`），
    `REGULARS`／`BOSSES` 又是從 `ENEMIES` 過濾出來的（`enemies.ts:167,170`）——
    **所以新增敵種只要改 `data/enemies.ts`，不需要動 `waves.ts`**（這與擴充前的規則相反，舊文件說要改兩處）。
    要注意的反而是這幾點：
    - `traits` 是**必填**欄位（`types.ts:223`）。填空陣列（像 `thief`）代表「不受任何 `bias` 加權」；填錯會讓關卡卡片的推薦標籤撒謊。
    - `minWave` 太高會讓敵種在短關卡永遠不出現（黃巾只到 12 波，`stone` 的 `minWave` 12 只趕上最後一波）。
-   - `eligible()` 有一道防呆：全部被 `minWave` 擋掉時退回 `pool[0]`（`waves.ts:73`）。
+   - `eligible()` 有一道防呆：全部被 `minWave` 擋掉時退回 `pool[0]`（`waves.ts:86`）。
      這依賴 `ENEMIES` 的**宣告順序**——第一筆一般兵必須是 `thief`、第一筆 BOSS 必須是 `boss`，別隨意重排表格頂端。
 
 7. **`rarity: 4` 目前是死的**（見上）。`RARITY_TABLE` 是 module-private，外部一律用 `rarityWeights()`。
 
-8. **`level.hpMul` 只在兩個地方被乘**：`buildWave`（`waves.ts:102`）與 `stepMeteor`（`step.ts:56`）。
+8. **`level.hpMul` 只在兩個地方被乘**：`buildWave`（`waves.ts:115`）與 `stepMeteor`（`step.ts:56`）。
    `enemyBaseHp()` 本身**不含** `hpMul`——新增任何「跟著波次成長」的傷害或血量時要記得自己乘。
    分裂子代是例外中的例外：它從母體 `maxHp` 反推（`step.ts:199`），`hpMul` 已經內含在裡面，不要再乘一次。
 
@@ -494,12 +510,12 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
     | `costMul` | `recruitCost`（`economy.ts:23`）、`rerollCost`（`economy.ts:121`） | 1 |
     | `familiarBoostMul` | `rollGlyph`（`economy.ts:100`），與 `FAMILIAR_BOOST` 相乘 | 1 |
     | `recruitEliteChance` | `recruit`（`actions.ts:49`） | 0 |
-    | `incomeMul` | `checkWaveEnd`（`step.ts:213`），**只影響固定收入、不影響產糧** | 1 |
-    | `healEveryWaves` | `checkWaveEnd`（`step.ts:222-229`） | 0 |
+    | `incomeMul` | `checkWaveEnd`（`step.ts:220`），**只影響固定收入、不影響產糧** | 1 |
+    | `healEveryWaves` | `checkWaveEnd`（`step.ts:232-239`） | 0 |
     | `enemySpeedMul` | `moveEnemies`（`step.ts:155`） | 1 |
     | `leakBlockChance` | `moveEnemies`（`step.ts:162`） | 0 |
     | `meteorInterval` | `stepMeteor`（`step.ts:46-49`） | 0 |
-    | `extraLives` | `createGame`（`state.ts:165-166`） | 0 |
+    | `extraLives` | `createGame`（`state.ts:174-175`） | 0 |
 
     **新增 perk 的鐵則**：中性值必須讓行為與「沒有這個 perk」逐位元相同（倍率 1／機率 0／間隔 0），
     否則 `npm run sim` 的難度基準與所有既有種子都會漂移。
@@ -511,7 +527,7 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
     ⚠ **分裂與回血刻意不 emit 任何事件**：分裂一次可能生出 6 隻、回血是每幀發生，
     emit 會把事件佇列與音效淹掉。要加音效的話請只在 `cleanupDead` 對「母體」emit 一次，不要對每隻子代 emit。
 
-12. `checkWaveEnd` 的通關判定在回血之前（`step.ts:217-221`），所以**通關那一波不會觸發杏林春暖**；
+12. `checkWaveEnd` 的通關判定在回血之前（`step.ts:227-231`），所以**通關那一波不會觸發杏林春暖**；
     回血用的是遞增**前**的 `state.wave`。改這段時注意別把 `wave++` 移到前面。
 
 13. **`data/enemies.ts` 的檔頭與 BOSS 區段註解各自抄了一份數字**（`enemies.ts:2` 的 `HP_GROWTH`、
@@ -528,26 +544,26 @@ dist >= path.length-1 → hp=0、dist 夾到終點、stats.leaks++、emit('leak'
 | **玩家整體戰力變了**（例如新增大量配方） | 反向動 `BASE_HP`（`waves.ts:24`） | 它是線性項，整條曲線等比例移動，正好抵銷「每一波都變強」這種水位變化。配方從 17 擴到 43 種時就是靠它把 20 → 32 |
 | 前期難度 | `BASE_HP`（`waves.ts:18`）或 `level.startFood`／`lives` | `BASE_HP` 是線性項，前期影響大、後期被指數吃掉 |
 | 單關難度 | `data/levels/index.ts` 的 `hpMul`／`maxWave`／`lives` | 只影響一關，是最安全的旋鈕 |
-| 敵人數量／出怪節奏 | `enemyCount`（`waves.ts:61-63`）、`gap`（`waves.ts:105`） | `gap` 是區域變數；縮小它會同時縮短整波長度與玩家的反應窗口 |
-| BOSS 頻率 | `isBossWave`（`waves.ts:65-67`） | 也決定 `pickBoss` 的呼叫頻率，改它會移動整條 rng 流 |
+| 敵人數量／出怪節奏 | `enemyCount`（`waves.ts:74-76`）、`gap`（`waves.ts:118`） | `gap` 是區域變數；縮小它會同時縮短整波長度與玩家的反應窗口 |
+| BOSS 頻率 | `isBossWave`（`waves.ts:78-80`） | 也決定 `pickBoss` 的呼叫頻率，改它會移動整條 rng 流 |
 | BOSS 強度／組成 | `data/enemies.ts` 的 BOSS 那一段（`enemies.ts:99-159`） | 現在是**隨機挑一隻**，所以「BOSS 有多強」是分布而非單值。調某一隻只影響它出現的那些波 |
 | **新增敵種（一般兵）** | 只改 `data/enemies.ts` 的 `ENEMIES`（一般兵區段） | **不用改 `waves.ts`**——`REGULARS` 自動收（`enemies.ts:167`）。`traits` 必填、設好 `minWave`；`troop` 決定相剋；`flying` 需要 `baseRange >= 2` 才打得到 |
 | **新增 BOSS** | 同一張表，加 `boss: true` + `minWave` | `BOSSES` 自動收（`enemies.ts:170`）。基準：`hpMul` 8～22、`ccImmune: true`、`damage` 2+。**請給它一個機制鉤子**（免疫／光環／分裂／護衛），只加血量等於沒加內容 |
-| **調整關卡偏好** | `data/levels/index.ts` 的 `bias` | 同時改變敵種比重**與**關卡卡片的「建議帶」標籤（`ui/screens.ts:500`）——不要另外手寫推薦清單 |
+| **調整關卡偏好** | `data/levels/index.ts` 的 `bias` | 同時改變敵種比重**與**關卡卡片的「建議帶」標籤（`ui/screens.ts:569`）——不要另外手寫推薦清單 |
 | 偏好的強度 | `BIAS_WEIGHT`（`waves.ts:36`） | 4 的意思是「帶該特徵的敵人比重 ×4」。調高會讓關卡個性更鮮明但變化更少 |
 | 新增 `EnemyTrait` | `types.ts:203` ＋ `TRAIT_COUNTERS`（`enemies.ts:28-36`）＋ `TRAIT_LABEL`（`enemies.ts:47-55`） | 後兩者是 `Record<EnemyTrait, …>`，漏填 tsc 會擋下來（這是刻意的） |
 | 新增 `CounterKind`（推薦手段） | `types.ts:206` ＋ `COUNTER_LABEL`（`enemies.ts:38-45`） | 只影響 UI 文案，不影響模擬 |
 | 敵種的解鎖時程 | 各敵人的 `minWave` | 短關卡（黃巾 12 波）看不到高 `minWave` 的敵種；別把第一筆 `thief`／`boss` 加上 `minWave`（`eligible` 的防呆依賴它們） |
 | 回血／再生強度 | `healAura.hps`、`regen`（`data/enemies.ts`） | 兩者都是「每秒最大血量比例」，等於直接對玩家 dps 設門檻。刻意沒有反制的 perk |
 | 死亡分裂 | `splitInto`（`data/enemies.ts`） | ⚠ **不能形成環**（`enemies-ext.test.ts:103` 會擋）。子代血量由母體反推（`step.ts:199`），不要另外乘 `hpMul` |
-| BOSS 護衛 | `escort`（`data/enemies.ts`） | 在 `buildWave` 展開（`waves.ts:117-124`），不消耗 rng、**不受 `minWave` 限制** |
+| BOSS 護衛 | `escort`（`data/enemies.ts`） | 在 `buildWave` 展開（`waves.ts:130-137`），不消耗 rng、**不受 `minWave` 限制** |
 | 灼燒能不能打穿高防 | 不要改 `damageEnemy`；用 `burnImmune` | 「灼燒無視防禦」是全局設計前提，改它會連帶影響所有火系字與技能的定位 |
 | 對空門檻 | `ANTI_AIR_RANGE`（`enemies.ts:173`） | 比對的是 `u.baseRange`（未乘 `RANGE_MUL`），刻意如此（`combat.ts:96-101`） |
 | 在主迴圈插入「敵人自己做的事」 | `stepEnemySupport`（`step.ts:111-130`） | 已經在正確的位置（`stepStatuses` 後、`moveEnemies` 前）。新行為記得跳過 `hp <= 0`，否則會把本幀燒死的敵人救回來 |
 | 征兵／重抽花費 | `economy.ts:43-49`、`economy.ts:120-122` | 一次征兵填滿所有空格，改花費等於改「手牌大小的價值」 |
 | **一波能征幾次兵** | `waveIncome` 的斜率（`economy.ts:60-65`）與 `recruitCost` 的斜率（`economy.ts:43-49`）**成對調** | ★ 設計目標 1～2 次，用 `npm run econ` 驗收。單獨調一邊會破壞比值 |
 | 擊殺獎勵的份量 | `data/enemies.ts` 的 `bounty` | 佔總收入約 65%，是「滾雪球速度」的主力旋鈕 |
-| 每波收入／產糧 | `waveIncome`（`economy.ts:60-65`）、字表的 `income`（`data/glyphs.ts`）、`屯田` 的 `income`（`generals.ts:228`） | 經濟字產出是 `income × 品質階級`（線性，`state.ts:242`），不是指數 |
+| 每波收入／產糧 | `waveIncome`（`economy.ts:60-65`）、字表的 `income`（`data/glyphs.ts`）、`屯田` 的 `income`（`generals.ts:228`） | 經濟字產出是 `income × 品質階級`（線性，`state.ts:251`），不是指數 |
 | 抽卡稀有度曲線 | `RARITY_TABLE`（`economy.ts:60-65`） | 每列合計必須是 100（有測試）。第 4 欄無效 |
 | 抽卡收斂強度 | `FAMILIAR_BOOST`（`economy.ts:76`）、`WISH_BOOST`（`economy.ts:82`） | 兩者相乘。調高會讓對局更容易滾雪球 |
 | 每局字池大小 | `data/levels/index.ts` 的 `pool: { support, generals }` | `generals` 是「幾組配方」，不是幾個字（一組 2～3 字） |

@@ -97,7 +97,7 @@
           <p class="tagline">一字一兵，成詞成將</p>
         </div>
         <div id="level-list" class="level-list"></div>
-        <!-- 六個入口排成 3×2；五個擠一列在窄螢幕上標籤會黏在一起 -->
+        <!-- 前六個入口排成 3×2；無盡自己占滿第三列（見 style.css 的 nav-row） -->
         <div class="screen-foot nav-grid">
           <button id="btn-codex" class="wide nav-book">
             <span class="nav-icon">卷</span><span class="nav-label">圖鑑</span>
@@ -116,6 +116,9 @@
           </button>
           <button id="btn-daily" class="wide nav-daily">
             <span class="nav-icon">曆</span><span class="nav-label">每日</span>
+          </button>
+          <button id="btn-endless" class="wide nav-endless nav-row">
+            <span class="nav-icon">∞</span><span class="nav-label">無盡</span>
           </button>
         </div>
         <div class="screen-foot thin">
@@ -161,6 +164,15 @@
           <span id="daily-date" class="muted"></span>
         </div>
         <div id="daily-body" class="codex-body"></div>
+      </section>
+
+      <!-- ── 無盡：通關後開放，波數無上限 ───────────── -->
+      <section id="screen-endless" class="screen" hidden>
+        <div class="screen-head row">
+          <button id="endless-back" class="icon-btn">←</button>
+          <h2>無盡</h2>
+        </div>
+        <div id="endless-body" class="codex-body"></div>
       </section>
 
       <!-- ── 戰功（成就）：達成即發聲望 ─────────────── -->

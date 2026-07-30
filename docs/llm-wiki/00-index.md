@@ -44,6 +44,7 @@
 | 改**棋盤／路徑／地形生成** | [modules/03](modules/03-board-and-mapgen.md) |
 | 改**局外進度／存檔** | [modules/06](modules/06-meta-progression.md) |
 | 改**每日挑戰／續玩存檔** | [modules/06](modules/06-meta-progression.md)。⚠ 每日挑戰必須用中性 meta，否則無法重現 |
+| 改**無盡模式** | [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」（關卡側）＋ [modules/06](modules/06-meta-progression.md) 的「獨立的高分榜」（局外側）。⚠ 無盡的難度弧與原關波數無關 |
 | 改 **UI／畫面／渲染／音效** | [modules/07](modules/07-presentation.md) |
 | 加**音效或粒子**觸發 | [modules/07](modules/07-presentation.md) 的事件佇列機制 |
 | 改 **PWA／離線** | [03-change-recipes.md](03-change-recipes.md) §10g |
@@ -98,11 +99,12 @@
 - 湊齊特定武將組合 → 觸發**羈絆**全域加成與**組合技**。
 - 敵人沿預先算好的單一路徑從「寨」走到「營」，抵達就扣生命。
 - 9 關，其中 6 關**每局隨機生成地形**（由構造保證沒有死路，見 `sim/mapgen.ts`）。
+- 每關通關後開放**無盡變體**（`endless_<key>`）：`maxWave = Infinity`，血量照 40 波的參考弧一路長上去。
 - 每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，並自動推導出選單的「建議帶」標籤。
 - 全部視覺由 Canvas 2D 繪製，**零外部圖片／字型資產**；音效由 Web Audio 即時合成，**零音檔**。
 - 抽卡有四層收斂：**編隊**（玩家手動指定）→ 每局字池 → 熟悉度加權 → 心願單。
 - 局外系統：圖鑑（字／武將／敵人三頁）、兵書（4 種數值升級）、商城（16 種可升級被動道具）、編隊、心願單、
-  成就（24 個，共 2130 聲望）、每日挑戰（日期即種子）、局內續玩存檔。共用「聲望」貨幣。
+  成就（24 個，共 2130 聲望）、每日挑戰（日期即種子）、無盡模式（獨立高分榜）、局內續玩存檔。共用「聲望」貨幣。
 - 內容量：**71 字／69 武將（26 姓名配方＋43 字組合）／13 羈絆／33 主動技／5 組合技／22 種敵人（10 一般＋12 BOSS）／9 關**。
 
 ---
@@ -120,6 +122,7 @@ src/
                shop.ts        商城：16 種可升級被動道具 → Perks
                loadout.ts     編隊：手動挑選字池內容
                daily.ts       每日挑戰：日期 → 關卡與種子（純函式）
+               levels/index.ts 末段  無盡變體（由 9 關推導，maxWave: Infinity）
                achievements.ts 成就：24 個「計數器 >= 門檻」+ 一次性聲望
   sim/         types.ts       全部型別（含 GameState / Unit / Perks）
                state.ts       createGame / recalcUnits / 單位建立
@@ -137,7 +140,7 @@ src/
                events.ts      事件佇列（sim → app 的唯一出口）
                persist.ts     局內存檔的快照與還原（續玩）
   render/      renderer.ts  theme.ts  fx.ts（攻擊特效畫法）  particles.ts
-  ui/          hud.ts  screens.ts（七個全螢幕畫面）  wish.ts（心願單）
+  ui/          hud.ts  screens.ts（九個全螢幕畫面）  wish.ts（心願單）
   input/       pointer.ts
   core/        loop.ts（固定步長）  rng.ts（mulberry32）  save.ts（localStorage）
                audio.ts（Web Audio 合成）  pwa.ts（SW 註冊）  devtools.ts（開發密技）

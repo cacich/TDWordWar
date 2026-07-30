@@ -16,7 +16,7 @@ import { startLoop, type LoopHandle } from './core/loop'
 import { clearRun, loadRun, saveMeta, saveRun } from './core/save'
 import { ACHIEVEMENTS, claimAchievements } from './data/achievements'
 import { dailyChallenge, dateKeyOf, type DailyChallenge } from './data/daily'
-import { LEVELS, LEVEL_ORDER } from './data/levels'
+import { LEVELS, LEVEL_ORDER, baseKeyOf, endlessKeyOf, isEndlessKey } from './data/levels'
 import { setLoadoutActive, toggleLoadoutGeneral, toggleLoadoutGlyph } from './data/loadout'
 import { buyUpgrade } from './data/upgrades'
 import { buyItem } from './data/shop'
@@ -172,9 +172,12 @@ export class App implements HudHost, PointerHost, ScreensHost {
 
     const key = this.state.levelKey
     const reached = this.state.wave
-    // 第 1 波還沒打完就不算成績，否則一進關卡就會顯示「最佳 1 波」
-    if (reached > 1 && (meta.best[key] ?? 0) < reached) {
-      meta.best[key] = reached
+    // 第 1 波還沒打完就不算成績，否則一進關卡就會顯示「最佳 1 波」。
+    // 無盡的成績記在自己那份榜上（鍵是原關 key），理由見 MetaProgress.endless
+    const board = isEndlessKey(key) ? meta.endless : meta.best
+    const boardKey = baseKeyOf(key)
+    if (reached > 1 && (board[boardKey] ?? 0) < reached) {
+      board[boardKey] = reached
       this.metaDirty = true
     }
     // 每日挑戰的成績記在自己的欄位，不跟一般對局的 best 混在一起
@@ -461,6 +464,7 @@ export class App implements HudHost, PointerHost, ScreensHost {
     if (!snap) return null
     const lv = LEVELS[snap.levelKey]
     if (!lv) return null
+    // 無盡的 maxWave 是 Infinity，交給 ui/screens.ts 的 waveTotal() 顯示成「∞」
     return { levelName: lv.name, wave: snap.wave, maxWave: lv.maxWave, daily: !!snap.dailyKey }
   }
 
@@ -511,6 +515,23 @@ export class App implements HudHost, PointerHost, ScreensHost {
     recalcUnits(this.state)
     this.afterRunStart()
     this.hud.toast(`每日挑戰 ${c.dateKey}：${this.state.levelName}`)
+  }
+
+  // ── 無盡模式 ────────────────────────────────────────
+  /**
+   * 開始某一關的無盡版。與每日挑戰相反，**兵書／商城／編隊全部照常套用**——
+   * 無盡是給養成後期的長線挑戰，成績只跟自己比（`meta.endless`），
+   * 不需要跨玩家可重現，所以沒有「必須用中性 meta」的限制。
+   */
+  startEndless(baseKey: string): void {
+    this.seed = newSeed()
+    this.dailyKey = null
+    this.savedWave = -1
+    this.state = createGame(endlessKeyOf(baseKey), this.seed, this.meta)
+    recalcUnits(this.state)
+    this.afterRunStart()
+    const best = this.meta.endless[baseKey] ?? 0
+    this.hud.toast(best ? `無盡：${this.state.levelName}（最佳 ${best} 波）` : `無盡：${this.state.levelName}`)
   }
 
   startLevel(key: string): void {

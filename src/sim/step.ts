@@ -207,6 +207,13 @@ function cleanupDead(state: GameState): void {
 }
 
 function checkWaveEnd(state: GameState): void {
+  /**
+   * 這一幀剛剛落敗——**最後一隻敵人漏過大營並打光生命**時，`moveEnemies` 已經把
+   * phase 設成 'lost'，但場上與隊列同時清空了，於是下面的過波結算會把它覆寫回 'prep'，
+   * 玩家在 0 生命的狀態下繼續打（結算畫面與聲望也都不會出現）。
+   * 無盡模式讓這個縫隙變得致命：那裡沒有通關出口，落敗是唯一的結束方式。
+   */
+  if (state.phase === 'lost') return
   if (state.spawnQueue.length || state.enemies.length) return
   // 糧道暢通：固定收入 ×incomeMul（產糧不受影響）
   state.lastIncome = {
@@ -214,6 +221,9 @@ function checkWaveEnd(state: GameState): void {
     units: unitIncome(state),
   }
   state.food += state.lastIncome.base + state.lastIncome.units
+  // ⚠ 無盡模式的 maxWave 是 Infinity，這個條件永遠不成立——無盡只能被打敗、不會通關，
+  //   所以下面的過波流程（回血、事件、進佈陣）就是它唯一的出口。刻意不寫成
+  //   `Number.isFinite(...) &&`：多一個條件反而讓人以為無盡走的是另一條分支。
   if (state.wave >= state.maxWave) {
     state.phase = 'won'
     emit(state, { kind: 'won' })

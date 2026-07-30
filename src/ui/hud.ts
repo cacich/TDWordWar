@@ -181,7 +181,8 @@ export class Hud {
 
     this.food.textContent = String(Math.floor(state.food))
     this.lives.textContent = '♥'.repeat(Math.max(0, state.lives))
-    this.waveInfo.textContent = `第 ${state.wave} 波 / ${state.maxWave}`
+    // 無盡模式的 maxWave 是 Infinity，直接內插會印出 "Infinity"
+    this.waveInfo.textContent = `第 ${state.wave} 波 / ${Number.isFinite(state.maxWave) ? state.maxWave : '∞'}`
 
     // 過波時回報收入，讓經濟字的價值看得見
     if (state.wave !== this.lastWave) {

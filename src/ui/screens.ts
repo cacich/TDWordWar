@@ -1,6 +1,6 @@
 /**
- * 全螢幕畫面（七個）：選單 menu／圖鑑 codex／兵書 forge／商城 shop／編隊 loadout／
- * 成就 achieve／開發密技 dev。
+ * 全螢幕畫面（九個）：選單 menu／圖鑑 codex／兵書 forge／商城 shop／編隊 loadout／
+ * 成就 achieve／每日挑戰 daily／無盡 endless／開發密技 dev。
  * 由 show(ScreenName) 統一切換，一次只顯示一個；screen === null 代表回到對局畫面。
  * 與 hud.ts 一樣只碰 DOM，所有狀態變更都經由 ScreensHost 交回 app 層。
  */
@@ -28,7 +28,17 @@ import type { BondDef, GlyphCategory } from '../sim/types'
 
 type CodexTab = 'glyph' | 'general' | 'enemy'
 
-export type ScreenName = 'menu' | 'codex' | 'forge' | 'shop' | 'dev' | 'loadout' | 'achieve' | 'daily' | null
+export type ScreenName =
+  | 'menu'
+  | 'codex'
+  | 'forge'
+  | 'shop'
+  | 'dev'
+  | 'loadout'
+  | 'achieve'
+  | 'daily'
+  | 'endless'
+  | null
 
 export interface ScreensHost {
   getMeta(): MetaProgress
@@ -42,6 +52,8 @@ export interface ScreensHost {
   /** 今天的挑戰內容（關卡與種子由日期推導） */
   todayChallenge(): { dateKey: string; levelKey: string; seed: number }
   startDaily(): void
+  /** 開始某一關的無盡版（傳入的是**原關** key，見 data/levels 的無盡節） */
+  startEndless(baseKey: string): void
   /** 目前有沒有可續玩的局內存檔；沒有回傳 null */
   savedRun(): { levelName: string; wave: number; maxWave: number; daily: boolean } | null
   resumeRun(): void
@@ -100,6 +112,8 @@ export class Screens {
   private daily = el('screen-daily')
   private dailyBody = el('daily-body')
   private dailyDate = el('daily-date')
+  private endless = el('screen-endless')
+  private endlessBody = el('endless-body')
   private achieve = el('screen-achieve')
   private achieveBody = el('achieve-body')
   private achieveCount = el('achieve-count')
@@ -130,6 +144,8 @@ export class Screens {
     el('achieve-back').addEventListener('click', () => this.host.show('menu'))
     el('btn-daily').addEventListener('click', () => this.host.show('daily'))
     el('daily-back').addEventListener('click', () => this.host.show('menu'))
+    el('btn-endless').addEventListener('click', () => this.host.show('endless'))
+    el('endless-back').addEventListener('click', () => this.host.show('menu'))
     el('menu-title').addEventListener('click', () => this.handleTitleTap())
     this.tabGlyph.addEventListener('click', () => this.setTab('glyph'))
     this.tabGeneral.addEventListener('click', () => this.setTab('general'))
@@ -158,6 +174,7 @@ export class Screens {
     this.loadout.hidden = screen !== 'loadout'
     this.achieve.hidden = screen !== 'achieve'
     this.daily.hidden = screen !== 'daily'
+    this.endless.hidden = screen !== 'endless'
     if (screen === 'menu') this.renderMenu()
     if (screen === 'codex') this.renderCodex()
     if (screen === 'forge') this.renderForge()
@@ -166,6 +183,58 @@ export class Screens {
     if (screen === 'loadout') this.renderLoadout()
     if (screen === 'achieve') this.renderAchieve()
     if (screen === 'daily') this.renderDaily()
+    if (screen === 'endless') this.renderEndless()
+  }
+
+  /**
+   * 無盡：每一關通關後開放它的無盡版。波數無上限，只能被打敗。
+   *
+   * 這一頁必須把兩件反直覺的事講清楚，否則玩家會以為壞掉了：
+   *   1. 難度弧與原關的波數無關（黃巾的無盡反而最長）
+   *   2. 成績記在獨立的無盡榜上，不會蓋掉選關畫面的最佳波數
+   */
+  private renderEndless(): void {
+    const meta = this.host.getMeta()
+    this.endlessBody.innerHTML = ''
+
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '無盡＝<b>同一關，但沒有終點</b>：地形、字池、敵人偏好與難度倍率全部沿用原關，敵人血量每波持續指數成長，撐到守不住為止。<br>' +
+      '<span class="muted">難度弧一律用 40 波的長度攤開，<b>與原關的波數無關</b>——所以波數短的關卡（黃巾 12 波）' +
+      '在無盡裡反而是最平緩的一條路。兵書、商城道具與編隊<b>照常生效</b>（這點跟每日挑戰相反），' +
+      '成績記在獨立的無盡榜上，不會影響選關畫面的最佳波數。</span>'
+    this.endlessBody.appendChild(note)
+
+    const openCount = LEVEL_ORDER.filter((k) => meta.cleared.includes(k)).length
+    this.endlessBody.appendChild(section(`可挑戰的戰場　${openCount}/${LEVEL_ORDER.length}`))
+
+    for (const key of LEVEL_ORDER) {
+      const level = LEVELS[key]
+      // 解鎖條件是「這一關本身已通關」——沒打完就開無盡只會被前期血量牆擋住
+      const unlocked = meta.cleared.includes(key)
+      const best = meta.endless[key] ?? 0
+      const tips = countersFor(level.bias)
+        .map((c) => `<span class="lv-tip">${COUNTER_LABEL[c]}</span>`)
+        .join('')
+
+      const card = document.createElement('button')
+      card.className = `level-card${unlocked ? '' : ' locked'}${level.gen ? ' random' : ''}`
+      card.disabled = !unlocked
+      card.innerHTML = `
+        <div>
+          <div class="lv-name">${level.name}・無盡</div>
+          <div class="lv-sub">${unlocked ? level.subtitle : `通關「${level.name}」後開放無盡`}</div>
+          ${unlocked && tips ? `<div class="lv-tips"><span class="lv-tip-label">建議帶</span>${tips}</div>` : ''}
+        </div>
+        <div class="lv-meta">
+          <div class="lv-wave">∞ 波</div>
+          <div>難度 ×${level.hpMul.toFixed(2)}</div>
+          ${best ? `<div class="lv-best">最佳 ${best} 波</div>` : ''}
+        </div>`
+      if (unlocked) card.addEventListener('click', () => this.host.startEndless(key))
+      this.endlessBody.appendChild(card)
+    }
   }
 
   /**
@@ -475,7 +544,7 @@ export class Screens {
       card.className = 'resume-card'
       card.innerHTML = `<div>
           <div class="rs-title">繼續上一局</div>
-          <div class="rs-sub">${run.daily ? '每日挑戰・' : ''}${run.levelName}　第 ${run.wave} / ${run.maxWave} 波</div>
+          <div class="rs-sub">${run.daily ? '每日挑戰・' : ''}${run.levelName}　第 ${run.wave} / ${waveTotal(run.maxWave)} 波</div>
         </div>
         <div class="rs-go">▶</div>`
       card.addEventListener('click', () => this.host.resumeRun())
@@ -730,6 +799,11 @@ export class Screens {
     this.codexBody.appendChild(box)
     box.scrollIntoView({ block: 'nearest' })
   }
+}
+
+/** 總波數的顯示值。無盡模式的 maxWave 是 Infinity，直接內插會印出 "Infinity" */
+function waveTotal(maxWave: number): string {
+  return Number.isFinite(maxWave) ? String(maxWave) : '∞'
 }
 
 function section(title: string): HTMLElement {

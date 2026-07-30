@@ -35,6 +35,7 @@ export const EMPTY_META: MetaProgress = {
   seenGenerals: [],
   seenEnemies: [],
   best: {},
+  endless: {},
   daily: {},
   items: {},
   loadoutActive: false,
@@ -67,6 +68,8 @@ export function loadMeta(): MetaProgress {
       // 只留仍存在於敵表的 key：刪掉或改名某個敵人時舊存檔自動清乾淨
       seenEnemies: arr(p.seenEnemies).filter((k) => ENEMY_BY_KEY[k]),
       best: typeof p.best === 'object' && p.best ? { ...p.best } : {},
+      // 無盡榜是後來才加的欄位；舊存檔沒有它，補空物件即可（不需要版本遷移）
+      endless: typeof p.endless === 'object' && p.endless ? { ...p.endless } : {},
       daily: typeof p.daily === 'object' && p.daily ? { ...p.daily } : {},
       items: items(p.items),
       loadoutActive: typeof p.loadoutActive === 'boolean' ? p.loadoutActive : false,

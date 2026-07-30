@@ -82,6 +82,8 @@ BOSS（加 `boss: true`，慣例上都給 `ccImmune`）：
 
 **只改 `src/data/levels/index.ts`**：在 `LEVELS` 加一筆，再把 key 放進 `LEVEL_ORDER`
 （順序就是解鎖順序，選單會自動長出卡片）。
+放進 `LEVEL_ORDER` 之後，檔尾的迴圈會**自動**幫這一關生出無盡變體（`endless_<key>`），
+不需要另外宣告——見 [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」。
 
 固定地圖：
 
@@ -115,7 +117,7 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 | 想要的效果 | 改哪裡 |
 |---|---|
 | 整體變難／變簡單（全九關） | `sim/waves.ts` 的 `HP_GROWTH`（目前 1.23）。⚠ 它必須貼著玩家戰力的成長率，不是自由參數 |
-| 敵人變多 | `sim/waves.ts` 的 `enemyCount()` |
+| 敵人變多 | `sim/waves.ts` 的 `enemyCount()`（有 `MAX_WAVE_ENEMIES = 90` 上限，只有無盡模式碰得到） |
 | **某一關太硬／太軟** | 該關的 `maxWave`（`data/levels/index.ts`）→ 中位數目標是它的一半，會自動跟著走 |
 | **糧累積得太快／太慢** | `data/enemies.ts` 的 `bounty`（佔收入 65%）＋ `economy.ts` 的 `waveIncome`／`recruitCost` 斜率，用 `npm run econ` 驗收 |
 | 玩家整體戰力 | `data/glyphs.ts` 的 `atk` 欄等比例縮放 |

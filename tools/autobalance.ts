@@ -8,6 +8,7 @@ import { mulberry32 } from '../src/core/rng'
 import { LEVELS } from '../src/data/levels'
 import { createGame } from '../src/sim/state'
 import { stepGame } from '../src/sim/step'
+import { WAVE_REF } from '../src/sim/waves'
 import { candidateCells, playPrep } from './dumb-ai'
 
 const GAMES = Number(process.argv[2] ?? 30)
@@ -53,7 +54,9 @@ for (const [bucket, n] of [...hist.entries()].sort((a, b) => a[0] - b[0])) {
 }
 // 目標是「總波數的一半」而不是固定波次：血量的指數吃的是相對進度（見 waves.ts 的 WAVE_REF），
 // 所以不論關卡多長，傻 AI 都應該死在中段。偏差 ±20% 內算達標，超出才需要動該關的 hpMul。
-const target = LEVELS[LEVEL].maxWave / 2
+// 無盡模式（maxWave = Infinity）沒有「總波數」，它走的就是 WAVE_REF 這條參考弧 → 目標同樣取一半。
+const maxWave = LEVELS[LEVEL].maxWave
+const target = (Number.isFinite(maxWave) ? maxWave : WAVE_REF) / 2
 const dev = ((median - target) / target) * 100
 console.log(
   `\n目標：中位數 ≈ 總波數一半 = ${target}　實際 ${median}　偏差 ${dev >= 0 ? '+' : ''}${dev.toFixed(0)}%` +

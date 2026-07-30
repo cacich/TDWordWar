@@ -14,7 +14,7 @@
 >
 > **下游使用者**：
 > - `sim/step.ts:32-34` 每 tick 依序呼叫 `stepCombat` → `stepSkills` → `stepBondSkills`
-> - `sim/state.ts:410` 用 `effectiveRange()` 寫 `Unit.range`；`state.ts:400` 用 `computeBonds()`；`state.ts:339,432` 用 `SKILLS[]` 判斷「技能有沒有實作」
+> - `sim/state.ts:419` 用 `effectiveRange()` 寫 `Unit.range`；`state.ts:409` 用 `computeBonds()`；`state.ts:348,432` 用 `SKILLS[]` 判斷「技能有沒有實作」
 > - `render/renderer.ts:7` 借用 `enemyPos` / `unitCenter` 定位（唯讀）
 > - `ui/screens.ts:24` 借用 `COMBOS` 在圖鑑標示「組合技已實作」
 > - `tools/autobalance.ts`（`npm run sim`）整條鏈都要能在 Node 裡跑
@@ -53,7 +53,7 @@ r ×= kind === 'general' ? GENERAL_RANGE_BONUS(1.25) : GLYPH_RANGE_MUL(0.8)   �
 r += maxOff                  （cells.length > 1 時：中心到最遠成員格的距離）
 ```
 
-再由 `recalcUnits`（`state.ts:409`）乘上局外道具 `perks.rangeMul`（精工兵器）寫進 `Unit.range`。
+再由 `recalcUnits`（`state.ts:418`）乘上局外道具 `perks.rangeMul`（精工兵器）寫進 `Unit.range`。
 
 **⚠ 資料表裡的 `range` 不是實戰值**，差距 1.6～2.5 倍以上：
 
@@ -165,7 +165,7 @@ export function canHit(u: Unit, e: Enemy): boolean {
 
 資料表只**宣告**文字與冷卻（`GeneralDef.skill`、`BondDef.comboSkill`），行為在 `skills.ts` **註冊**。
 
-- 沒註冊 → `state.ts:338,432` 讓 `skillCdMax = 0` → `stepSkills` 直接 `continue`，**技能永遠不觸發，但圖鑑／面板仍顯示描述文字**（安靜失效）。
+- 沒註冊 → `state.ts:347,432` 讓 `skillCdMax = 0` → `stepSkills` 直接 `continue`，**技能永遠不觸發，但圖鑑／面板仍顯示描述文字**（安靜失效）。
 - 鍵是字串（含全形漢字），打錯不會報錯。`core.test.ts:58-77` 有三道守護：
   `SKILLS` 的鍵必須是存在的武將名、有實作的必須也宣告 `skill`、`COMBOS` 的鍵必須是有 `comboSkill` 的羈絆。**別刪這些測試。**
 
@@ -187,7 +187,7 @@ export function canHit(u: Unit, e: Enemy): boolean {
 | `requireTag: { tag, count }` | 帶該 tag 的武將**數量 >= count**（`bonds.ts:40`） | 西涼鐵騎＝2 名「馬」姓 |
 
 效果 `atkMul` / `apsMul` / `cdMul` 是**全域**的（套在場上所有單位，包含沒參與羈絆的字牌），
-多個羈絆**相乘**（`bonds.ts:41-43`）。`state.cdMul = bonds.cdMul × perks.cdMul`（`state.ts:403`）。
+多個羈絆**相乘**（`bonds.ts:41-43`）。`state.cdMul = bonds.cdMul × perks.cdMul`（`state.ts:412`）。
 
 組合技（`stepBondSkills`，`bonds.ts:68`）：
 - 羈絆不成立 → `delete state.bondCds[name]`，**重新湊齊要重新等冷卻**。
@@ -218,7 +218,7 @@ core/loop.ts（固定 1/60）
 倍率的重算走另一條路（**不在每 tick**）：
 
 ```
-actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
+actions.ts 任一操作 → recalcUnits(state)（state.ts:402）
   1. recomputeForm       武將屬性 = 成員字牌總和 × 武將倍率
   2. computeBonds        → state.activeBonds / state.cdMul；u.atk/aps/range（含 effectiveRange × perks.rangeMul）
   3. 光環                 在羈絆之後相乘
@@ -227,7 +227,7 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
 
 ## 契約與陷阱
 
-1. **⚠ 新增羈絆的硬約束：靠姓名配方武將達成的門檻不能超過 `MAX_LOADOUT_GENERALS`（= 5，`state.ts:125`）。**
+1. **⚠ 新增羈絆的硬約束：靠姓名配方武將達成的門檻不能超過 `MAX_LOADOUT_GENERALS`（= 5，`state.ts:134`）。**
    姓氏／名字字**不能**被選進編隊的「攜帶的字」，只能靠「攜帶的武將」欄位帶入，
    所以門檻 > 5 的羈絆在啟用編隊時**永遠湊不齊**（蜀漢棟樑曾經是 6，踩過這個坑，見 `data/bonds.ts:90`）。
    `loadout.test.ts:23-51` 是守護測試：`requireGenerals.length <= 5`；`requireTag.count` 若無法靠「配方是兵器／兵種字的部隊武將」達成，也必須 `<= 5`。

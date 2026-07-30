@@ -794,14 +794,21 @@ body {
 }
 
 /**
- * 六個入口排成 3×2 網格。
- * 一列六個在手機上每格只剩約 55px，圖示與標籤會擠成一團；分兩列之後
- * 每格寬度加倍，也留出將來再加一個入口的位置（第 6 格就是每日挑戰）。
+ * 入口排成 3 欄網格。
+ * 一列六個在手機上每格只剩約 55px，圖示與標籤會擠成一團；分列之後每格寬度加倍。
  */
 .screen-foot.nav-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: calc(var(--ui) * 0.5);
+}
+
+/**
+ * 獨占一整列的入口（無盡）。第 7 個入口若照 3 欄排，第三列會只有一格、右邊兩格空著，
+ * 看起來像漏掉了什麼；讓它橫跨滿列反而讀得出「這是另一種模式」。
+ */
+.screen-foot.nav-grid .nav-row {
+  grid-column: 1 / -1;
 }
 
 .screen-foot.nav-grid .wide {
@@ -843,6 +850,10 @@ body {
 
 .screen-foot .nav-daily {
   background: #4a4a7a;
+}
+
+.screen-foot .nav-endless {
+  background: #6a3a6a;
 }
 
 /* ── 續玩卡片：只在有局內存檔時出現，放在關卡列表最上方 ── */

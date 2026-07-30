@@ -32,6 +32,8 @@ function totalDps(s: GameState): number {
 }
 
 const state = createGame(LEVEL, SEED)
+/** 無盡模式的 maxWave 是 Infinity，印出來會是 "Infinity" */
+const waveTotal = Number.isFinite(state.maxWave) ? String(state.maxWave) : '∞'
 const cells = candidateCells(state)
 let guard = 0
 let lastWave = state.wave
@@ -40,7 +42,7 @@ let recruits = 0
 let spent = 0
 const recruitLog: number[] = []
 
-console.log(`\n=== 經濟儀表板：${LEVEL} seed=${SEED}（maxWave ${state.maxWave}）===`)
+console.log(`\n=== 經濟儀表板：${LEVEL} seed=${SEED}（maxWave ${waveTotal}）===`)
 console.log('波 | 征兵 花費 | 固定 產糧  賞金 =  總收 | 存糧 |    dps    敵總血  dps/血')
 
 while (state.phase !== 'lost' && state.phase !== 'won' && guard++ < 60 * 60 * 40) {
@@ -74,5 +76,5 @@ while (state.phase !== 'lost' && state.phase !== 'won' && guard++ < 60 * 60 * 40
 }
 
 const avgRecruit = recruitLog.length ? recruitLog.reduce((a, b) => a + b, 0) / recruitLog.length : 0
-console.log(`\n結果：${state.phase} 於第 ${state.wave} 波 / ${state.maxWave}`)
+console.log(`\n結果：${state.phase} 於第 ${state.wave} 波 / ${waveTotal}`)
 console.log(`每波平均征兵 ${avgRecruit.toFixed(2)} 次（設計目標 1～2）\n`)

@@ -53,13 +53,26 @@ export const WAVE_REF = 40
 /**
  * 該波的基準血量。`maxWave` 預設為 `WAVE_REF`，所以 `enemyBaseHp(w)` 等同於
  * 舊版的 `BASE_HP × HP_GROWTH^w`——測試與「參考長度關卡」都不受影響。
+ *
+ * ⚠ 無盡模式的 `maxWave` 是 `Infinity`，相對進度會恆等於 0（血量永不成長，
+ * 敵人永遠是第 0 波的強度）。因此非有限的 `maxWave` 一律退回 `WAVE_REF`：
+ * 無盡走的就是「絕對波次」那條原始曲線，也是本專案調得最久的那一條。
  */
 export function enemyBaseHp(wave: number, maxWave: number = WAVE_REF): number {
-  return BASE_HP * Math.pow(HP_GROWTH, (wave * WAVE_REF) / maxWave)
+  const ref = Number.isFinite(maxWave) ? maxWave : WAVE_REF
+  return BASE_HP * Math.pow(HP_GROWTH, (wave * WAVE_REF) / ref)
 }
 
+/**
+ * 單波敵人數量的上限。有限關卡最多 40 波（62 隻），**永遠碰不到這個上限**，
+ * 它只為無盡模式存在：`6 + 1.4w` 在第 100 波是 146 隻，
+ * 以 0.75 秒的出怪間隔算就是連續 110 秒的出怪，體感與效能都會塌掉。
+ * 到頂之後成長全部交給血量的指數項——那是原本就在成長的部分。
+ */
+export const MAX_WAVE_ENEMIES = 90
+
 export function enemyCount(wave: number): number {
-  return 6 + Math.floor(wave * 1.4)
+  return Math.min(6 + Math.floor(wave * 1.4), MAX_WAVE_ENEMIES)
 }
 
 export function isBossWave(wave: number): boolean {

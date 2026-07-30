@@ -62,6 +62,14 @@ export interface MetaProgress {
   seenEnemies: string[]
   /** 每關的最佳波數 */
   best: Record<string, number>
+  /**
+   * 無盡模式的最佳波數（**鍵是原關 key**，不是 `endless_` 開頭的那個）。
+   *
+   * 刻意不跟 `best` 共用一份：無盡走的是 40 波參考弧（見 data/levels 的無盡節），
+   * 比 12～32 波的關卡平緩得多。混進 `best` 會讓選關畫面的「最佳 N 波」變成
+   * 兩把不同的尺，也會讓「撐到第 30 波」這種成就被無盡輕鬆帶過。
+   */
+  endless: Record<string, number>
   /** 每日挑戰成績：dateKey('YYYY-MM-DD') → 抵達波次。見 data/daily.ts */
   daily: Record<string, number>
   /** 商城已購買的道具等級（key → 目前等級，0 或不存在＝未購買，見 data/shop.ts） */
@@ -100,6 +108,7 @@ export const DEFAULT_META: MetaProgress = {
   seenGenerals: [],
   seenEnemies: [],
   best: {},
+  endless: {},
   daily: {},
   items: {},
   loadoutActive: false,

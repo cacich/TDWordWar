@@ -4,7 +4,7 @@
 >
 > | 檔案 | 規模 | 職責 |
 > |---|---|---|
-> | `src/app.ts` | 502 行 | 唯一同時認識四層的接線層：建 state、跑 loop、drainEvents、syncProgress、syncUiScale、實作三個 Host 介面 |
+> | `src/app.ts` | 701 行 | 唯一同時認識四層的接線層：建 state、跑 loop、drainEvents、syncProgress、syncUiScale、實作三個 Host 介面 |
 > | `src/core/loop.ts` | 60 行 | 固定步長模擬 + 可變渲染，掉幀保護、倍速、暫停 |
 > | `src/core/audio.ts` | 199 行 | Web Audio 即時合成 19 種音效（專案零音檔），含手勢解鎖與攻擊音節流 |
 > | `src/core/pwa.ts` | 28 行 | Service Worker 註冊（僅 production）＋ `isStandalone()` |
@@ -12,12 +12,12 @@
 > | `src/render/theme.ts` | 99 行 | 水墨配色、階級／品質／提示／狀態色表、`glyphFont()`、`roundRect()` |
 > | `src/render/fx.ts` | 225 行 | 10 種 `FxKind` 的攻擊特效畫法與顏色 |
 > | `src/render/particles.ts` | 193 行 | 極簡粒子（上限 240 顆，固定種子偽隨機） |
-> | `src/ui/hud.ts` | 374 行 | DOM HUD：狀態列、手牌、操作列、羈絆條、資訊面板、toast |
-> | `src/ui/screens.ts` | 746 行 | 八個全螢幕畫面（menu／codex／forge／shop／loadout／achieve／daily／dev） |
+> | `src/ui/hud.ts` | 401 行 | DOM HUD：狀態列、手牌、操作列、羈絆條、資訊面板、toast |
+> | `src/ui/screens.ts` | 820 行 | 九個全螢幕畫面（menu／codex／forge／shop／loadout／achieve／daily／endless／dev） |
 > | `src/ui/wish.ts` | 85 行 | 心願單挑選面板（列本局字池，不是全字表） |
 > | `src/input/pointer.ts` | 281 行 | Pointer Events：拖放、點選待放置、鏟除、疊合、交換 |
-> | `index.html` | 201 行 | 全部 DOM 節點（HUD 與八個 `.screen` 都寫死在這裡，JS 只填內容） |
-> | `src/style.css` | 980 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
+> | `index.html` | 213 行 | 全部 DOM 節點（HUD 與九個 `.screen` 都寫死在這裡，JS 只填內容） |
+> | `src/style.css` | 1209 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
 >
 > **上游依賴**：`sim/`（讀 `GameState`、呼叫 `sim/actions.ts`）、`data/`（顯示名稱、配方、商城／兵書／編隊表）、`core/save.ts`
 > **下游使用者**：只有 `src/main.ts`（建 `App`、註冊 SW、掛 `__game` / `__dev`）
@@ -43,26 +43,26 @@
 ### 2. ★ 事件佇列：`sim` 說發生了什麼，app 決定聽起來／看起來怎樣
 
 `sim/` 只呼叫 `emit(state, ev)`（`sim/events.ts:9`）把純資料塞進 `state.events`，上限 `MAX_EVENTS = 64`（`sim/types.ts:318`），超量直接丟棄。
-app 每幀 `drainEvents()`（`app.ts:255-317`）翻譯成音效與粒子，最後 `evs.length = 0`（`app.ts:316`）清空。
+app 每幀 `drainEvents()`（`app.ts:258-320`）翻譯成音效與粒子，最後 `evs.length = 0`（`app.ts:319`）清空。
 
 **目前 12 種 `SimEvent`（定義在 `sim/types.ts:303-315`）與各自的呈現**：
 
 | 事件 | 音效 | 粒子／其他 | 程式碼 |
 |---|---|---|---|
-| `place {char}` | `place`（節流 0.04s） | — | app.ts:261 |
-| `merge {char, level}` | `merge` | `ps.merge(格心, qualityColor(level))`；座標靠 `char` 反查場上第一個同字 glyph | app.ts:264-272 |
-| `combine {name, tier, cells}` | `tier` 為 `legendary`/`mythic` → `combineBig`，否則 `combine` | `ps.combine(cells 形心, tier)`（粒子數與顏色依 tier） | app.ts:273-276 |
-| `dissolve {name}` | `dissolve` | — | app.ts:277 |
-| `attack {fx, x, y}` | `attackSfx(fx)`，音量 0.9 | 無粒子——攻擊的視覺走 `state.effects` + `render/fx.ts` | app.ts:280-282 |
-| `kill {x, y, bounty}` | `kill`，音量 0.8（節流 0.05s） | `ps.kill(x, y)` 墨點 | app.ts:283-286 |
-| `skill {name, x, y}` | `skill` | `ps.skill(x, y)` 金色火花 | app.ts:287-290 |
-| `combo {name}` | `combo` | `ps.combo(大營格心)` + `hud.toast('組合技：…')` | app.ts:291-297 |
-| `leak` | `leak` | `ps.leak(大營格心)` 紅色潑濺 | app.ts:298-304 |
-| `waveClear {wave}` | `wave` | — | app.ts:305-306 |
-| `won` | `win` | — | app.ts:308 |
-| `lost` | `lose` | — | app.ts:311 |
+| `place {char}` | `place`（節流 0.04s） | — | app.ts:264 |
+| `merge {char, level}` | `merge` | `ps.merge(格心, qualityColor(level))`；座標靠 `char` 反查場上第一個同字 glyph | app.ts:267-275 |
+| `combine {name, tier, cells}` | `tier` 為 `legendary`/`mythic` → `combineBig`，否則 `combine` | `ps.combine(cells 形心, tier)`（粒子數與顏色依 tier） | app.ts:276-279 |
+| `dissolve {name}` | `dissolve` | — | app.ts:280 |
+| `attack {fx, x, y}` | `attackSfx(fx)`，音量 0.9 | 無粒子——攻擊的視覺走 `state.effects` + `render/fx.ts` | app.ts:283-285 |
+| `kill {x, y, bounty}` | `kill`，音量 0.8（節流 0.05s） | `ps.kill(x, y)` 墨點 | app.ts:286-289 |
+| `skill {name, x, y}` | `skill` | `ps.skill(x, y)` 金色火花 | app.ts:290-293 |
+| `combo {name}` | `combo` | `ps.combo(大營格心)` + `hud.toast('組合技：…')` | app.ts:294-300 |
+| `leak` | `leak` | `ps.leak(大營格心)` 紅色潑濺 | app.ts:301-307 |
+| `waveClear {wave}` | `wave` | — | app.ts:308-309 |
+| `won` | `win` | — | app.ts:311 |
+| `lost` | `lose` | — | app.ts:314 |
 
-`attackSfx()`（`app.ts:647-662`）把 10 種 `FxKind` 收斂成 5 個攻擊音：`blade`/`thrust` → `attackBlade`、`arrow` → `attackArrow`、`fire`/`venom` → `attackFire`、`bolt` → `attackBolt`、其餘（`gale`/`plan`/`charge`/`none`）→ `attackSoft`。
+`attackSfx()`（`app.ts:668-683`）把 10 種 `FxKind` 收斂成 5 個攻擊音：`blade`/`thrust` → `attackBlade`、`arrow` → `attackArrow`、`fire`/`venom` → `attackFire`、`bolt` → `attackBolt`、其餘（`gale`/`plan`/`charge`/`none`）→ `attackSoft`。
 
 未被消費的 payload：`kill.bounty`、`waveClear.wave`、`dissolve.name`、`skill.name`、`combine.name`——想加飄字或提示直接拿來用，不必改 sim。
 
@@ -84,7 +84,7 @@ app 每幀 `drainEvents()`（`app.ts:255-317`）翻譯成音效與粒子，最�
 |---|---|---|
 | `HudHost` | `ui/hud.ts:13-41` | 讀狀態（`getState` / `getMode` / `isPaused` / `getSpeed` / `getArmedHand` / `isMuted` / `getSelectedGlyph` / `getSelectedForms`）＋ 觸發玩家指令（`recruit` / `reroll` / `smeltHand` / `startWave` / `togglePause` / `cycleSpeed` / `restart` / `sellSelected` / `cycleTargeting` / `select` / `setMode` / `beginHandDrag` / `openMenu` / `openWishPanel` / `toggleWish` / `toggleMute`） |
 | `PointerHost` | `input/pointer.ts:18-28` | 只要 `getState` / `renderer`（做座標換算）/ `getMode` / `setMode` / `select` / `toast` / `onCombined`。**注意它直接持有 `renderer`**，因為要用 `cellFromPoint()` 與寫 `renderer.view.drag` |
-| `ScreensHost` | `ui/screens.ts:33-64` | 局外事務：`getMeta` / `achieveProgress` / `startLevel` / `show` / `buyUpgrade` / `buyItem` / 三個 loadout 方法 / 七個 dev 方法。**完全不碰 `GameState`**——成就畫面要的進度是 app 層算好成 `Record<key, number>` 再交過來，就是為了守住這個性質 |
+| `ScreensHost` | `ui/screens.ts:43-76` | 局外事務：`getMeta` / `achieveProgress` / `startLevel` / `startDaily` / `startEndless` / 三個續玩方法 / `show` / `buyUpgrade` / `buyItem` / 三個 loadout 方法 / 七個 dev 方法。**完全不碰 `GameState`**——成就畫面要的進度是 app 層算好成 `Record<key, number>` 再交過來，就是為了守住這個性質 |
 
 `App` 一次實作三個（`app.ts:39`）。`WishHost`（`ui/wish.ts:10-14`）是第四個小介面，只要 `getState` / `toggleWish` / `closeWishPanel`。
 
@@ -128,10 +128,10 @@ render callback 的固定順序（`app.ts:110-120`）：寫入 `renderer.view.se
 
 ### 畫面切換與凍結
 
-`App.show(screen)`（`app.ts:437-443`）= `screens.show(screen)` + `loop.setPaused(screen !== null)`。
-`Screens.show()`（`ui/screens.ts:151-219`）把八個 `.screen` 的 `hidden` 全設好（一次只顯示一個）再呼叫對應的 render 方法。`screen === null` 代表回對局。
+`App.show(screen)`（`app.ts:440-446`）= `screens.show(screen)` + `loop.setPaused(screen !== null)`。
+`Screens.show()`（`ui/screens.ts:167-288`）把八個 `.screen` 的 `hidden` 全設好（一次只顯示一個）再呼叫對應的 render 方法。`screen === null` 代表回對局。
 雙重保險：`step` callback 另外檢查 `this.screens.visible`（`app.ts:107`），`syncProgress` 也在畫面開著時直接 return（`app.ts:146`）。
-`dev` 畫面的入口是彩蛋：選單標題 2.5 秒內連點 7 下（`ui/screens.ts:140-149`）。
+`dev` 畫面的入口是彩蛋：選單標題 2.5 秒內連點 7 下（`ui/screens.ts:156-165`）。
 
 ### 渲染分層（`renderer.ts:109-125`）
 
@@ -158,22 +158,22 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 - `upgrade = '#1fb6c9'`（青）——**刻意避開二階品質色的綠 `#3f8f4f`**（`QUALITY_COLOR[1]`，`theme.ts:57`）。原本用綠色時，二階字牌自己的綠描邊與提示光暈疊在一起完全分不清
 - `combine = '#d9a520'`（金，同 `THEME.gold`）
 
-`performance.now()` 只出現在呈現層（`renderer.ts:310`、`app.ts:58/88`、`screens.ts:141`、`loop.ts` 內）。**`sim/` 內禁用**。
+`performance.now()` 只出現在呈現層（`renderer.ts:310`、`app.ts:58/88`、`screens.ts:157`、`loop.ts` 內）。**`sim/` 內禁用**。
 
-### 進度與存檔：`syncProgress()`（`app.ts:145-229`）
+### 進度與存檔：`syncProgress()`（`app.ts:145-232`）
 
 每幀做四件事，全在 app 層而**不在 sim 層——這樣 `sim/` 完全不知道 localStorage 與 `MetaProgress` 的存在**，`npm run sim` 也就不會污染玩家存檔：
 
 1. 掃 `state.hand` 與 `state.units` 寫入 `meta.seenGlyphs` / `seenGenerals`（`app.ts:148-164`）
-2. `meta.best[levelKey]`，**只在 `wave > 1` 才記**（`app.ts:176`），否則一進關卡就顯示「最佳 1 波」
-3. `phase === 'won'` 時補 `meta.cleared`（`app.ts:192-195`）
-4. 聲望結算：`renownPaid` 旗標保證一局只結一次（`app.ts:198-220`），數值由 `renownFor()`（`sim/state.ts:128`）算，並 toast 通知。`startLevel()` 會把旗標重設（`app.ts:534`）
+2. `meta.best[levelKey]`，**只在 `wave > 1` 才記**（`app.ts:175`），否則一進關卡就顯示「最佳 1 波」
+3. `phase === 'won'` 時補 `meta.cleared`（`app.ts:195-198`）
+4. 聲望結算：`renownPaid` 旗標保證一局只結一次（`app.ts:201-223`），數值由 `renownFor()`（`sim/state.ts:137`）算，並 toast 通知。`startLevel()` 會把旗標重設（`app.ts:555`）
 
-寫檔節流：只有 `metaDirty` 時才倒數 `saveTimer`，**最多每 2 秒一次 `saveMeta()`**（`app.ts:223-228`）。局外操作（買升級／道具／改編隊）則走各自的 handler 立即存檔（`app.ts:369-404`）。
+寫檔節流：只有 `metaDirty` 時才倒數 `saveTimer`，**最多每 2 秒一次 `saveMeta()`**（`app.ts:226-231`）。局外操作（買升級／道具／改編隊）則走各自的 handler 立即存檔（`app.ts:372-407`）。
 
 ### 音效解鎖
 
-瀏覽器自動播放政策：`AudioContext` 必須在使用者手勢後才建立。`app.ts:83-86` 用 `pointerdown` / `keydown` 各掛一個 `{ once: true }` 的 `unlock`；`Audio.unlock()`（`core/audio.ts:133-157`）建 ctx、master gain（0.9）與一段固定種子白噪音 buffer，已建立則只 `resume()` suspended 的 ctx。`toggleMute()`（`app.ts:351-357`）也會先呼叫 `unlock()`——玩家點喇叭本身就是有效手勢。
+瀏覽器自動播放政策：`AudioContext` 必須在使用者手勢後才建立。`app.ts:83-86` 用 `pointerdown` / `keydown` 各掛一個 `{ once: true }` 的 `unlock`；`Audio.unlock()`（`core/audio.ts:133-157`）建 ctx、master gain（0.9）與一段固定種子白噪音 buffer，已建立則只 `resume()` suspended 的 ctx。`toggleMute()`（`app.ts:354-360`）也會先呼叫 `unlock()`——玩家點喇叭本身就是有效手勢。
 `Audio.play()` 在 ctx 還沒建立前呼叫是**安全的 no-op**（`audio.ts:160`），所以不需要在 drainEvents 裡判斷。
 攻擊音節流表在 `audio.ts:102-110`（同名音效在該秒數內只播一次）：後期每秒 20 次攻擊全播會變成噪音牆。
 
@@ -192,38 +192,39 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 2. **`renderer.view.drag` 是 input 寫、render 讀的共享可變狀態**（`renderer.ts:14-26`）。`input/pointer.ts` 直接 `Object.assign(this.drag, {...})`。取消拖曳一定要走 `cancel()`（`pointer.ts:230-236`），否則會留下永久的拖曳影。
 3. **`input/` 唯一碰 DOM 的地方是 `handIndexAtPoint()`**（`pointer.ts:279-284`，用 `document.elementFromPoint` 找 `.card[data-index]`）。這也代表 `hud.buildHand()` 產生的卡片**必須帶 `data-index`**（`hud.ts:126`），否則「拖手牌到另一張手牌上疊合」會靜默失效。
 4. **手牌卡片的 `pointerdown` 要 `setPointerCapture`**（`hud.ts:136-141`）：卡片內容每幀可能被重繪，不鎖指標的話手指移出卡片就收不到 move/up。
-5. **HUD 的差異更新靠 `dataset.sig`**（`hud.ts:236`、`hud.ts:208`、`hud.ts:269`）。清空卡片時**必須 `delete card.dataset.sig`**（`hud.ts:229-231`），否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
+5. **HUD 的差異更新靠 `dataset.sig`**（`hud.ts:237`、`hud.ts:209`、`hud.ts:270`）。清空卡片時**必須 `delete card.dataset.sig`**（`hud.ts:230-232`），否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
 6. ★ **「選取框」與「詳情面板」是兩個獨立的狀態**（`app.ts` 的 `selectedCell` 與 `infoCell`）。
    `select(cell)` 兩者都設，**只有「真的點擊字牌」這條路徑會呼叫它**（`input/pointer.ts` 的 `onUp`，
    `src.kind === 'unit' && !this.moved`）；放置與搬移改走 `highlight(cell)`，只標落點、不開面板。
    ⚠ 這是刻意分開的：以前放置後會一併 `select()`，於是**連續放置時每放一張都會彈出詳情，
    玩家得先關掉才能繼續操作**。改動這一段時不要把兩者合回去。
 
-7. **`getSelectedForms()` 可能回傳 0 個以上的武將**（上限不是 2，見 [modules/01](modules/01-state-and-units.md)），`getSelectedGlyph()` 可能為 null 而 forms 非空（字牌被鏟後不會發生，但邏輯上要處理）。所有面板都以「格子」為單位而非單位（`hud.ts:304-362`）。
+7. **`getSelectedForms()` 可能回傳 0 個以上的武將**（上限不是 2，見 [modules/01](modules/01-state-and-units.md)），`getSelectedGlyph()` 可能為 null 而 forms 非空（字牌被鏟後不會發生，但邏輯上要處理）。所有面板都以「格子」為單位而非單位（`hud.ts:305-363`）。
 7. **`--ui` 只由 `syncUiScale()` 寫。** 不要在 CSS 裡寫死 px 字級，也不要在 JS 別處覆蓋它。
-8. **`index.html` 是 DOM 的唯一定義處。** `hud.ts:66-70` / `screens.ts:81-85` / `wish.ts:16-20` 的 `el()` 找不到節點會直接 `throw`，所以刪 HTML 節點會讓整個 App 建構失敗。加畫面要同時：`index.html` 加 `<section class="screen" hidden>`、`ScreenName` 加字面值（`screens.ts:31`）、`Screens.show()` 加 `hidden` 切換與 render 呼叫。
+8. **`index.html` 是 DOM 的唯一定義處。** `hud.ts:66-70` / `screens.ts:93-97` / `wish.ts:16-20` 的 `el()` 找不到節點會直接 `throw`，所以刪 HTML 節點會讓整個 App 建構失敗。加畫面要同時：`index.html` 加 `<section class="screen" hidden>`、`ScreenName` 加字面值（`screens.ts:31`）、`Screens.show()` 加 `hidden` 切換與 render 呼叫。
 9. **`hidden` 屬性靠 `style.css:23-25` 的 `[hidden] { display: none !important }` 生效**，元件自己的 `display` 會壓過它。新元件用 `hidden` 而不要自己發明 `.is-open`。
-10. **心願面板與資訊面板不能同時開**（都占畫面底部）：`select()` 會 `wishPanel.hide()`（`app.ts:565-570`），`openWishPanel()` 會清 `selectedCell`（`app.ts:331-335`）。
-11. **`startLevel()` 的重設清單**（`app.ts:516-541`）：`selectedCell` / `mode` / `renownPaid` / `particles.clear()` / `wishPanel.hide()` / `hud.onLevelChanged()` / `renderer.resize()`。新增任何「跨局會殘留」的 app 層欄位都要加進這裡。
-12. **`newSeed()` 是 `Date.now()`**（`app.ts:642`）。要重現 bug 就把它改成固定值——這是唯一的隨機來源入口，`sim/` 內禁用 `Math.random()`（`particles.ts:27-33` 與 `audio.ts:151-154` 也都用固定種子的 LCG，讓畫面／音色在同機器上可重現）。
+10. **心願面板與資訊面板不能同時開**（都占畫面底部）：`select()` 會 `wishPanel.hide()`（`app.ts:586-591`），`openWishPanel()` 會清 `selectedCell`（`app.ts:334-338`）。
+11. **`startLevel()` 的重設清單**（`app.ts:537-562`）：`selectedCell` / `mode` / `renownPaid` / `particles.clear()` / `wishPanel.hide()` / `hud.onLevelChanged()` / `renderer.resize()`。新增任何「跨局會殘留」的 app 層欄位都要加進這裡。
+12. **`newSeed()` 是 `Date.now()`**（`app.ts:663`）。要重現 bug 就把它改成固定值——這是唯一的隨機來源入口，`sim/` 內禁用 `Math.random()`（`particles.ts:27-33` 與 `audio.ts:151-154` 也都用固定種子的 LCG，讓畫面／音色在同機器上可重現）。
 13. **`renderer.resize()` 的 dpr 上限是 2**（`renderer.ts:73`）：3x 螢幕全開會讓填充率變成 2.25 倍而幾乎看不出差別。
 14. **`Effect.kind === 'ring'` 用 `toX - fromX` 攜帶半徑**（`renderer.ts:500-501`，產生端見 `sim/skills.ts`）。這是個省欄位的約定，改 `Effect` 結構時別忘了它。
-15. **`FX_COLOR['none'] = 'transparent'`**（`fx.ts:23`）：圖鑑／編隊／心願面板拿 fx 當字色時必須排除 `none`，否則字會消失（`screens.ts:554`、`screens.ts:386`、`wish.ts:63` 都寫了 `g.fx !== 'none'` 的 fallback）。
-16. **`drainEvents()` 依賴當幀 `state` 仍與事件一致**：`merge` 事件靠 `char` 反查場上單位取座標（`app.ts:266`），找不到就不噴粒子。不要把 drain 延後到下一幀。
+15. **`FX_COLOR['none'] = 'transparent'`**（`fx.ts:23`）：圖鑑／編隊／心願面板拿 fx 當字色時必須排除 `none`，否則字會消失（`screens.ts:623`、`screens.ts:455`、`wish.ts:63` 都寫了 `g.fx !== 'none'` 的 fallback）。
+16. **`drainEvents()` 依賴當幀 `state` 仍與事件一致**：`merge` 事件靠 `char` 反查場上單位取座標（`app.ts:269`），找不到就不噴粒子。不要把 drain 延後到下一幀。
 
 ## 我想改 X → 動哪裡
 
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
-| 新增一種 sim 事件的音效／粒子 | `sim/types.ts:303` 加 `SimEvent` 變體 → sim 內 `emit()` → `app.ts:259` 的 switch | switch 沒 `default`，漏接是靜默的；粒子要新方法就加在 `particles.ts` |
+| 新增一種 sim 事件的音效／粒子 | `sim/types.ts:303` 加 `SimEvent` 變體 → sim 內 `emit()` → `app.ts:262` 的 switch | switch 沒 `default`，漏接是靜默的；粒子要新方法就加在 `particles.ts` |
 | 改某個音效的音色 | `core/audio.ts:46-99` 的 `RECIPES` | 只改這張表就好；新增音效名要同時加進 `SfxName`（`audio.ts:10-29`） |
 | 攻擊音太吵／太稀疏 | `core/audio.ts:102-110` 的 `THROTTLE` | 秒數越大越安靜 |
-| 新增一種攻擊特效 `FxKind` | `sim/types.ts` 的 `FxKind` → `render/fx.ts:13` 的 `FX_COLOR` → `fx.ts:56` 的 switch → `app.ts:647` 的 `attackSfx()` | 三處都要加，`FX_COLOR` 漏了會 undefined 導致整幀繪製異常 |
+| 新增一種攻擊特效 `FxKind` | `sim/types.ts` 的 `FxKind` → `render/fx.ts:13` 的 `FX_COLOR` → `fx.ts:56` 的 switch → `app.ts:668` 的 `attackSfx()` | 三處都要加，`FX_COLOR` 漏了會 undefined 導致整幀繪製異常 |
 | 改階級／品質／提示／狀態顏色 | `render/theme.ts`（`TIER_COLOR:29` / `TIER_TINT:38` / `HINT_COLOR:51` / `QUALITY_COLOR:57` / `STATUS_COLOR:63`） | 提示色與品質色要保持可辨（見核心概念第 5 段的青綠衝突事故） |
 | 改棋盤上某個東西的畫法 | `render/renderer.ts` 對應的 `drawXxx` | 保持三趟順序；不要在 draw 裡改 state |
 | 加／改一個 HUD 元素 | `index.html` 加節點 → `hud.ts:73-97` 加 `el()` 欄位 → `hud.ts:178` 的 `update()` 寫值 | 高頻更新的請用 `dataset.sig` 差異比對 |
 | 加一個 HUD 按鈕觸發遊戲動作 | `HudHost`（`hud.ts:13`）加方法 → `hud.ts:150` 的 `bind()` 綁 click → `App` 實作並呼叫 `sim/actions.ts` | 別讓 `hud.ts` 直接 import `sim/actions` |
-| 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:442`），這是刻意的 |
+| 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:445`），這是刻意的。最近一例：無盡畫面（`screens.ts` 的 `renderEndless`） |
+| 選單再加一個入口 | `index.html` 的 `.nav-grid` 加按鈕 → `style.css` 加 `.nav-xxx` 底色 | 網格是 3 欄；第 7 個入口用 `.nav-row`（`grid-column: 1/-1`）獨占一整列，否則第三列會只有一格看起來像漏了東西 |
 | 改選關卡／圖鑑／兵書／商城／編隊的呈現 | `ui/screens.ts` 對應 `renderXxx()` | 資料表本身在 `data/`（見 [02-data-tables.md](../02-data-tables.md)） |
 | 改 UI 整體大小或斷點 | `app.ts:134` 的除數（27 / 56）與 clamp（9.5 / 18）、`app.ts:137` 的 320px | 改除數會同時影響所有 DOM 尺寸 |
 | 極窄視窗要隱藏更多東西 | `style.css:78` 的 `#app[data-compact='true']` 區塊 | 不要改成 media query：斷點看的是 `#app` 而非視窗（`#app` 有 `max-width: 560px`） |
@@ -232,7 +233,7 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 | 改粒子上限／密度 | `render/particles.ts:10` 的 `MAX` 與各方法的迴圈次數 | 超量丟棄是刻意的 |
 | 改拖放手感 | `input/pointer.ts:17` 的 `TAP_SLOP`、`evalTarget()`（`pointer.ts:239`） | 「點一下手牌 → 點一下空地」的 armed 流程（`pointer.ts:102-115`、`174-184`、`214-225`）是手機主要放置方式，別破壞 |
 | 改 PWA 快取策略／圖示 | `vite.config.ts` 的 `pwaPlugin()`、`public/manifest.webmanifest`、`public/icons/` | 驗證一律 `npm run build && npm run preview` |
-| 加開發密技 | `core/devtools.ts` 加函式 → `ScreensHost`（`screens.ts:52-59`）加方法 → `App` 實作 → `screens.ts:313-320` 的 actions 陣列 | 密技繞過 `sim/actions.ts` 的驗證，僅供測試 |
+| 加開發密技 | `core/devtools.ts` 加函式 → `ScreensHost`（`screens.ts:64-71`）加方法 → `App` 實作 → `screens.ts:382-389` 的 actions 陣列 | 密技繞過 `sim/actions.ts` 的驗證，僅供測試 |
 
 ## 相關頁面
 

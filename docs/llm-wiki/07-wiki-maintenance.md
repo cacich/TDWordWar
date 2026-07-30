@@ -74,6 +74,7 @@
 | `data/achievements.ts`（成就） | [modules/06](modules/06-meta-progression.md) 的成就節、[00-index](00-index.md) 的內容量、`docs/game-design.md` §8.2 的分區表；**改獎勵要重算總額**（目前 2130，須夾在兵書 1230 與商城 13590 之間，有守護測試） |
 | `data/loadout.ts` | [modules/06](modules/06-meta-progression.md) |
 | `data/daily.ts`（每日挑戰） | [modules/06](modules/06-meta-progression.md) 的每日挑戰節、`docs/game-design.md` §8.2 |
+| `data/levels/index.ts` 的**無盡節** | [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」（關卡側）＋ [modules/06](modules/06-meta-progression.md) 的「獨立的高分榜」（局外側）、`docs/game-design.md` §8.2 |
 | `sim/persist.ts` 的 `RunSnapshot` | [modules/06](modules/06-meta-progression.md) 的續玩節、[04-invariants](04-invariants.md)。⚠ **新增 `GameState` 可變欄位時要一併加進快照**，漏了會靜默遺失 |
 | `sim/skills.ts`（技能／組合技） | [modules/04](modules/04-combat-and-skills.md) 的原型清單與註冊表數量、[02](02-data-tables.md) |
 | `sim/combat.ts` 的常數 | [modules/04](modules/04-combat-and-skills.md)、[02](02-data-tables.md) 的公式區、[03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 |
@@ -108,7 +109,7 @@
 | **平衡註解沒重算** | 商城總價註解寫 9000，實際 13590（漏算每級成長項） |
 | **修好的 bug 還被寫成現存陷阱** | 組合技 cdMax 少乘 `perks.cdMul` 修好後，模組頁仍把它列為待修陷阱。**修 bug 時要一起搜尋文件裡對它的描述** |
 | **自己的修正讓行號位移** | 改 `sim/bonds.ts` 後，模組頁 9 處 `bonds.ts:NN` 全部失效。動過的檔案要回頭校對引用它的頁面 |
-| **只回寫「主場」頁面，忘了旁邊四頁** | 敵種擴充只動了 `data/enemies.ts` 與 `sim/waves.ts` 的**內容**，但順手在 `state.ts:151` 插了一行 `bias`、在 `types.ts` 插了 33 行——結果 modules/01・04・06・07 共約 90 個 `檔案:行號` 全部位移一格到三十三格，全部指到錯的地方。**回寫時先問「我增減了哪些檔案的行數」，再問「誰引用了那些檔案」** |
+| **只回寫「主場」頁面，忘了旁邊四頁** | 敵種擴充只動了 `data/enemies.ts` 與 `sim/waves.ts` 的**內容**，但順手在 `state.ts:160` 插了一行 `bias`、在 `types.ts` 插了 33 行——結果 modules/01・04・06・07 共約 90 個 `檔案:行號` 全部位移一格到三十三格，全部指到錯的地方。**回寫時先問「我增減了哪些檔案的行數」，再問「誰引用了那些檔案」** |
 
 **共通模式**：出錯的幾乎都是「數字」與「函式名」。回寫時優先檢查這兩類。
 
@@ -179,6 +180,8 @@ grep -o -E '(state|types|step|combat|actions|waves|economy|pool|skills|bonds)\.t
 | 每個用到的 `EnemyTrait` 都有對應的應對手段與中文標籤 | `enemies-ext.test.ts` |
 | 關卡 `bias` 都是合法 trait 且有敵人帶該 trait | `enemies-ext.test.ts` |
 | 血量指數吃「相對進度」：同進度百分比 → 同血量 | `core.test.ts` |
+| `maxWave = Infinity`（無盡）時弧長退回 `WAVE_REF`，且永遠不會通關 | `endless.test.ts` |
+| 無盡變體都由原關推導，且不在 `LEVEL_ORDER` 裡 | `endless.test.ts` |
 | `buildWave` 有把 `maxWave` 傳進血量計算 | `core.test.ts` |
 | 同種子產生同一場對局 | `core.test.ts` / `enemies-ext.test.ts` |
 | 續玩還原後走出完全相同的一局 | `persist.test.ts` |

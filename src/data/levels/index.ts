@@ -23,7 +23,18 @@ export interface LevelDef {
   gen?: { cols: number; rows: number; minPathLen: number; blockRate?: number }
   startFood: number
   lives: number
+  /**
+   * 總波數。打完這一波就通關。
+   * **無盡模式是 `Infinity`**（見本檔最後的「無盡模式」節）——`checkWaveEnd` 的
+   * `wave >= maxWave` 因此永遠不成立，而 `enemyBaseHp` 會退回 `WAVE_REF` 當弧長。
+   */
   maxWave: number
+  /**
+   * 無盡變體的標記。**只有 UI 讀它**（顯示「∞」與成績記在哪一份榜上），
+   * sim 一律只看 `maxWave === Infinity`——沿用 Perks「中性預設值」的分層慣例，
+   * 讓 sim 不必知道「無盡模式」這個上層概念存在。
+   */
+  endless?: boolean
   /** 難度：敵人血量倍率 */
   hpMul: number
   /**
@@ -216,3 +227,45 @@ export const LEVELS: Record<string, LevelDef> = {
 }
 
 export const JULU = LEVELS.julu
+
+// ── 無盡模式 ──────────────────────────────────────────
+/**
+ * 無盡＝「同一關，但沒有終點」。地圖、字池、敵人偏好、`hpMul`、生命全部沿用原關，
+ * 只把 `maxWave` 換成 `Infinity`。所以它不是 9 個新關卡，而是 9 個既有關卡的**推導變體**
+ * （`endlessOf()`）——原關改數值，無盡版自動跟著改，不會出現兩份會不同步的真相。
+ *
+ * ★ 難度弧：血量的指數吃「相對進度」`wave × WAVE_REF / maxWave`（見 sim/waves.ts），
+ *   而 `Infinity` 會讓相對進度永遠是 0、血量永不成長。因此 `enemyBaseHp` 對非有限的
+ *   `maxWave` 退回 `WAVE_REF`，也就是**無盡一律走 40 波的參考弧**（`HP_GROWTH^wave`）。
+ *
+ * ⚠ 推論（反直覺，但是刻意的）：無盡的難度只由 `hpMul`／`lives`／字池區分，
+ *   **與原關的 `maxWave` 無關**。黃巾（12 波）的無盡版反而是最長的一條路——
+ *   它的原關把同一條 40 波的弧壓縮了 3.3 倍，攤平回來自然變長。
+ *
+ * 為什麼不註冊進 `LEVEL_ORDER`：那條陣列是「流程」，被解鎖鏈、每日挑戰輪替與
+ * 「天下歸心」成就的門檻共用。無盡是支線，混進去會同時弄壞這三件事。
+ */
+export const ENDLESS_PREFIX = 'endless_'
+
+export function endlessKeyOf(baseKey: string): string {
+  return ENDLESS_PREFIX + baseKey
+}
+
+export function isEndlessKey(key: string): boolean {
+  return key.startsWith(ENDLESS_PREFIX)
+}
+
+/** 無盡關卡 key → 原關 key；本來就是原關 key 時原樣回傳 */
+export function baseKeyOf(key: string): string {
+  return isEndlessKey(key) ? key.slice(ENDLESS_PREFIX.length) : key
+}
+
+function endlessOf(base: LevelDef): LevelDef {
+  return { ...base, key: endlessKeyOf(base.key), name: `${base.name}・無盡`, maxWave: Infinity, endless: true }
+}
+
+/** 無盡關卡的顯示順序，與 `LEVEL_ORDER` 一一對應 */
+export const ENDLESS_ORDER = LEVEL_ORDER.map(endlessKeyOf)
+
+// 註冊進 LEVELS：createGame 與續玩還原都只認得 LEVELS，沒註冊就開不起來
+for (const key of LEVEL_ORDER) LEVELS[endlessKeyOf(key)] = endlessOf(LEVELS[key])
