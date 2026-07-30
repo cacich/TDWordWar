@@ -108,6 +108,9 @@ M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 
 （純 sim 層，與 `npm run ai` 跑同一份程式碼）。它是估值驅動的貪婪策略，打得比難度量尺（`tools/dumb-ai.ts`）
 深得多，但**不保證通關**——末段指數難度需要人類級的長線規劃，逐拍貪婪跨不過（旋鈕與誠實說明見檔頭 `TUNE`）。
 ⚠ 這份是**強** AI，`tools/dumb-ai.ts` 是**難度量尺**，兩者刻意分開，不可互相取代。
+節奏是「**想得少、一次做完**」：`THINK_INTERVAL`（1.2 模擬秒）是手機發熱的主旋鈕，而一輪決策**沒有動作數上限**——
+`runActions` 會一直做到沒有值得做的事。想省電就把間隔往上加，不要去限制每輪的動作數（那只會讓擺陣落後於敵人）。
+⚠ 間隔吃模擬時間，所以 3× 速時實際思考頻率也是 3 倍。
 
 未實作項目與已知陷阱列在 [docs/llm-wiki/04-invariants.md](docs/llm-wiki/04-invariants.md)。
 新增技能／控場狀態的步驟在 [03-change-recipes.md](docs/llm-wiki/03-change-recipes.md) §10、§10b。

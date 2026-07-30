@@ -86,6 +86,7 @@
 | `sim/state.ts` 的 `recalcUnits` / `MetaProgress` | [modules/01](modules/01-state-and-units.md)、若動 `MetaProgress` 還要看 [modules/06](modules/06-meta-progression.md) 與 `core/save.ts` 的遷移 |
 | `sim/actions.ts`（新增操作） | [modules/02](modules/02-actions-and-combine.md) |
 | `sim/types.ts` 的 `Perks` | [modules/06](modules/06-meta-progression.md) 的 Perks 對應表 |
+| `sim/autoplay.ts` 的旋鈕（`TUNE` / `THINK_INTERVAL`） | [CLAUDE.md](../../CLAUDE.md) 的「AI 代管」段，**並跑 `npm run ai` 前後對照**：同時記下九關波數中位數與**耗時**（耗時就是手機的發熱量表，改決策頻率一定要看它） |
 | `ui/hud.ts` / `index.html` / `style.css`（HUD 版面） | [modules/07](modules/07-presentation.md) 的檔案規模表（行數）、核心概念的狀態列／底部浮層兩段，**並校對「契約與陷阱」裡所有 `hud.ts:行號`**——HUD 是行號最密集的一頁 |
 | 新增檔案到 `src/` | [00-index.md](00-index.md) 的檔案地圖 **＋** 對應的 `modules/` 頁；若是新子系統，照模板開新頁 |
 | 新增／移除測試檔 | [04-invariants.md](04-invariants.md) 的測試涵蓋清單與測試總數 |

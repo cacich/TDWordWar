@@ -56,12 +56,15 @@ import type { AttackShape, Aura, Board, GameState, GeneralDef, OnHit, Unit } fro
 export const TUNE = { SAT: 350, STACK: 2.2, FOOD: 22 }
 
 /**
- * 決策間隔（模擬秒）。0.35 秒一輪足以跟上 12 秒的佈陣節奏，
- * 又不會每幀重掃棋盤。它吃的是模擬時間，所以 3× 速時思考也跟著變快。
+ * 決策間隔（模擬秒）。它吃的是模擬時間，所以 3× 速時思考也跟著變快。
+ *
+ * ⚠ 這是**手機發熱的主旋鈕**。一輪決策要重掃棋盤、列舉所有窗格、對每個窗格做
+ * 覆蓋積分，成本遠高於一幀模擬；曾經是 0.35 秒一輪（≈ 2.9 輪/秒），實測會讓手機燙手。
+ * 現值 1.2 秒一輪：12 秒的佈陣期還有 10 輪，而**一輪不再有動作數上限**（見 runActions），
+ * 所以「少想幾次」不等於「少做幾件事」——該擺的陣還是會在同一輪裡擺完。
+ * 想再省電就往上加；往下調之前先想清楚為什麼「一輪做完」不夠。
  */
-const THINK_INTERVAL = 0.35
-/** 一輪最多執行幾個動作。每個動作後都要重掃棋盤，所以這是單幀成本的上界 */
-const MAX_ACTIONS = 6
+const THINK_INTERVAL = 1.2
 /** 增益低於這個值就不值得動手（單位同上：一趟路的傷害量） */
 const MIN_GAIN = 1
 
@@ -141,25 +144,43 @@ export function autoThink(brain: AutoBrain, state: GameState): number {
   acted += mergeHandPairs(state, boardGlyphKeys(state))
   acted += recruitIfWorth(state)
   acted += mergeHandPairs(state, boardGlyphKeys(state))
-  acted += runActions(brain, state, geom)
+  const run = runActions(brain, state, geom)
+  acted += run.acted
 
-  syncWishes(brain, state, geom)
+  // 沿用 runActions 最後建的那份 ctx（它是在「已經沒有值得做的事」時建的，所以與現況一致）。
+  // buildCtx 會列舉全部窗格，是整輪最貴的一步，能省一次就省一次。
+  syncWishes(brain, state, geom, run.fresh)
   if (acted === 0) acted += idleTurn(state)
   return acted
 }
 
-/** 反覆挑「增益最大的單一動作」直到沒有值得做的事，回傳執行的動作數 */
-function runActions(brain: AutoBrain, state: GameState, geom: Geom): number {
+/**
+ * 反覆挑「增益最大的單一動作」直到沒有值得做的事，回傳執行的動作數。
+ *
+ * **刻意沒有動作數上限**：想的次數少（THINK_INTERVAL 拉長省電）就得讓每一輪把該做的事做完，
+ * 否則手上有六張牌卻一輪只擺得下幾張，剩下的要等下一輪——擺陣會比敵人來得慢。
+ * 一輪的實際上界由資源本身決定：place/stack/replace 各吃掉一張手牌，補牌要花糧且征兵費會漲。
+ *
+ * 沒有上限就得自己保證「每一輪一定會停」，靠兩道閘：
+ *   1. `apply()` 回報動作是否真的生效——沒生效就跳出，否則會永遠重選同一個動作
+ *   2. 同一枚字一輪只搬一次（`movedIds`）——搬動不消耗任何資源，是唯一可能繞圈的動作
+ *
+ * @returns `acted` 執行的動作數；`fresh` 最後建的 ctx，**僅在它仍與現況一致時**才回傳
+ *   （正常收尾＝沒有值得做的事就跳出，狀態自那時起沒變），給 syncWishes 重用。
+ */
+function runActions(brain: AutoBrain, state: GameState, geom: Geom): { acted: number; fresh: Ctx | null } {
   let acted = 0
-  for (let i = 0; i < MAX_ACTIONS; i++) {
+  const movedIds = new Set<number>()
+  for (;;) {
     const ctx = buildCtx(brain, state, geom)
-    const best = bestAction(state, geom, ctx)
-    if (!best || best.gain < MIN_GAIN) break
-    apply(state, best)
+    const best = bestAction(state, geom, ctx, movedIds)
+    if (!best || best.gain < MIN_GAIN) return { acted, fresh: ctx }
+    // 動作被拒絕：狀態可能已經被動過一半（replace 會先賣再放），這份 ctx 不可信
+    if (!apply(state, best)) return { acted, fresh: null }
+    if (best.kind === 'move') movedIds.add(best.id)
     acted++
     acted += recruitIfWorth(state) // 手牌空出格子後可能又買得起，順手補征
   }
-  return acted
 }
 
 // ── 棋盤幾何：路徑覆蓋 ────────────────────────────────
@@ -516,6 +537,8 @@ interface Ctx {
   /** 這一關有沒有飛行威脅（關卡 bias 宣告，或場上已出現飛賊）→ 逼 AI 準備對空 */
   flyingThreat: boolean
   emptyPlots: number[]
+  /** 這一輪列舉出的窗格。留著給 syncWishes 重用——列舉是整輪最貴的一步，不要算兩次 */
+  wins: Win[]
   /** 放置／疊合／替換用：所有窗格（含半完成，會折價） */
   slot: Map<number, Map<string, number>>
   /** 搬動專用：只認「這一步就成將」的窗格，避免孤字在半完成槽之間來回震盪 */
@@ -568,10 +591,12 @@ function buildCtx(brain: AutoBrain, state: GameState, geom: Geom): Ctx {
     pathLoad,
     flyingThreat: state.bias.includes('flying') || state.enemies.some((e) => e.flying && e.hp > 0),
     emptyPlots,
+    wins: [],
     slot: new Map(),
     complete: new Map(),
   }
   const wins = enumerateWindows(state, geom, ctx)
+  ctx.wins = wins
   ctx.slot = slotBonusMap(wins)
   ctx.complete = slotBonusMap(wins, true)
   return ctx
@@ -597,19 +622,20 @@ type Action =
   /** 鏟掉最弱的字牌，把手牌換上去 */
   | { kind: 'replace'; gain: number; hand: number; id: number; cell: number }
 
-function apply(state: GameState, a: Action): void {
+/**
+ * 執行動作，回傳「是否真的生效」。
+ * ⚠ 回傳值不是裝飾用的：`runActions` 沒有動作數上限，靠它跳出——
+ * 動作若被 `sim/actions.ts` 拒絕（估值端與驗證端對不上），下一圈會選到同一個動作而無限迴圈。
+ */
+function apply(state: GameState, a: Action): boolean {
   switch (a.kind) {
     case 'place':
     case 'stack':
-      placeFromHand(state, a.hand, a.cell)
-      break
+      return placeFromHand(state, a.hand, a.cell).ok
     case 'move':
-      moveGlyph(state, a.id, a.cell)
-      break
+      return moveGlyph(state, a.id, a.cell).ok
     case 'replace':
-      sellGlyph(state, a.id)
-      placeFromHand(state, a.hand, a.cell)
-      break
+      return sellGlyph(state, a.id).ok && placeFromHand(state, a.hand, a.cell).ok
   }
 }
 
@@ -644,19 +670,23 @@ function stackGain(state: GameState, geom: Geom, ctx: Ctx, target: Unit): number
 /**
  * 挑出增益最大的單一動作。這裡是整個 AI 的心臟：
  * 四種動作都換算成同一個單位後直接比大小，不做優先序。
+ *
+ * @param movedIds 這一輪已經搬過的字牌 id，不再納入搬動來源（見 runActions 的終止保證）
  */
-function bestAction(state: GameState, geom: Geom, ctx: Ctx): Action | null {
+function bestAction(state: GameState, geom: Geom, ctx: Ctx, movedIds: ReadonlySet<number>): Action | null {
   let best: Action | null = null
   const take = (a: Action) => {
     if (!best || a.gain > best.gain) best = a
   }
 
-  // 場上最弱的幾個字牌：既是「鏟掉換人」的對象，也是搬動的來源
-  const movable = state.units.filter((u) => u.kind === 'glyph' && u.formIds.length === 0)
-  const weakest = movable
+  // 沒被武將接手的字牌：既是「鏟掉換人」的對象，也是搬動的來源
+  const loose = state.units.filter((u) => u.kind === 'glyph' && u.formIds.length === 0)
+  // 場上最弱的幾個 → 鏟除候選（鏟除會吃掉一張手牌，不必防繞圈，所以不排除搬過的）
+  const weakest = loose
     .map((u) => ({ u, value: liveValue(geom, ctx, u) }))
     .sort((a, b) => a.value - b.value)
     .slice(0, REPLACE_CANDIDATES)
+  const movable = loose.filter((u) => !movedIds.has(u.id))
 
   for (let h = 0; h < state.hand.length; h++) {
     const card = state.hand[h]
@@ -770,9 +800,9 @@ function recruitIfWorth(state: GameState): number {
  *   2. 疊高場上最強武將的成員字（把主力推向高階，這才是通關的爆發來源）
  * 兩者用同一把尺（估計增益）競爭有限的心願格。
  */
-function syncWishes(brain: AutoBrain, state: GameState, geom: Geom): void {
+function syncWishes(brain: AutoBrain, state: GameState, geom: Geom, reuse: Ctx | null): void {
   if (state.wishSlots <= 0) return
-  const ctx = buildCtx(brain, state, geom)
+  const ctx = reuse ?? buildCtx(brain, state, geom)
   const score = new Map<string, number>()
   const bump = (ch: string, v: number) => {
     if (!state.pool.includes(ch)) return
@@ -791,8 +821,8 @@ function syncWishes(brain: AutoBrain, state: GameState, geom: Geom): void {
     }
   }
 
-  // 1. 補完進行中的窗格
-  for (const w of enumerateWindows(state, geom, ctx)) {
+  // 1. 補完進行中的窗格（用 ctx 已經列舉好的那份，別再列一次——那是整輪最貴的一步）
+  for (const w of ctx.wins) {
     if (w.filled === 0) continue // 還沒動工的配方不許願，否則會亂點
     const weight = w.gain * (w.filled / w.cells.length)
     for (let i = 0; i < w.cells.length; i++) {
