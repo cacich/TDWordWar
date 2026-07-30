@@ -86,6 +86,7 @@
 | `sim/state.ts` 的 `recalcUnits` / `MetaProgress` | [modules/01](modules/01-state-and-units.md)、若動 `MetaProgress` 還要看 [modules/06](modules/06-meta-progression.md) 與 `core/save.ts` 的遷移 |
 | `sim/actions.ts`（新增操作） | [modules/02](modules/02-actions-and-combine.md) |
 | `sim/types.ts` 的 `Perks` | [modules/06](modules/06-meta-progression.md) 的 Perks 對應表 |
+| `ui/hud.ts` / `index.html` / `style.css`（HUD 版面） | [modules/07](modules/07-presentation.md) 的檔案規模表（行數）、核心概念的狀態列／底部浮層兩段，**並校對「契約與陷阱」裡所有 `hud.ts:行號`**——HUD 是行號最密集的一頁 |
 | 新增檔案到 `src/` | [00-index.md](00-index.md) 的檔案地圖 **＋** 對應的 `modules/` 頁；若是新子系統，照模板開新頁 |
 | 新增／移除測試檔 | [04-invariants.md](04-invariants.md) 的測試涵蓋清單與測試總數 |
 | 任何**增減行數**的改動（不只改值） | **回頭校對所有引用該檔的頁面的 `檔案:行號`**。`sim/types.ts`／`state.ts`／`step.ts`／`combat.ts` 被 [modules/01](modules/01-state-and-units.md)、[02](modules/02-actions-and-combine.md)、[04](modules/04-combat-and-skills.md)、[05](modules/05-economy-and-waves.md)、[06](modules/06-meta-progression.md)、[07](modules/07-presentation.md) 大量引用，改一次就會同時弄髒六頁。做法見下方「怎麼驗證文件沒失效」 |

@@ -49,67 +49,123 @@ body {
 }
 
 /* ── 頂部狀態列 ────────────────────────────── */
+/*
+ * 版面是「三區」而不是一排並列的元素：左右兩區是按鈕、中間一區是讀數。
+ * 早期版本把 9 個元素平鋪在同一排，按鈕與數字混在一起，一到手機寬度就分不出
+ * 哪些是資訊、哪些是可按的東西 —— 分區並給中間區一塊底色就是為了解決這件事。
+ */
 #topbar {
   display: flex;
   align-items: center;
-  gap: calc(var(--ui) * 0.45);
+  justify-content: space-between;
+  gap: calc(var(--ui) * 0.4);
   /* 加上 safe-area：以 PWA 安裝後在有瀏海的機型上執行時，狀態列不會壓到內容 */
-  padding: calc(var(--ui) * 0.42 + env(safe-area-inset-top)) calc(var(--ui) * 0.7)
+  padding: calc(var(--ui) * 0.42 + env(safe-area-inset-top)) calc(var(--ui) * 0.6)
     calc(var(--ui) * 0.42);
   border-bottom: 2px solid var(--ink);
   background: var(--paper-2);
   flex: 0 0 auto;
 }
 
-#level-name {
-  flex: 1 1 auto;
-  /* 窄視窗時必須能被壓縮並省略，否則關卡名會折成兩行把狀態列撐高 */
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  font-size: calc(var(--ui) * 1.42);
-  font-weight: 700;
-  letter-spacing: calc(var(--ui) * 0.2);
+/* 左右按鈕區：同一區內的按鈕靠得比跨區更近，讓分組看得出來 */
+.bar-side {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.26);
+  flex: 0 0 auto;
 }
 
-/* 極窄視窗：關卡名是遊戲中最不需要的資訊（選單就看得到），優先讓出空間 */
-#app[data-compact='true'] #level-name {
-  display: none;
+/*
+ * 中央讀數區。min-width:0 是必要的：沒有它，內容過寬時 flex 不會壓縮而是把整列撐爆。
+ * 三個讀數本身**不准壓縮**（flex: 0 0 auto）—— 數字被壓到省略號等於資訊消失，
+ * 寧可讓內容溢出後由 ui/hud.ts 的 fitLevelName() 實測到並收掉關卡名。
+ */
+.bar-stats {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--ui) * 0.5);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  justify-content: center;
+  border: 1.5px solid rgba(43, 43, 43, 0.22);
+  border-radius: calc(var(--ui) * 0.75);
+  background: rgba(255, 253, 244, 0.72);
+  /* 上下留白刻意壓到最小：讀數區是狀態列裡最高的東西，它決定整條列吃掉多少棋盤 */
+  padding: calc(var(--ui) * 0.12) calc(var(--ui) * 0.42);
+}
+
+.bar-stats > * {
+  flex: 0 0 auto;
 }
 
 .stat {
   display: flex;
   align-items: center;
-  gap: calc(var(--ui) * 0.28);
+  gap: calc(var(--ui) * 0.26);
   font-weight: 700;
-  font-size: calc(var(--ui) * 1.06);
+  font-size: calc(var(--ui) * 1.02);
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .pill {
   display: inline-grid;
   place-items: center;
-  width: calc(var(--ui) * 1.55);
-  height: calc(var(--ui) * 1.55);
+  width: calc(var(--ui) * 1.32);
+  height: calc(var(--ui) * 1.32);
   border-radius: 50%;
   background: #fffdf4;
   border: 1.5px solid var(--ink);
-  font-size: calc(var(--ui) * 0.84);
+  font-size: calc(var(--ui) * 0.78);
+  flex: 0 0 auto;
 }
 
+/*
+ * 生命改成「一顆心 + 數字」而不是 N 顆心：心數會隨兵書升級成長，
+ * 平鋪時會把狀態列吃掉一大半，且六顆以上根本數不出來。
+ */
 .lives {
-  display: flex;
-  gap: 1px;
-  font-size: var(--ui);
   color: var(--red);
 }
 
-#wave-info {
-  font-size: calc(var(--ui) * 0.9);
+.pill.heart {
+  border-color: var(--red);
+  color: var(--red);
+  background: #fff4f0;
+}
+
+/* 剩 2 命以內：整組轉紅底，讓「快輸了」在餘光裡也看得到 */
+.lives.low .pill.heart {
+  background: var(--red);
+  color: #fff;
+}
+
+.wave {
   color: var(--ink-soft);
-  text-align: right;
+  font-size: calc(var(--ui) * 0.94);
+}
+
+/*
+ * 關卡名是狀態列裡最不急的資訊（選單就看得到），所以它是唯一可以被犧牲的一項。
+ * 名字長度從 2 字（巨鹿）到 7 字（黃巾之亂・無盡）差三倍，斷點猜不準 → 交給實測。
+ */
+#level-name {
+  font-size: calc(var(--ui) * 0.9);
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: calc(var(--ui) * 0.06);
+}
+
+#wave-info {
   white-space: nowrap;
+  color: var(--ink);
+}
+
+/* 極窄視窗：關卡名早就被 fitLevelName() 收掉了，這裡再把讀數之間的間距壓到最小 */
+#app[data-compact='true'] .bar-stats {
+  gap: calc(var(--ui) * 0.34);
+  padding: calc(var(--ui) * 0.12) calc(var(--ui) * 0.28);
 }
 
 .icon-btn {
@@ -248,14 +304,19 @@ body {
 }
 
 /* ── 羈絆條（棋盤浮層） ────────────────────── */
+/*
+ * 容器不吃指標事件（否則標籤之間的空隙會擋住棋盤的點擊），只有標籤本身可點。
+ * 也因此不能用 overflow-x 捲動 —— 捲不動 —— 所以改成換行，多的羈絆往上疊。
+ */
 .bonds {
   position: absolute;
   left: calc(var(--ui) * 0.42);
+  right: calc(var(--ui) * 0.42);
   bottom: calc(var(--ui) * 0.42);
   display: flex;
-  gap: calc(var(--ui) * 0.42);
-  max-width: calc(100% - var(--ui) * 0.84);
-  overflow-x: auto;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  gap: calc(var(--ui) * 0.32);
   pointer-events: none;
 }
 
@@ -263,10 +324,13 @@ body {
   border: 1.5px solid var(--red);
   color: var(--red);
   border-radius: calc(var(--ui) * 0.7);
-  padding: calc(var(--ui) * 0.14) calc(var(--ui) * 0.56);
+  padding: calc(var(--ui) * 0.14) calc(var(--ui) * 0.5);
   font-size: calc(var(--ui) * 0.84);
   white-space: nowrap;
   background: #fff6ef;
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: var(--font);
 }
 
 .bond-chip .cd {
@@ -275,14 +339,27 @@ body {
   opacity: 0.75;
 }
 
+/* 「可點看詳情」的提示。羈絆的加成只寫在標籤名字上看不出來，沒有這個記號就沒人會去點 */
+.bond-chip .chip-i {
+  margin-left: calc(var(--ui) * 0.26);
+  font-size: calc(var(--ui) * 0.78);
+  opacity: 0.6;
+}
+
 .bond-chip.ready {
   border-color: var(--gold);
   color: #8a5a00;
   background: #fff4d6;
 }
 
+.bond-chip.open {
+  box-shadow: 0 0 0 2px rgba(217, 165, 32, 0.55);
+}
+
 /* ── 資訊面板（棋盤浮層） ──────────────────── */
-#infopanel {
+/* 羈絆詳情與字牌詳情占同一塊底部空間，樣式共用；互斥由 ui/hud.ts 負責 */
+#infopanel,
+#bondpanel {
   position: absolute;
   left: 0;
   right: 0;
@@ -386,6 +463,65 @@ body {
 #info-sell {
   background: #f4d9d4;
   color: #a3271a;
+}
+
+/* ── 羈絆詳情 ──────────────────────────────── */
+#bond-name {
+  color: var(--red);
+  letter-spacing: calc(var(--ui) * 0.14);
+}
+
+.bond-tier {
+  color: var(--red);
+}
+
+/* 條件：一格一個要求，湊到的打勾、沒湊到的灰掉，玩家才知道還差什麼 */
+.bond-req {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--ui) * 0.28);
+  margin-top: calc(var(--ui) * 0.28);
+}
+
+.bond-req span {
+  border: 1.5px solid #c9bfa8;
+  border-radius: calc(var(--ui) * 0.5);
+  padding: 0 calc(var(--ui) * 0.42);
+  font-size: calc(var(--ui) * 0.84);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.bond-req span.on {
+  border-color: var(--red);
+  background: #fff6ef;
+  color: var(--red);
+}
+
+/* 加成：把倍率翻成 ±% 的一行行，比 desc 那句話更好比較 */
+.bond-effect {
+  border-top: 1px dashed #c9bfa8;
+  margin-top: calc(var(--ui) * 0.42);
+  padding-top: calc(var(--ui) * 0.35);
+}
+
+.bond-effect b {
+  color: #8a5a00;
+}
+
+.bond-combo {
+  border-top: 1px dashed #c9bfa8;
+  margin-top: calc(var(--ui) * 0.42);
+  padding-top: calc(var(--ui) * 0.35);
+}
+
+.bond-combo .combo-cd {
+  color: var(--ink-soft);
+}
+
+.bond-combo .combo-cd.ready {
+  color: #8a5a00;
+  font-weight: 700;
 }
 
 /* ── 底部：手牌與操作 ──────────────────────── */

@@ -2,11 +2,12 @@
  * DOM HUD：頂部狀態列、手牌、操作列、資訊面板、羈絆條。
  * 每幀呼叫 update()，內部只在值有變動時寫 DOM。
  */
+import { BONDS } from '../data/bonds'
 import { GLYPH_BY_CHAR, qualityName } from '../data/glyphs'
 import { GENERAL_BY_NAME, generalsUsing } from '../data/generals'
 import { recruitCost, rerollCost } from '../sim/economy'
 import { TIER_COLOR, TIER_LABEL, qualityColor } from '../render/theme'
-import type { GameState, GlyphCategory, OnHit, Unit } from '../sim/types'
+import type { ActiveBond, BondDef, GameState, GlyphCategory, OnHit, Unit } from '../sim/types'
 
 export type Mode = 'normal' | 'shovel' | 'smelt'
 
@@ -24,6 +25,7 @@ export interface HudHost {
   reroll(): void
   openMenu(): void
   openWishPanel(): void
+  closeWishPanel(): void
   toggleWish(char: string): void
   isMuted(): boolean
   toggleMute(): void
@@ -75,8 +77,10 @@ function el<T extends HTMLElement>(id: string): T {
 
 export class Hud {
   private food = el('stat-food')
+  private statsBar = el('bar-stats')
   private levelName = el('level-name')
   private lives = el('lives')
+  private livesCount = el('lives-count')
   private waveInfo = el('wave-info')
   private hint = el('hint')
   private prep = el('prep')
@@ -87,6 +91,8 @@ export class Hud {
   private bannerSub = el('banner-sub')
   private handEl = el('hand')
   private bondsEl = el('bonds')
+  private bondPanel = el('bondpanel')
+  private bondBody = el('bond-body')
   private info = el('infopanel')
   private recruitBtn = el<HTMLButtonElement>('btn-recruit')
   private recruitCostEl = el('recruit-cost')
@@ -105,6 +111,11 @@ export class Hud {
   private toastTimer = 0
   private lastSig = ''
   private lastWave = 1
+  /** fitLevelName() 的節流依據：只有讀數區寬度或內容變了才重新實測 */
+  private lastFitKey = ''
+  /** 目前打開詳情的羈絆名；null = 面板關著 */
+  private openBond: string | null = null
+  private bondPanelSig = ''
 
   constructor(private host: HudHost) {
     this.buildHand()
@@ -118,6 +129,21 @@ export class Hud {
     this.levelName.textContent = this.host.getState().levelName
     this.lastWave = this.host.getState().wave
     this.lastSig = ''
+    this.lastFitKey = ''
+    this.openBond = null
+  }
+
+  /**
+   * 關卡名塞得下才顯示。用**實測溢出**而不是視窗寬度斷點：能不能塞下同時取決於
+   * 關卡名長度（2～7 字）、糧的位數與波數的位數，斷點怎麼猜都會在某個組合下失準。
+   * 讀數區的三個讀數都設了 flex 不壓縮，所以塞不下時一定會溢出，量得出來。
+   */
+  private fitLevelName(key: string): void {
+    if (this.lastFitKey === key) return
+    this.lastFitKey = key
+    this.levelName.hidden = false
+    // 先還原再量：不然變寬之後永遠不會把名字放回來
+    if (this.statsBar.scrollWidth > this.statsBar.clientWidth) this.levelName.hidden = true
   }
 
   private buildHand(): void {
@@ -165,6 +191,15 @@ export class Hud {
     this.wishBar.addEventListener('click', () => this.host.openWishPanel())
     this.muteBtn.addEventListener('click', () => this.host.toggleMute())
     el('info-close').addEventListener('click', () => this.host.select(null))
+    el('bond-close').addEventListener('click', () => {
+      this.openBond = null
+    })
+    // 委派在整條羈絆條上：標籤本身每次重繪都會換掉，逐一綁事件會漏
+    this.bondsEl.addEventListener('click', (ev) => {
+      const chip = (ev.target as HTMLElement).closest<HTMLElement>('.bond-chip')
+      const name = chip?.dataset.bond
+      if (name) this.showBond(name)
+    })
     el('info-sell').addEventListener('click', () => this.host.sellSelected())
     el('info-target').addEventListener('click', () => this.host.cycleTargeting())
     this.smeltBtn.addEventListener('click', () => {
@@ -181,14 +216,32 @@ export class Hud {
     this.toastTimer = 1.8
   }
 
+  /**
+   * 打開羈絆詳情。三個底部浮層（字牌詳情／心願單／羈絆詳情）疊在同一塊空間，
+   * 所以開一個就得關掉另外兩個，否則會互相蓋住。
+   */
+  private showBond(name: string): void {
+    this.openBond = this.openBond === name ? null : name
+    if (!this.openBond) return
+    this.host.select(null)
+    this.host.closeWishPanel()
+    this.lastSig = '' // 標籤要重畫才會標出「目前打開的是哪一個」
+  }
+
   update(dt: number): void {
     const state = this.host.getState()
     const mode = this.host.getMode()
 
     this.food.textContent = String(Math.floor(state.food))
-    this.lives.textContent = '♥'.repeat(Math.max(0, state.lives))
+    const lives = Math.max(0, state.lives)
+    this.livesCount.textContent = String(lives)
+    this.lives.classList.toggle('low', lives <= 2)
     // 無盡模式的 maxWave 是 Infinity，直接內插會印出 "Infinity"
-    this.waveInfo.textContent = `第 ${state.wave} 波 / ${Number.isFinite(state.maxWave) ? state.maxWave : '∞'}`
+    this.waveInfo.textContent = `${state.wave}/${Number.isFinite(state.maxWave) ? state.maxWave : '∞'}`
+    // 只有「會影響寬度的東西」進 key：位數而不是數值，否則糧每變一點就重量一次
+    this.fitLevelName(
+      `${this.statsBar.clientWidth}:${this.food.textContent?.length}:${this.waveInfo.textContent.length}`,
+    )
 
     // 過波時回報收入，讓經濟字的價值看得見
     if (state.wave !== this.lastWave) {
@@ -273,7 +326,7 @@ export class Hud {
       this.prep.hidden = true
     }
 
-    // 羈絆（含組合技冷卻）
+    // 羈絆（含組合技冷卻）。標籤可點，詳情由 updateBondPanel() 畫
     const bondSig = state.activeBonds
       .map((b) => `${b.name}:${b.combo ? Math.ceil(b.combo.cd) : ''}`)
       .join(',')
@@ -287,7 +340,11 @@ export class Hud {
               ? `<span class="cd">${b.combo.name} 就緒</span>`
               : `<span class="cd">${b.combo.name} ${Math.ceil(b.combo.cd)}s</span>`
             : ''
-          return `<span class="bond-chip${ready ? ' ready' : ''}" title="${b.desc}">${b.name}${cd}</span>`
+          const open = this.openBond === b.name ? ' open' : ''
+          return (
+            `<button class="bond-chip${ready ? ' ready' : ''}${open}" data-bond="${b.name}" title="${b.desc}">` +
+            `${b.name}${cd}<span class="chip-i">ⓘ</span></button>`
+          )
         })
         .join('')
     }
@@ -302,11 +359,42 @@ export class Hud {
     }
 
     this.updateInfo()
+    this.updateBondPanel()
 
     if (this.toastTimer > 0) {
       this.toastTimer -= dt
       if (this.toastTimer <= 0) this.toastEl.hidden = true
     }
+  }
+
+  /**
+   * 羈絆詳情。羈絆條上只看得到名字，玩家沒有任何管道知道「西涼鐵騎」到底加了什麼，
+   * 這個面板就是那條管道：條件（還差誰）、加成（翻成 ±%）、組合技（做什麼、還要多久）。
+   */
+  private updateBondPanel(): void {
+    const state = this.host.getState()
+    // 字牌詳情優先：玩家點了棋盤就是想看那一格，羈絆面板讓位
+    if (!this.info.hidden) this.openBond = null
+    const active = this.openBond
+      ? state.activeBonds.find((b) => b.name === this.openBond)
+      : undefined
+    const def = active ? BONDS.find((b) => b.name === active.name) : undefined
+    if (!active || !def) {
+      // 羈絆被拆掉時面板要跟著收，否則會停在一份已經失效的說明上
+      this.openBond = null
+      this.bondPanel.hidden = true
+      this.bondPanelSig = ''
+      return
+    }
+    this.bondPanel.hidden = false
+
+    // 場上武將數也要進 sig：tag 型羈絆的「3/2」會隨佈陣變動
+    const generals = state.units.filter((u) => u.kind === 'general')
+    const sig = `${active.name}:${active.combo ? Math.ceil(active.combo.cd) : ''}:${generals.length}`
+    if (this.bondPanelSig === sig) return
+    this.bondPanelSig = sig
+    el('bond-name').textContent = active.name
+    this.bondBody.innerHTML = bondDetailHtml(def, active, generals)
   }
 
   /**
@@ -368,6 +456,57 @@ export class Hud {
     el('info-desc').innerHTML = html
     el('info-target').textContent = `索敵：${TARGET_LABEL[(forms[0] ?? head).targeting]}`
   }
+}
+
+/**
+ * 一份羈絆的完整說明。刻意不直接印 `def.desc` 了事——那句話把條件與加成混在一起，
+ * 拆成「條件／加成／組合技」三段，玩家才能一眼比較兩個羈絆誰比較值得湊。
+ *
+ * @param generals 場上的武將（已由呼叫端過濾好，避免這裡再掃一次 units）
+ */
+function bondDetailHtml(def: BondDef, active: ActiveBond, generals: Unit[]): string {
+  const onField = new Set(generals.map((u) => u.defKey))
+  let html = ''
+
+  // 條件。羈絆已經生效了，所以列出來是「誰在撐著這條羈絆」，而不是還缺什麼
+  if (def.requireGenerals) {
+    const chips = def.requireGenerals
+      .map((n) => `<span class="${onField.has(n) ? 'on' : ''}">${n}</span>`)
+      .join('')
+    html += `<div class="muted">成員（${def.requireGenerals.length} 名齊聚）</div><div class="bond-req">${chips}</div>`
+  } else if (def.requireTag) {
+    const { tag, count } = def.requireTag
+    const holders = generals.filter((u) => u.tags.includes(tag))
+    const chips = holders.map((u) => `<span class="on">${u.defKey}</span>`).join('')
+    html +=
+      `<div class="muted">條件：場上「${tag}」武將 ${holders.length}/${count}</div>` +
+      `<div class="bond-req">${chips}</div>`
+  }
+
+  // 加成。倍率翻成 ±%，跟兵書／商城的寫法一致
+  const effects: string[] = []
+  if (def.atkMul && def.atkMul !== 1) effects.push(`全體攻擊 <b>${pct(def.atkMul)}</b>`)
+  if (def.apsMul && def.apsMul !== 1) effects.push(`全體攻速 <b>${pct(def.apsMul)}</b>`)
+  if (def.cdMul && def.cdMul !== 1) effects.push(`主動技冷卻 <b>${pct(def.cdMul)}</b>`)
+  html += `<div class="bond-effect">${effects.length ? effects.join('<br>') : '無數值加成'}</div>`
+
+  // 組合技：自動施放，所以玩家真正需要知道的是「它會做什麼」與「還要多久」
+  if (def.comboSkill && active.combo) {
+    const c = active.combo
+    const ready = c.cd <= 0
+    html +=
+      `<div class="bond-combo"><b>〈${c.name}〉</b>${def.comboSkill.desc}<br>` +
+      `<span class="combo-cd${ready ? ' ready' : ''}">` +
+      (ready ? '就緒，下次出手即發動' : `冷卻 ${Math.ceil(c.cd)}s / ${c.cdMax.toFixed(0)}s`) +
+      '　（湊齊即自動施放）</span></div>'
+  }
+  return html
+}
+
+/** 倍率轉成玩家看得懂的增減幅：1.3 → +30%、0.7 → −30% */
+function pct(mul: number): string {
+  const d = Math.round((mul - 1) * 100)
+  return d >= 0 ? `+${d}%` : `−${-d}%`
 }
 
 /**

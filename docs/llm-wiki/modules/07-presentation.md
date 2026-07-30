@@ -12,12 +12,12 @@
 > | `src/render/theme.ts` | 99 行 | 水墨配色、階級／品質／提示／狀態色表、`glyphFont()`、`roundRect()` |
 > | `src/render/fx.ts` | 225 行 | 10 種 `FxKind` 的攻擊特效畫法與顏色 |
 > | `src/render/particles.ts` | 193 行 | 極簡粒子（上限 240 顆，固定種子偽隨機） |
-> | `src/ui/hud.ts` | 401 行 | DOM HUD：狀態列、手牌、操作列、羈絆條、資訊面板、toast |
+> | `src/ui/hud.ts` | 547 行 | DOM HUD：狀態列、手牌、操作列、羈絆條、資訊面板、羈絆詳情、toast |
 > | `src/ui/screens.ts` | 822 行 | 九個全螢幕畫面（menu／codex／forge／shop／loadout／achieve／daily／endless／dev） |
 > | `src/ui/wish.ts` | 85 行 | 心願單挑選面板（列本局字池，不是全字表） |
 > | `src/input/pointer.ts` | 281 行 | Pointer Events：拖放、點選待放置、鏟除、疊合、交換 |
-> | `index.html` | 213 行 | 全部 DOM 節點（HUD 與九個 `.screen` 都寫死在這裡，JS 只填內容） |
-> | `src/style.css` | 1221 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
+> | `index.html` | 239 行 | 全部 DOM 節點（HUD 與九個 `.screen` 都寫死在這裡，JS 只填內容） |
+> | `src/style.css` | 1364 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
 >
 > **上游依賴**：`sim/`（讀 `GameState`、呼叫 `sim/actions.ts`）、`data/`（顯示名稱、配方、商城／兵書／編隊表）、`core/save.ts`
 > **下游使用者**：只有 `src/main.ts`（建 `App`、註冊 SW、掛 `__game` / `__dev`）
@@ -82,7 +82,7 @@ app 每幀 `drainEvents()`（`app.ts:258-320`）翻譯成音效與粒子，最�
 
 | 介面 | 定義處 | 邊界 |
 |---|---|---|
-| `HudHost` | `ui/hud.ts:13-41` | 讀狀態（`getState` / `getMode` / `isPaused` / `getSpeed` / `getArmedHand` / `isMuted` / `getSelectedGlyph` / `getSelectedForms`）＋ 觸發玩家指令（`recruit` / `reroll` / `smeltHand` / `startWave` / `togglePause` / `cycleSpeed` / `restart` / `sellSelected` / `cycleTargeting` / `select` / `setMode` / `beginHandDrag` / `openMenu` / `openWishPanel` / `toggleWish` / `toggleMute`） |
+| `HudHost` | `ui/hud.ts:14-47` | 讀狀態（`getState` / `getMode` / `isPaused` / `getSpeed` / `getArmedHand` / `isMuted` / `isAuto` / `getSelectedGlyph` / `getSelectedForms`）＋ 觸發玩家指令（`recruit` / `reroll` / `smeltHand` / `startWave` / `togglePause` / `cycleSpeed` / `toggleAuto` / `restart` / `sellSelected` / `cycleTargeting` / `select` / `setMode` / `beginHandDrag` / `openMenu` / `openWishPanel` / `closeWishPanel` / `toggleWish` / `toggleMute`） |
 | `PointerHost` | `input/pointer.ts:18-28` | 只要 `getState` / `renderer`（做座標換算）/ `getMode` / `setMode` / `select` / `toast` / `onCombined`。**注意它直接持有 `renderer`**，因為要用 `cellFromPoint()` 與寫 `renderer.view.drag` |
 | `ScreensHost` | `ui/screens.ts:43-76` | 局外事務：`getMeta` / `achieveProgress` / `startLevel` / `startDaily` / `startEndless` / 三個續玩方法 / `show` / `buyUpgrade` / `buyItem` / 三個 loadout 方法 / 七個 dev 方法。**完全不碰 `GameState`**——成就畫面要的進度是 app 層算好成 `Record<key, number>` 再交過來，就是為了守住這個性質 |
 
@@ -99,9 +99,43 @@ ui = clamp(9.5, 18, min(#app 寬 / 27, #app 高 / 56))   // app.ts:134
 **同時吃寬與高**：只看寬度時，矮而寬的視窗（橫置手機、桌面把視窗壓扁）會讓文字放大到壓掉棋盤區。
 寫到 `document.documentElement.style` 的 `--ui`，`style.css` 全檔用 `calc(var(--ui) * k)`（`style.css:1-15` 的規則：**不准在 CSS 裡寫死 px 字級**）。
 
-`#app.dataset.compact = 寬 < 320`（`app.ts:137`）→ `style.css:78-80` 在極窄視窗隱藏 `#level-name`（關卡名是遊戲中最不需要的資訊，選單就看得到）。想加更多 compact 隱藏項就照這條 selector 疊。
+`#app.dataset.compact = 寬 < 320`（`app.ts:144`）→ `style.css` 在極窄視窗把讀數區的間距與內距壓到最小。想加更多 compact 降級項就照這條 selector 疊。
 
 觸發時機（`app.ts:88-103`）：`window resize`、`orientationchange`、canvas 的 `ResizeObserver`、`#app` 的 `ResizeObserver`。canvas 的 CSS 尺寸會因浮層／軟鍵盤／瀏覽器工具列改變，**光靠 window resize 會漏**。
+
+### 6. 狀態列是「三區」，關卡名靠實測決定要不要顯示
+
+`#topbar`（`index.html:27-48`）分成三區而不是把元素平鋪一排：
+
+```
+[☰ ❚❚]   [ 糧 47 │ ♥ 3 │ 黃巾之亂 波 15/32 ]   [代管 1× ♪]
+ .bar-side          .bar-stats（有底色的讀數區）      .bar-side
+```
+
+為什麼要分區：早期版本九個元素並列，按鈕與數字交錯，一到手機寬度就分不出哪些是資訊、哪些可以按。
+中間區給一塊淡底色＋圓角邊框，它就讀得出來是「儀表」。生命也從 `♥.repeat(lives)` 改成
+**一顆心 + 數字**（`hud.ts:237-238`）——心數會隨兵書升級成長，平鋪時六顆以上根本數不出來，還吃掉半條狀態列。
+
+`.bar-stats` 內的三個讀數 **`flex: 0 0 auto`（不准壓縮）**，唯一可犧牲的是 `#level-name`。
+要不要顯示它由 `Hud.fitLevelName()`（`hud.ts:141-147`）**實測溢出**決定，不是寬度斷點：
+關卡名長度 2～7 字（`巨鹿` ～ `黃巾之亂・無盡`）、糧 1～4 位數、波數 2～5 字元，任何斷點都會在某個組合下失準。
+做法是先把名字設回可見再量 `scrollWidth > clientWidth`（先還原才量，否則變寬之後永遠放不回來），
+並用 `lastFitKey`（讀數區寬度＋糧位數＋波數字串長度）節流，避免每幀強制 reflow。
+實測結果：375px 寬（`--ui ≈ 13.9`）塞不下 4 字關卡名，560px 塞得下。
+
+### 7. 三個底部浮層互斥
+
+`#infopanel`（字牌／武將詳情）、`#wishpanel`（心願單）、`#bondpanel`（羈絆詳情）疊在棋盤底部**同一塊空間**，
+共用 `style.css` 的同一組樣式。互斥規則寫在 `hud.ts`：
+
+- 開羈絆詳情 → `showBond()`（`hud.ts:223-231`）先 `host.select(null)` + `host.closeWishPanel()`
+- 點棋盤 → `updateBondPanel()`（`hud.ts:374-398`）看到 `!info.hidden` 就把 `openBond` 清掉（字牌詳情優先）
+- 羈絆被拆掉 → 同一個函式找不到對應的 `activeBond` 就收面板，不會停在一份已失效的說明上
+
+羈絆詳情的內容由 `bondDetailHtml()`（`hud.ts:467-504`）從 `BONDS`（`data/bonds.ts`）＋ `ActiveBond` 現算，
+拆成**條件／加成／組合技**三段：條件列出「誰在撐著這條羈絆」（tag 型還印 `6/4` 這種現況比門檻）、
+加成把倍率翻成 `+30%` / `−25%`、組合技印 desc 與剩餘冷卻。刻意不直接印 `bond.desc` 了事——
+那句話把條件與加成混在一起，玩家沒辦法比較兩個羈絆誰值得湊。
 
 ## 主要流程
 
@@ -190,20 +224,20 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 
 1. **`sim/` 不可 import render／ui／input／DOM，`render/` 不可修改 `GameState`。** 想在 sim 裡播音效或噴粒子 → 加一種 `SimEvent`，在 `drainEvents()` 接。
 2. **`renderer.view.drag` 是 input 寫、render 讀的共享可變狀態**（`renderer.ts:14-26`）。`input/pointer.ts` 直接 `Object.assign(this.drag, {...})`。取消拖曳一定要走 `cancel()`（`pointer.ts:230-236`），否則會留下永久的拖曳影。
-3. **`input/` 唯一碰 DOM 的地方是 `handIndexAtPoint()`**（`pointer.ts:279-284`，用 `document.elementFromPoint` 找 `.card[data-index]`）。這也代表 `hud.buildHand()` 產生的卡片**必須帶 `data-index`**（`hud.ts:126`），否則「拖手牌到另一張手牌上疊合」會靜默失效。
-4. **手牌卡片的 `pointerdown` 要 `setPointerCapture`**（`hud.ts:136-141`）：卡片內容每幀可能被重繪，不鎖指標的話手指移出卡片就收不到 move/up。
-5. **HUD 的差異更新靠 `dataset.sig`**（`hud.ts:237`、`hud.ts:209`、`hud.ts:270`）。清空卡片時**必須 `delete card.dataset.sig`**（`hud.ts:230-232`），否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
+3. **`input/` 唯一碰 DOM 的地方是 `handIndexAtPoint()`**（`pointer.ts:279-284`，用 `document.elementFromPoint` 找 `.card[data-index]`）。這也代表 `hud.buildHand()` 產生的卡片**必須帶 `data-index`**（`hud.ts:157`），否則「拖手牌到另一張手牌上疊合」會靜默失效。
+4. **手牌卡片的 `pointerdown` 要 `setPointerCapture`**（`hud.ts:165-172`）：卡片內容每幀可能被重繪，不鎖指標的話手指移出卡片就收不到 move/up。
+5. **HUD 的差異更新靠 `dataset.sig`**（手牌 `hud.ts:298`、心願列 `hud.ts:269`、羈絆條 `hud.ts:333`、羈絆詳情 `hud.ts:387`）。清空卡片時**必須 `delete card.dataset.sig`**（`hud.ts:288-293`），否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
 6. ★ **「選取框」與「詳情面板」是兩個獨立的狀態**（`app.ts` 的 `selectedCell` 與 `infoCell`）。
    `select(cell)` 兩者都設，**只有「真的點擊字牌」這條路徑會呼叫它**（`input/pointer.ts` 的 `onUp`，
    `src.kind === 'unit' && !this.moved`）；放置與搬移改走 `highlight(cell)`，只標落點、不開面板。
    ⚠ 這是刻意分開的：以前放置後會一併 `select()`，於是**連續放置時每放一張都會彈出詳情，
    玩家得先關掉才能繼續操作**。改動這一段時不要把兩者合回去。
 
-7. **`getSelectedForms()` 可能回傳 0 個以上的武將**（上限不是 2，見 [modules/01](modules/01-state-and-units.md)），`getSelectedGlyph()` 可能為 null 而 forms 非空（字牌被鏟後不會發生，但邏輯上要處理）。所有面板都以「格子」為單位而非單位（`hud.ts:305-363`）。
+7. **`getSelectedForms()` 可能回傳 0 個以上的武將**（上限不是 2，見 [modules/01](modules/01-state-and-units.md)），`getSelectedGlyph()` 可能為 null 而 forms 非空（字牌被鏟後不會發生，但邏輯上要處理）。所有面板都以「格子」為單位而非單位（`hud.ts:404-458`）。
 7. **`--ui` 只由 `syncUiScale()` 寫。** 不要在 CSS 裡寫死 px 字級，也不要在 JS 別處覆蓋它。
-8. **`index.html` 是 DOM 的唯一定義處。** `hud.ts:66-70` / `screens.ts:93-97` / `wish.ts:16-20` 的 `el()` 找不到節點會直接 `throw`，所以刪 HTML 節點會讓整個 App 建構失敗。加畫面要同時：`index.html` 加 `<section class="screen" hidden>`、`ScreenName` 加字面值（`screens.ts:31`）、`Screens.show()` 加 `hidden` 切換與 render 呼叫。
+8. **`index.html` 是 DOM 的唯一定義處。** `hud.ts:72-76` / `screens.ts:93-97` / `wish.ts:16-20` 的 `el()` 找不到節點會直接 `throw`，所以刪 HTML 節點會讓整個 App 建構失敗。加畫面要同時：`index.html` 加 `<section class="screen" hidden>`、`ScreenName` 加字面值（`screens.ts:31`）、`Screens.show()` 加 `hidden` 切換與 render 呼叫。
 9. **`hidden` 屬性靠 `style.css:23-25` 的 `[hidden] { display: none !important }` 生效**，元件自己的 `display` 會壓過它。新元件用 `hidden` 而不要自己發明 `.is-open`。
-10. **心願面板與資訊面板不能同時開**（都占畫面底部）：`select()` 會 `wishPanel.hide()`（`app.ts:586-591`），`openWishPanel()` 會清 `selectedCell`（`app.ts:334-338`）。
+10. **三個底部浮層（資訊／心願／羈絆詳情）不能同時開**（都占畫面底部，見核心概念第 7 段）：`select()` 會 `wishPanel.hide()`（`app.ts:607-612`），`openWishPanel()` 會清 `selectedCell`（`app.ts:341-345`），`showBond()` 兩個都關（`hud.ts:223-231`）。
 11. **`startLevel()` 的重設清單**（`app.ts:537-562`）：`selectedCell` / `mode` / `renownPaid` / `particles.clear()` / `wishPanel.hide()` / `hud.onLevelChanged()` / `renderer.resize()`。新增任何「跨局會殘留」的 app 層欄位都要加進這裡。
 12. **`newSeed()` 是 `Date.now()`**（`app.ts:663`）。要重現 bug 就把它改成固定值——這是唯一的隨機來源入口，`sim/` 內禁用 `Math.random()`（`particles.ts:27-33` 與 `audio.ts:151-154` 也都用固定種子的 LCG，讓畫面／音色在同機器上可重現）。
 13. **`renderer.resize()` 的 dpr 上限是 2**（`renderer.ts:73`）：3x 螢幕全開會讓填充率變成 2.25 倍而幾乎看不出差別。
@@ -221,14 +255,16 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 | 新增一種攻擊特效 `FxKind` | `sim/types.ts` 的 `FxKind` → `render/fx.ts:13` 的 `FX_COLOR` → `fx.ts:56` 的 switch → `app.ts:668` 的 `attackSfx()` | 三處都要加，`FX_COLOR` 漏了會 undefined 導致整幀繪製異常 |
 | 改階級／品質／提示／狀態顏色 | `render/theme.ts`（`TIER_COLOR:29` / `TIER_TINT:38` / `HINT_COLOR:51` / `QUALITY_COLOR:57` / `STATUS_COLOR:63`） | 提示色與品質色要保持可辨（見核心概念第 5 段的青綠衝突事故） |
 | 改棋盤上某個東西的畫法 | `render/renderer.ts` 對應的 `drawXxx` | 保持三趟順序；不要在 draw 裡改 state |
-| 加／改一個 HUD 元素 | `index.html` 加節點 → `hud.ts:73-97` 加 `el()` 欄位 → `hud.ts:178` 的 `update()` 寫值 | 高頻更新的請用 `dataset.sig` 差異比對 |
-| 加一個 HUD 按鈕觸發遊戲動作 | `HudHost`（`hud.ts:13`）加方法 → `hud.ts:150` 的 `bind()` 綁 click → `App` 實作並呼叫 `sim/actions.ts` | 別讓 `hud.ts` 直接 import `sim/actions` |
+| 加／改一個 HUD 元素 | `index.html` 加節點 → `hud.ts:79-110` 加 `el()` 欄位 → `hud.ts:231` 的 `update()` 寫值 | 高頻更新的請用 `dataset.sig` 差異比對 |
+| 加一個 HUD 按鈕觸發遊戲動作 | `HudHost`（`hud.ts:14`）加方法 → `hud.ts:181` 的 `bind()` 綁 click → `App` 實作並呼叫 `sim/actions.ts` | 別讓 `hud.ts` 直接 import `sim/actions` |
+| 往狀態列再加一個讀數 | `index.html` 的 `.bar-stats` 加 `.stat` → `hud.ts` 的 `update()` 寫值 | 讀數區在 375px 已接近塞滿（見核心概念第 6 段的實測）。再加一項就得先讓出別的東西，別靠壓縮字級硬塞 |
+| 改羈絆詳情顯示的內容 | `bondDetailHtml()`（`hud.ts:467-504`） | 加成一律用 `pct()` 翻成 ±%；新增 `BondDef` 欄位要記得補進這裡，否則玩家看不到 |
 | 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:445`），這是刻意的。最近一例：無盡畫面（`screens.ts` 的 `renderEndless`） |
 | 選單再加一個入口 | `index.html` 的 `.nav-grid` 加按鈕 → `style.css` 加 `.nav-xxx` 底色 | 網格是 3 欄；第 7 個入口用 `.nav-row`（`grid-column: 1/-1`）獨占一整列，否則第三列會只有一格看起來像漏了東西 |
 | 在新畫面裡放關卡卡片 | 直接用 `.level-card`（`renderEndless`／`renderDaily` 都是） | ⚠ `.codex-body` 是**純 block 容器**：`<button>` 會 shrink-to-fit，卡片寬度隨文字長短參差、右側 `.lv-meta` 被壓成兩行擠在一起。`.level-card { width: 100% }` 與 `.codex-body .level-card + .level-card` 的 `margin-top` 就是在補這件事（在 flex 的 `.level-list` 裡是 no-op）。說明文字（`.codex-detail`）一律放**卡片之後**——手機一頁只看得到約 4 張卡 |
 | 改選關卡／圖鑑／兵書／商城／編隊的呈現 | `ui/screens.ts` 對應 `renderXxx()` | 資料表本身在 `data/`（見 [02-data-tables.md](../02-data-tables.md)） |
 | 改 UI 整體大小或斷點 | `app.ts:134` 的除數（27 / 56）與 clamp（9.5 / 18）、`app.ts:137` 的 320px | 改除數會同時影響所有 DOM 尺寸 |
-| 極窄視窗要隱藏更多東西 | `style.css:78` 的 `#app[data-compact='true']` 區塊 | 不要改成 media query：斷點看的是 `#app` 而非視窗（`#app` 有 `max-width: 560px`） |
+| 極窄視窗要隱藏更多東西 | `style.css:166` 的 `#app[data-compact='true']` 區塊 | 不要改成 media query：斷點看的是 `#app` 而非視窗（`#app` 有 `max-width: 560px`） |
 | 改倍速選項 | `app.ts:36` 的 `SPEEDS` | 倍速只是往累加器多灌時間，太高會頂到 `MAX_STEPS_PER_FRAME` 而變慢動作 |
 | 改掉幀容忍度 | `core/loop.ts:6` 的 `MAX_STEPS_PER_FRAME` | 改大 → 慢機器可能死亡螺旋；改小 → 掉幀時遊戲變慢 |
 | 改粒子上限／密度 | `render/particles.ts:10` 的 `MAX` 與各方法的迴圈次數 | 超量丟棄是刻意的 |

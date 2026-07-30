@@ -20,16 +20,31 @@
   </head>
   <body>
     <div id="app">
+      <!--
+        狀態列分三區：左＝流程控制、中＝三個讀數、右＝節奏控制。
+        讀數擠成一個有底色的區塊，是為了讓「糧／命／波」在一堆按鈕之間仍讀得出來。
+      -->
       <header id="topbar">
-        <button id="btn-menu" class="icon-btn" title="選單">☰</button>
-        <button id="btn-pause" class="icon-btn" title="暫停">❚❚</button>
-        <button id="btn-auto" class="icon-btn" title="AI 代管：自動征兵、組將、佈陣">代管</button>
-        <div class="stat" title="糧"><span class="pill">糧</span><span id="stat-food">0</span></div>
-        <div id="level-name">巨鹿</div>
-        <div id="lives" class="lives"></div>
-        <div id="wave-info">第 1 波</div>
-        <button id="btn-mute" class="icon-btn" title="音效">♪</button>
-        <button id="btn-speed" class="icon-btn" title="速度">1×</button>
+        <div class="bar-side">
+          <button id="btn-menu" class="icon-btn" title="選單">☰</button>
+          <button id="btn-pause" class="icon-btn" title="暫停">❚❚</button>
+        </div>
+
+        <div id="bar-stats" class="bar-stats">
+          <div class="stat" title="糧草"><span class="pill">糧</span><span id="stat-food">0</span></div>
+          <div id="lives" class="stat lives" title="大營生命">
+            <span class="pill heart">♥</span><span id="lives-count">0</span>
+          </div>
+          <div class="stat wave" title="波次">
+            <span id="level-name"></span><span class="pill">波</span><span id="wave-info">1/12</span>
+          </div>
+        </div>
+
+        <div class="bar-side">
+          <button id="btn-auto" class="icon-btn" title="AI 代管：自動征兵、組將、佈陣">代管</button>
+          <button id="btn-speed" class="icon-btn" title="速度">1×</button>
+          <button id="btn-mute" class="icon-btn" title="音效">♪</button>
+        </div>
       </header>
 
       <main id="stage">
@@ -51,6 +66,16 @@
 
         <!-- 羈絆條與資訊面板都是棋盤上的浮層，不占版面 → 開關時棋盤不會被壓縮 -->
         <div id="bonds" class="bonds"></div>
+
+        <!-- 羈絆詳情：點羈絆條上的任一個標籤打開，說明條件、加成與組合技 -->
+        <section id="bondpanel" hidden>
+          <div class="info-head">
+            <span id="bond-name"></span>
+            <span class="tier bond-tier">羈絆</span>
+            <button id="bond-close" class="icon-btn">✕</button>
+          </div>
+          <div id="bond-body" class="info-desc"></div>
+        </section>
 
         <!-- 心願單挑選：列出本局字池，點一下切換 -->
         <section id="wishpanel" hidden>
