@@ -69,7 +69,9 @@ describe('攻擊特效的辨識資訊', () => {
     put(s, '槍', 2, 1)
     put(s, '火', 3, 1)
     put(s, '雷', 4, 1)
-    const fx = Object.fromEntries(s.units.map((u) => [u.defKey, u.fx]))
+    // 只看字牌：這幾個字相鄰時可能順便組成武將（例如火＋雷 → 火雷），
+    // 那是另一個測試的主題，不該讓這裡的斷言跟著配方表變動
+    const fx = Object.fromEntries(s.units.filter((u) => u.kind === 'glyph').map((u) => [u.defKey, u.fx]))
     expect(fx).toEqual({ 刀: 'blade', 弓: 'arrow', 槍: 'thrust', 火: 'fire', 雷: 'bolt' })
   })
 

@@ -30,7 +30,7 @@
    四條路徑共用同一套組詞規則。
 
 `actions.ts` 的鐵律（檔頭註解 `src/sim/actions.ts:1-7`）：**只改 `GameState`，不碰 DOM、不播音效、
-不回傳 JSX**。音效與粒子一律走 `emit()` 事件佇列（不變式 #7），由 `app.ts:253` 每幀 drain。
+不回傳 JSX**。音效與粒子一律走 `emit()` 事件佇列（不變式 #7），由 `app.ts:259` 每幀 drain。
 
 ## 核心概念
 
@@ -40,10 +40,10 @@
 
 | 欄位 | 意義 | 誰在讀 |
 |---|---|---|
-| `ok` | 操作是否成立 | `input/pointer.ts:106` 決定要不要 `select(cell)`；`app.ts:335` 決定播 `ui` 還是 `deny` |
+| `ok` | 操作是否成立 | `input/pointer.ts:108` 決定要不要 `select(cell)`；`app.ts:341` 決定播 `ui` 還是 `deny` |
 | `msg` | 給玩家看的字串（成功摘要或失敗原因） | 全部呼叫端都是 `if (res.msg) toast(res.msg)` |
-| `combined` | 這次成的武將名，**可能兩個**（十字同時成兩將） | `input/pointer.ts:105,202` → `host.onCombined()` → `app.ts:573` |
-| `broken` | 這次解除的武將名 | `input/pointer.ts:201`（**只在 `msg` 為空時**才自己 toast，避免與 `msg` 重複） |
+| `combined` | 這次成的武將名，**可能兩個**（十字同時成兩將） | `input/pointer.ts:107,205` → `host.onCombined()` → `app.ts:588` |
+| `broken` | 這次解除的武將名 | `input/pointer.ts:204`（**只在 `msg` 為空時**才自己 toast，避免與 `msg` 重複） |
 
 失敗一律用 `fail(msg)` helper（`src/sim/actions.ts:27`），回傳 `{ ok:false, msg }` 且**不改任何 state**
 （所有驗證都在改動之前做完）。`combined` 沒有東西時是 `undefined` 而**不是**空陣列
@@ -76,12 +76,34 @@
 | 同方向多個命中 → 先比 `TIER_ORDER`、再比配方字數 | `betterThan()` `:64-69` |
 | 同名 + 同格子（**順序敏感**）的武將不重複產生 | `alreadyFormed()` `:72-80` |
 
+### ★ 一枚字牌可以同時屬於好幾個武將（配方擴充後的推論）
+
+`findCombinations` 一次**每個方向最多回傳一個**，但**武將形成之後不會因為後來又形成別的武將而消失**
+（`alreadyFormed` 只擋「同名同格」）。於是同一枚字牌會隨著多次放置累積 `formIds`：
+
+```
+刀 盾 兵   →  放 刀盾 之後再放「兵」，盾兵 也成立
+              「盾」同時屬於 刀盾 與 盾兵，兩個武將各自獨立計算傷害
+```
+
+⚠ **`formIds` 的上限不是 2**（舊文件說「橫向與縱向各一，最多 2」）。
+字組合擴充後有些字**既是某配方的頭、又是另一個配方的尾**（`陣` → 風陣＋陣令），
+所以橫向就可能掛到兩個，加上縱向最多到四個。實測 `陣` 擺成十字時 `formIds.length === 3`。
+
+這是刻意接受的設計：它讓「一條線上連續鋪字」變成一種構築手法，與十字成雙同源。
+代價是玩家戰力整體上升——配方從 17 種擴到 43 種時，傻 AI 每波戰力約 +78%，
+用 `BASE_HP` 20 → 32 反向抵銷（見 [05-economy-and-waves.md](05-economy-and-waves.md)）。
+
+⚠ **不要新增「把既有配方再包一層」的巢狀配方**（例如已有 `車騎` 又加 `車騎兵`）：
+兩者會同時存在並共用同一批字牌，等於同一條線白拿兩份火力，而且沒有「升級取代」的語意。
+首尾相接（風陣＋陣令）可以，巢狀包覆不行。`data/generals.ts` 的兵種編制區有一段註解記著這件事。
+
 `runThrough` 的方向向量 `dc/dr` 由 `orientation` 決定（`:35-36`）：`'h'` = 左→右、`'v'` = 上→下，
 回傳陣列**就是正讀順序**（`before.unshift()` + `after.push()`，`:48,57`）。
 `makeGeneralUnit()` 直接把 `parts.map(p => p.cells[0])` 當成 `Unit.cells`（`src/sim/state.ts:318`），
 所以**正讀順序是從 `runThrough` 一路傳到渲染的**——這就是不變式 #5 的來源。
 
-搜尋上界是 `MAX_RECIPE_LEN`（`data/generals.ts:255`，由 `GENERALS` 自動算出最長配方），
+搜尋上界是 `MAX_RECIPE_LEN`（`data/generals.ts:338`，由 `GENERALS` 自動算出最長配方），
 新增更長的配方不需要改 `combine.ts`。
 
 ## 主要流程
@@ -127,7 +149,7 @@ B 兩邊都算「移動」，所以兩邊的武將都解除、兩端都要重新
 2. 把**所有**字牌的 `formIds` 裡對應 id 清掉（`:260-262`）——不只成員，是全掃，寫法上不用先算成員集合
 3. `delete state.bondCds[name]`（`:264`）——羈絆技冷卻以武將名為 key，武將沒了就得歸零，
    否則重新組同一名武將會繼承舊冷卻
-4. 每個被解除的武將 `emit({ kind:'dissolve', name })`（`:265`）→ `app.ts:271` 播音效
+4. 每個被解除的武將 `emit({ kind:'dissolve', name })`（`:265`）→ `app.ts:277` 播音效
 
 **回傳武將名陣列**，供 `ActionResult.broken`。**它自己不呼叫 `recalcUnits`**，由 action 收尾時統一呼叫。
 
@@ -252,7 +274,7 @@ findCombination (board, units, changedCell): CombineMatch|null ← 只給測試�
 `tryCombine` 每個武將發 `combine`（`:282`）、`dissolveFormsOf` 每個武將發 `dissolve`（`:265`）。
 但 **`mergeHand`（手牌之間疊合）與 `moveGlyph` 的移動／交換分支不發任何事件**，
 `recruit` / `rerollHand` / `smelt` / `sellGlyph` 也不發——這些操作的音效由 UI 層依 `res.ok` 自己播
-（例如 `app.ts:335`）。加事件前先確認 `SimEvent` 聯集（`sim/types.ts`）與 `app.ts:253` 的 drain switch
+（例如 `app.ts:341`）。加事件前先確認 `SimEvent` 聯集（`sim/types.ts`）與 `app.ts:259` 的 drain switch
 都要同步，否則事件被無聲丟棄。
 
 ### 陷阱 6：`alreadyFormed` 的比對是順序敏感的

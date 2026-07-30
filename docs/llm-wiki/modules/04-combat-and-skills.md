@@ -5,7 +5,7 @@
 > | 檔案 | 規模 | 職責 |
 > |---|---|---|
 > | `src/sim/combat.ts` | 348 行 | 索敵、射程、傷害公式、控場狀態與三種免疫、特效佇列（`stepCombat` / `stepEffects`） |
-> | `src/sim/skills.ts` | 384 行 | 9 個技能原型、`SKILLS`（30 個主動技）、`stepSkills`、`COMBOS`（5 個組合技）、`bondMembers` |
+> | `src/sim/skills.ts` | 387 行 | 9 個技能原型、`SKILLS`（33 個主動技）、`stepSkills`、`COMBOS`（5 個組合技）、`bondMembers` |
 > | `src/sim/bonds.ts` | 82 行 | `computeBonds`（倍率彙總，由 `recalcUnits` 呼叫）、`stepBondSkills`（每 tick） |
 > | `src/data/bonds.ts` | 96 行 | `BONDS` 資料表：13 個羈絆的條件、倍率、組合技宣告 |
 >
@@ -105,11 +105,11 @@ export function canHit(u: Unit, e: Enemy): boolean {
 
 ### 6. 控場狀態與三種免疫
 
-狀態存在 `Enemy` 上，全部是「剩餘秒數」（`types.ts:256-262`），由 `step.ts:133-146` 的 `stepStatuses` 倒數，
+狀態存在 `Enemy` 上，全部是「剩餘秒數」（`types.ts:263-269`），由 `step.ts:133-146` 的 `stepStatuses` 倒數，
 `applyStatus`（`combat.ts:214-238`）一律用 `Math.max` 覆寫（**取較長者，不累加**）。
 
 免疫**不是**一個開關而是三個獨立欄位，各自擋掉不同的東西（`Enemy` 的 `ccImmune`／`burnImmune`／`slowImmune`，
-`types.ts:251-253`）：
+`types.ts:258-260`）：
 
 | 狀態 | 欄位 | 生效處 | 被誰擋掉 |
 |---|---|---|---|
@@ -171,7 +171,7 @@ export function canHit(u: Unit, e: Enemy): boolean {
 
 ### 10. 施放失敗不重設冷卻
 
-`stepSkills`（`skills.ts:272-289`）：只有 `fn(state, u)` 回傳 `true` 才 `skillCd = skillCdMax`。
+`stepSkills`（`skills.ts:278-295`）：只有 `fn(state, u)` 回傳 `true` 才 `skillCd = skillCdMax`。
 沒有目標時不該浪費一整輪冷卻——否則「敵人剛出場就被技能空放清掉」會讓玩家覺得技能不受控。
 同一哲學也在攻擊上：`stepCombat` 找不到目標時把 `u.cd = 0`（`combat.ts:257`），下一 tick 立刻可打。
 
@@ -192,7 +192,7 @@ export function canHit(u: Unit, e: Enemy): boolean {
 組合技（`stepBondSkills`，`bonds.ts:68`）：
 - 羈絆不成立 → `delete state.bondCds[name]`，**重新湊齊要重新等冷卻**。
 - 剛湊齊時給 `min(4, cdMax)` 的短冷卻，讓玩家馬上看到一次（`bonds.ts:79`）。
-- 傷害以 `sumAtk(members)`（**參與武將的實效攻擊力總和**，`skills.ts:294`）為基準 →
+- 傷害以 `sumAtk(members)`（**參與武將的實效攻擊力總和**，`skills.ts:300`）為基準 →
   越晚湊齊、武將等級越高，組合技越痛。這是後期構築的主要爆發來源。
 - 組合技沒有施放者，走 `flatDamage()`：**不吃相剋、不吃對空加成、不吃易傷、不會爆擊**，只過 `mitigate`。
 
@@ -244,8 +244,8 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
    在 `combat.ts` / `skills.ts` 加機率效果時**沿用短路寫法**。
 
 3. **`applyStatus` 的第 4 參數 `baseAtk` 只餵灼燒**（`combat.ts:219`：`burnDps = baseAtk × burn.mul`）。
-   組合技傳 `0` 時灼燒 dps 會是 0 —— 這就是 `江東基業` 特意傳 `total * 0.6` 的原因（`skills.ts:359`），
-   而 `桃園結義` 只給 stun/vuln 所以傳 0 沒事（`skills.ts:321`）。**新組合技帶 `burn` 時務必傳非 0 的基準值。**
+   組合技傳 `0` 時灼燒 dps 會是 0 —— 這就是 `江東基業` 特意傳 `total * 0.6` 的原因（`skills.ts:365`），
+   而 `桃園結義` 只給 stun/vuln 所以傳 0 沒事（`skills.ts:327`）。**新組合技帶 `burn` 時務必傳非 0 的基準值。**
 
 4. **`computeBonds` 必須收到 `perks.cdMul` 才算得對 `cdMax`。**（曾經是 bug，已修）
    面板顯示的 `active[].combo.cdMax` 用 `bonds.ts:49` 的 `effectiveCdMul = cdMul × perksCdMul`，
@@ -254,7 +254,7 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
    導致買冷卻道具後**面板顯示的冷卻比實際偏長**。
    **新增任何會影響冷卻的來源時，記得兩邊都要納入**；`shop.test.ts` 有迴歸守護測試。
 
-5. **`bondMembers` 的 fallback 會回傳全部武將**（`skills.ts:383`：`generals.filter(() => bondName.length > 0)`）。
+5. **`bondMembers` 的 fallback 會回傳全部武將**（`skills.ts:389`：`generals.filter(() => bondName.length > 0)`）。
    只有在羈絆既沒 `requireGenerals` 也沒 `requireTag` 時才會走到（目前不存在這種資料）。
    新增這種羈絆前先想清楚 `sumAtk` 會把全場武將都算進去。
 
@@ -263,7 +263,7 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
 7. **`Effect` 只是視覺，`pushEffect` 超過 240 筆直接丟棄**（`combat.ts:242`）。不要把任何機制資訊塞進 `state.effects`，它會被丟。
    `ring` 用 `toX − fromX` 偷渡半徑給 renderer（`skills.ts:38`），改 `Effect` 結構時注意這個約定。
 
-8. **音效與粒子一律走 `emit()`**（`attack` / `kill` / `skill` / `combo`），`sim/` 內不可碰 Audio／canvas。事件佇列上限 64（`types.ts:311`）。
+8. **音效與粒子一律走 `emit()`**（`attack` / `kill` / `skill` / `combo`），`sim/` 內不可碰 Audio／canvas。事件佇列上限 64（`types.ts:318`）。
    ⚠ 敵方的死亡分裂與回血**刻意不 emit 任何事件**（分裂一次可能生 6 隻、回血每幀發生，會把佇列與音效淹掉）。
 
 9. `stepCombat` 用 `u.atk <= 0 || u.aps <= 0` 過濾光環／經濟字（`combat.ts:251`）；`effectiveRange` 另外用 `baseRange <= 0` 短路。兩個條件都要成立才算「完全不攻擊」。
@@ -278,12 +278,12 @@ actions.ts 任一操作 → recalcUnits(state)（state.ts:393）
 | 防禦曲線 | `combat.ts:14` `DEF_K` | `mitigate` 有 `max(1, …)` 地板，別移除 |
 | 相剋強度 | `combat.ts:17-18` `COUNTER_BONUS` / `COUNTER_PENALTY` | 相剋環定義在 `counterMul` 的 `beats` 表（騎→弓→步→騎） |
 | 減速／易傷幅度 | `combat.ts:15-16` `SLOW_FACTOR` / `VULN_MUL` | 減速幅度是全域固定值，資料表只能給**持續秒數** |
-| 某武將的技能數值 | `skills.ts:230-266` 的 `SKILLS` 那一行 | 冷卻在 `data/generals.ts` 的 `skill.cd`，不在這裡 |
+| 某武將的技能數值 | `skills.ts:230-272` 的 `SKILLS` 那一行 | 冷卻在 `data/generals.ts` 的 `skill.cd`，不在這裡 |
 | 新增一名武將的主動技 | ① `data/generals.ts` 宣告 `skill: { name, cd, desc }` ② `skills.ts` 的 `SKILLS['武將名']` 註冊 | 兩邊缺一就靜默失效；優先組合現有原型。完整步驟見 [../03-change-recipes.md](../03-change-recipes.md) §10 |
 | 新增技能原型 | `skills.ts:67-227` 區塊 | **最後手段**。必須回傳 `boolean`，且失敗時不得產生副作用 |
 | 新增一種控場狀態 | 要改七處（`OnHit` 型別、`Enemy` 欄位、`makeEnemy` 初值、`applyStatus`、`stepStatuses`、`mergeOnHit`、render／hud 顯示） | 完整清單見 [../03-change-recipes.md](../03-change-recipes.md) §10b；漏一處會安靜失效 |
 | 新增羈絆 | `data/bonds.ts` 加一筆；有組合技再到 `skills.ts` 的 `COMBOS` 註冊 | **門檻 <= `MAX_LOADOUT_GENERALS`（5）**，否則 `loadout.test.ts` 會紅；描述文字要跟數值一致（UI 直接顯示 `desc`） |
-| 組合技威力 | `skills.ts:315-376` 的 `sumAtk(members) × n` 係數 | 基準是實效攻擊力總和，後期成長很快，係數調 0.1 影響就很大 |
+| 組合技威力 | `skills.ts:321-382` 的 `sumAtk(members) × n` 係數 | 基準是實效攻擊力總和，後期成長很快，係數調 0.1 影響就很大 |
 | 某隻敵人免疫什麼 | `data/enemies.ts` 該筆的 `ccImmune` / `burnImmune` / `slowImmune` | **不要改 `applyStatus` 的判斷**——三種免疫已經各自獨立，逐筆宣告即可。改完同步該筆的 `desc` 與 `m3.test.ts:134` |
 | 新增第四種免疫 | `types.ts` 的 `EnemyDef` ＋ `Enemy` ＋ `step.ts:86-88` 的 `makeEnemy` ＋ `applyStatus`（`combat.ts:214-238`） | 漏掉 `makeEnemy` 那一行會靜默失效。**易傷刻意保持不可免疫**，別順手補上去 |
 | 擊殺獎勵 / 死亡飄字 | `damageEnemy`（`combat.ts:151-174`） | 唯一的死亡結算點，`dealDamage` 也會流經這裡 |

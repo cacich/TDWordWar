@@ -17,13 +17,13 @@
 
 ## 這個模組解決什麼問題
 
-1. **單一狀態樹**：整局遊戲只有一個 `GameState`（`types.ts:389`）。沒有隱藏在 render/ui 裡的第二份真實資料，所以 `npm run sim` 能在 Node 裡跑完整對局。
+1. **單一狀態樹**：整局遊戲只有一個 `GameState`（`types.ts:396`）。沒有隱藏在 render/ui 裡的第二份真實資料，所以 `npm run sim` 能在 Node 裡跑完整對局。
 2. **字牌與武將的雙層模型**：武將不取代字牌，而是疊在字牌上的一層。這個決定讓「組將後繼續疊字升階」、「抽走一個字換將」、「一個字同時屬於橫向與縱向兩個武將」三種玩法成立，代價是**一格可能有多個 `Unit`**。
 3. **基礎值 / 實效值分離**：`baseAtk`/`baseAps` 是可重算的純函式輸出，`atk`/`aps` 是每次 `recalcUnits()` 從基礎值重新推導的快取。這讓「羈絆、光環、局外道具」可以任意重算而不會層層複利。
 
 ## 核心概念
 
-### `Unit`：字牌與武將共用型別（`types.ts:131-187`）
+### `Unit`：字牌與武將共用型別（`types.ts:131-194`）
 
 ```
 state.units = [ ...字牌(kind:'glyph'), ...武將(kind:'general') ]   // 同一個陣列，格子會重疊
@@ -33,7 +33,7 @@ state.units = [ ...字牌(kind:'glyph'), ...武將(kind:'general') ]   // 同一
 |---|---|---|
 | `cells` | 長度 1 | 配方全字，**依正讀順序**（橫向左→右／縱向上→下） |
 | `level` | 品質階級 1~5 | 成員階級之和（三階張＋二階飛 = 5） |
-| `formIds` | 所屬武將 id，**0～2 個** | 恆為 `[]` |
+| `formIds` | 所屬武將 id，**0 個以上**（見下方的上限說明） | 恆為 `[]` |
 | `memberIds` | 恆為 `[]` | 成員字牌 id，依正讀順序 |
 | `tier` | 恆 `'common'` | 來自 `GeneralDef.tier` |
 
@@ -42,13 +42,13 @@ state.units = [ ...字牌(kind:'glyph'), ...武將(kind:'general') ]   // 同一
 **為什麼不能假設「一格一個 unit」**：`張`右邊是`遼`、下面是`飛` → 同一枚`張`的 `formIds` 同時掛著張遼與張飛兩個武將 id。所以：
 
 - 取字牌：`glyphAt(state, cell)`（`state.ts:192`，比對 `kind==='glyph' && cells[0]===cell`）
-- 取覆蓋該格的武將：`formsAt(state, cell)`（`state.ts:197`，回傳 0～2 個）
+- 取覆蓋該格的武將：`formsAt(state, cell)`（`state.ts:197`，回傳 0 個以上）
 - 取武將成員：`glyphsOf(state, form)`（`state.ts:205`，走 `memberIds` 查 id，**不是**走 `cells`）
 
 **「成員字牌不重複計算」是散落在三處的同一條規則**（都用 `formIds.length > 0` 判斷）：
 攻擊 `combat.ts:250`、產糧 `economy.ts:45`、光環投射 `state.ts:415`。新增任何「掃全場 units 加總」的邏輯時必須自己補這個判斷，模組本身不會幫你擋。
 
-### 基礎值 vs 實效值（`types.ts:161-169`）
+### 基礎值 vs 實效值（`types.ts:168-176`）
 
 ```
 baseAtk = GlyphDef.atk × levelMul(level)                    ← 字牌，makeGlyphUnit:194
@@ -63,14 +63,14 @@ range = effectiveRange(board, u) × perks.rangeMul           ← effectiveRange 
 `recalcUnits` 每次都從 `base*` 重算 `atk`/`aps`，所以它是**冪等**的——重複呼叫不會讓倍率複利。這是「絕對不要把加成寫進 `baseAtk`」的理由。
 兵種相剋、爆擊、`splashMul`、防禦減免不在這裡，它們是每次出手時算的，見 `modules/04-combat-and-skills.md`。
 
-### `GameState` 的分區（`types.ts:389-458`）
+### `GameState` 的分區（`types.ts:396-465`）
 
 - **不變量**：`levelKey` / `levelName` / `hpMul` / `bias` / `board` / `pool` / `poolGenerals` / `perks`（整局固定，`perks` 由 `createGame` 從 `meta.items` 算好；`bias` 是關卡的敵人偏好，`createGame:116` 從 `level.bias` 抄進來，只被 `buildWave` 讀）
 - **RNG**：`state.rng`（`createGame:102` 建立的 mulberry32）。**禁用 `Math.random()`**，同種子必須重現同一場。
 - **真實資料**：`units` / `enemies` / `hand` / `food` / `lives` / `wave` / `phase`
 - **每 tick 遞減**：`prepTimer` / `waveTime` / `meteorTimer` / `bondCds` / 單位的 `cd` / `skillCd` / `*Flash`
 - **衍生值（只由 `recalcUnits` 寫）**：`activeBonds` / `cdMul` / 每個 unit 的 `atk`/`aps`/`range`/`skillCdMax` / `hints` / `hintCells`
-- **輸出佇列**：`events`（`MAX_EVENTS = 64`，`types.ts:311`）、`effects`
+- **輸出佇列**：`events`（`MAX_EVENTS = 64`，`types.ts:318`）、`effects`
 
 ### `MetaProgress`（`state.ts:47-90`）
 
@@ -81,7 +81,7 @@ range = effectiveRange(board, u) × perks.rangeMul           ← effectiveRange 
 判定與發獎都在 `data/achievements.ts` 與 `app.ts`，見 [modules/06](06-meta-progression.md)。
 ⚠ 註解（`state.ts:44`）說 `seenGlyphs` 屬於 app 層，但**啟用編隊時 `createGame:106` 會把它傳進 `buildGlyphPool`**（`pool.ts:33,82`：沒解鎖過的字繼續留在池內）。改編隊邏輯時別被那行註解誤導。
 
-### `hintCells`（`types.ts:453-457`、`state.ts:447-477`）
+### `hintCells`（`types.ts:460-464`、`state.ts:447-477`）
 
 純 UI 衍生值，`recalcUnits` 最後一步產生，`render/renderer.ts:235` 消費（畫脈動光暈）。
 `kind:'upgrade'` = 手牌＋場上有 ≥2 枚同字同階且未滿階；`kind:'combine'` = 該字是 `state.hints` 裡某個可湊配方的成員字。判定刻意寬鬆、每格最多一筆（upgrade 優先），**不影響任何機制**，改它不必跑 `npm run sim`。
@@ -91,7 +91,7 @@ range = effectiveRange(board, u) × perks.rangeMul           ← effectiveRange 
 ### 開局
 
 `createGame(levelKey, seed, meta)`（`state.ts:132`）→ `LEVELS[key]` → `level.map ?? generateMap(rng, level.gen!)` → `parseMap` → `buildGlyphPool(rng, level, loadout)` → `perksFrom(meta.items)` → 回傳一棵全新的 state。
-**`createGame` 不呼叫 `recalcUnits`**，所以 `cdMul` 留在初值 `1`、`hints`/`hintCells` 為空。呼叫端自己補：`app.ts:69`、`app.ts:515`；測試裡的同一個坑見 `__tests__/shop.test.ts:220` 的註解。
+**`createGame` 不呼叫 `recalcUnits`**，所以 `cdMul` 留在初值 `1`、`hints`/`hintCells` 為空。呼叫端自己補：`app.ts:75`、`app.ts:521`；測試裡的同一個坑見 `__tests__/shop.test.ts:220` 的註解。
 
 ### 放一個字 → 可能成兩將
 
@@ -150,12 +150,12 @@ actions.placeFromHand(actions.ts:133)
 | 武將攻擊／攻速／等級／產糧公式 | `state.ts:361-387` `recomputeForm` | **不是** `makeGeneralUnit`。改完跑 `npm run sim` 對照 CLAUDE.md 的中位數基準 |
 | 字牌基礎屬性隨階級的成長 | `data/glyphs.ts:129` `LEVEL_MUL`／`makeGlyphUnit:194` | 影響全部武將（`baseAtk` 是加總來源），改動幅度要小 |
 | 羈絆／光環／perks 的疊法（相乘改相加等） | `state.ts:405-427` | 別破壞「每次都從 `base*` 重設」的冪等性 |
-| 新增一種全場被動加成 | `types.ts:342` `Perks` ＋ `data/shop.ts` ＋ `state.ts:405-411` | `Perks` 新欄位必須有中性值（倍率 1／機率 0），否則會改變無道具時的難度基準 |
+| 新增一種全場被動加成 | `types.ts:349` `Perks` ＋ `data/shop.ts` ＋ `state.ts:405-411` | `Perks` 新欄位必須有中性值（倍率 1／機率 0），否則會改變無道具時的難度基準 |
 | 光環的成長曲線或半徑 | `state.ts:252` `scaleAura` | `radius` 目前不隨階級成長；武將沿用成員的 aura 物件參考（陷阱 5） |
 | 武將的攻擊特效繼承 | `state.ts:268` `FX_PRIORITY` / `240` `inheritFx` / `313` `deriveGeneralFx` | 只認資料表明確宣告的 `fx`（陷阱 6） |
 | 控場效果的繼承合併 | `state.ts:286` `mergeOnHit` ＋ `types.ts:48` `OnHit` | 新增 `OnHit` 欄位要同步補一行 max 合併，否則武將不會繼承 |
 | `Unit` 加新欄位 | `types.ts:144` ＋ `makeGlyphUnit:183` ＋ `makeGeneralUnit:278` ＋（需跨升階保留時）`actions.ts:171` | 三處工廠都要給初值，否則 `undefined` 會漏到 render |
-| `GameState` 加新欄位 | `types.ts:389` ＋ `createGame:112` | 衍生值請在 `recalcUnits` 尾段產生，不要在 render 裡算 |
+| `GameState` 加新欄位 | `types.ts:396` ＋ `createGame:112` | 衍生值請在 `recalcUnits` 尾段產生，不要在 render 裡算 |
 | 局外存檔加新項目 | `state.ts:47` `MetaProgress` ＋ `DEFAULT_META:61` ＋ `core/save.ts` 的遷移 | 舊存檔沒有這個 key，讀取端要有預設值 |
 | 提示光暈的判定 | `state.ts:447` `computeHintCells`（消費端 `render/renderer.ts:235`） | 純 UI，不影響機制，不必跑平衡 |
 | 編隊上限／羈絆門檻 | `state.ts:113-125` `MAX_LOADOUT_*` ＋ `data/bonds.ts` | 兩者互相牽制，見陷阱 8 |

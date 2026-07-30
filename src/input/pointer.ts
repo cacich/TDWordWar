@@ -23,6 +23,8 @@ export interface PointerHost {
   select(cell: number | null): void
   toast(msg: string): void
   onCombined(names: string[]): void
+  /** 只標記位置、**不**開啟詳情面板（放置／搬移後用） */
+  highlight(cell: number): void
 }
 
 export class Input {
@@ -105,7 +107,8 @@ export class Input {
       if (res.combined?.length) this.host.onCombined(res.combined)
       if (res.ok) {
         this.disarm()
-        this.host.select(cell)
+        // 只標記落點，不開詳情——連續放置時每次都要先關面板才能操作，很煩
+        this.host.highlight(cell)
       }
       // 放置失敗（例如點到路上）就保持待放置，讓玩家再點一次別的格子
       return
@@ -163,7 +166,7 @@ export class Input {
     const cell = d.targetCell
 
     if (src?.kind === 'unit' && !this.moved) {
-      // 沒有移動 → 視為點選該格
+      // 沒有移動 → 視為點選該格。**這是唯一會開啟詳情面板的路徑**
       const g = unitById(state, src.id)
       this.host.select(g ? g.cells[0] : null)
       this.cancel()
@@ -200,7 +203,7 @@ export class Input {
       if (res.msg) this.host.toast(res.msg)
       if (res.broken?.length && !res.msg) this.host.toast(`解除 ${res.broken.join('、')}`)
       if (res.combined?.length) this.host.onCombined(res.combined)
-      if (res.ok) this.host.select(cell)
+      if (res.ok) this.host.highlight(cell)
     } else if (src?.kind === 'hand') {
       this.host.toast('請放在棋盤的空地上')
     }

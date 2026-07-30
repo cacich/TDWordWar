@@ -14,7 +14,7 @@
 > | `src/core/devtools.ts` | 55 行 | 開發密技：直接竄改 state／meta 的測試後門 |
 >
 > **上游依賴**：`sim/state.ts`（`MetaProgress`、`DEFAULT_META`、`MAX_*` 常數、`renownFor`）、
-> `sim/types.ts:342-377`（`Perks`）、`data/glyphs.ts`、`data/generals.ts`。
+> `sim/types.ts:349-384`（`Perks`）、`data/glyphs.ts`、`data/generals.ts`。
 >
 > **下游使用者**：`main.ts:11`（`loadMeta()` → `new App`）、`app.ts`（唯一呼叫 `saveMeta` 的地方）、
 > `ui/screens.ts`（兵書／商城／編隊／成就／密技五個畫面）、`sim/state.ts:145`（`perksFrom`）、
@@ -27,7 +27,7 @@
 
 | 系統 | 存哪裡 | 怎麼影響對局 | 檔案 |
 |---|---|---|---|
-| 圖鑑 | `seenGlyphs` / `seenGenerals` | 不影響（純收集紀錄），但是編隊的解鎖判定來源 | 由 `app.ts:139-189` 每幀寫入 |
+| 圖鑑 | `seenGlyphs` / `seenGenerals` | 不影響（純收集紀錄），但是編隊的解鎖判定來源 | 由 `app.ts:145-195` 每幀寫入 |
 | 兵書 | `handSize` / `wishSlots` / `extraFood` / `extraLives` | `createGame` 直接讀這些欄位 | `data/upgrades.ts` |
 | 商城 | `items`（key → 等級） | 先推導成 `Perks`，再注入 `GameState.perks` | `data/shop.ts` |
 | 編隊 | `loadoutActive` / `loadoutGlyphs` / `loadoutGenerals` | `createGame` 轉成 `LoadoutConfig` 給 `buildGlyphPool` | `data/loadout.ts` |
@@ -122,7 +122,7 @@
 renownFor(wave, kills, won) = max(1, round(wave * 1.5 + kills * 0.05) + (won ? 20 : 0))
 ```
 
-波次是主要來源，擊殺是零頭，通關 +20。呼叫點只有 `app.ts:196`，
+波次是主要來源，擊殺是零頭，通關 +20。呼叫點只有 `app.ts:202`，
 用 `this.renownPaid` 旗標保證 **一局只結一次**（`phase` 變成 `won`／`lost` 後每幀都會經過那段）。
 
 ### ★ 成就：每一個都是「計數器 >= 門檻」，沒有布林條件
@@ -153,7 +153,7 @@ UI 只需要順序，而序號讓 `data/achievements.ts` 不必碰 `Date`，整�
 1. **既有的 meta 欄位**：`cleared` / `best` / `seenGlyphs` / `seenGenerals` / `handSize`。
 2. **`meta.totals`**（`RunTotals`，型別定義在 `sim/state.ts:29-40`）：`runs` / `wins` / `kills` / `waves`。
 
-⚠ `totals` **只在一局真正結束（勝或敗）時累加一次**，就寫在 `app.ts:198-203` 的
+⚠ `totals` **只在一局真正結束（勝或敗）時累加一次**，就寫在 `app.ts:204-209` 的
 `renownPaid` 區塊裡。放這裡是為了共用那個「一局只結一次」的旗標——
 若改成每幀累加，同一局會被重複計入；若改成回選單時累加，玩家反覆開關選單也會重複計入。
 代價是**中途離開的那一局不列入統計**，這是刻意接受的定義（UI 的說明文字有寫）。
@@ -165,15 +165,15 @@ UI 只需要順序，而序號讓 `data/achievements.ts` 不必碰 `Date`，整�
 
 | 時機 | 位置 | 為什麼需要它 |
 |---|---|---|
-| 每 0.5 秒輪詢 | `app.ts:209-214` | 24 個成就要掃全場單位，不必每幀跑；0.5 秒對 toast 來說夠即時 |
-| 一局結束的當下 | `app.ts:206`（`renownPaid` 區塊內） | 「通關且沒掉命」這類條件**只有那一刻成立**，等下一次輪詢玩家可能已經回選單 |
-| 切換畫面時 | `app.ts:431-436` 的 `show()` | `syncProgress` 在選單畫面會早退，所以「在選單裡才達成」的成就（把兵書買滿）只能靠這裡補 |
+| 每 0.5 秒輪詢 | `app.ts:215-220` | 24 個成就要掃全場單位，不必每幀跑；0.5 秒對 toast 來說夠即時 |
+| 一局結束的當下 | `app.ts:212`（`renownPaid` 區塊內） | 「通關且沒掉命」這類條件**只有那一刻成立**，等下一次輪詢玩家可能已經回選單 |
+| 切換畫面時 | `app.ts:437-442` 的 `show()` | `syncProgress` 在選單畫面會早退，所以「在選單裡才達成」的成就（把兵書買滿）只能靠這裡補 |
 
-⚠ **成就解鎖是立即 `saveMeta`，不走 2 秒節流**（`app.ts:229-242`）：
+⚠ **成就解鎖是立即 `saveMeta`，不走 2 秒節流**（`app.ts:235-248`）：
 多數成就在一局結束的那一刻達成，而玩家常常馬上回選單，等節流會來不及寫入。
 
 ⚠ **一次解鎖多項時要合併成一則 toast**。`hud.toast()` 只有一格、後蓋前（`ui/hud.ts:172-176`），
-在迴圈裡逐項 toast 只會看到最後一項。`app.ts:237-242` 因此把它們併成一句。
+在迴圈裡逐項 toast 只會看到最後一項。`app.ts:243-248` 因此把它們併成一句。
 
 ### 成就的獎勵總額是一個平衡數字
 
@@ -269,10 +269,10 @@ localStorage['tdwordwar.meta.v3']（沒有 → 依序找 LEGACY_KEYS: v2, v1）
 
 ### 寫入（`saveMeta`）
 
-`saveMeta` 本身沒有節流，**節流在 app 層**：`app.ts:216-222`，
+`saveMeta` 本身沒有節流，**節流在 app 層**：`app.ts:222-228`，
 `metaDirty` 旗標 + `saveTimer` 倒數，最多每 2 秒寫一次（圖鑑是每幀掃描的，不節流會每幀寫 localStorage）。
-但**購買／編隊／密技類操作是立即寫入**（`app.ts:366`、`:296`、`:305`、`:311`、`:318`、`:326`、`:347`）——
-它們發生在選單畫面，`syncProgress` 因為 `screens.visible` 早退（`app.ts:140`）不會跑到節流那段。
+但**購買／編隊／密技類操作是立即寫入**（`app.ts:372`、`:296`、`:305`、`:311`、`:318`、`:326`、`:347`）——
+它們發生在選單畫面，`syncProgress` 因為 `screens.visible` 早退（`app.ts:146`）不會跑到節流那段。
 
 ### 購買（兵書與商城完全同構）
 
@@ -283,7 +283,7 @@ buyUpgrade(meta, key)  /  buyItem(meta, key)
   → 已滿級 → 擋
   → def.cost(lv) > meta.renown → 擋
   → meta.renown -= cost；兵書呼叫 def.apply(meta)／商城 meta.items[key] = lv + 1
-  → 回傳 BuyResult { ok, msg }（msg 直接進 toast，見 app.ts:368）
+  → 回傳 BuyResult { ok, msg }（msg 直接進 toast，見 app.ts:374）
 ```
 
 兩者都**原地改 meta、不回傳新物件**，呼叫端要自己 `saveMeta` 並重繪畫面。
@@ -346,7 +346,7 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 `tdwordwar.run.v1` 只在每波開始與頁面隱藏時寫；分開存也讓局內存檔壞掉時不會連累局外進度。
 `GameState` 含 `rng` 閉包不能直接 `JSON.stringify`，快照的產生與還原在 `sim/persist.ts`（純函式）。
 
-**靜音設定不在這裡。** `tdwordwar.muted` 是獨立的 key，讀寫在 `app.ts:649-665`，不走 `MetaProgress`。
+**靜音設定不在這裡。** `tdwordwar.muted` 是獨立的 key，讀寫在 `app.ts:664-680`，不走 `MetaProgress`。
 
 **`loadMeta` 不清洗 `seenGlyphs`／`seenGenerals`。** `arr()`（`:98-100`）只過濾非字串。
 刪掉某個字／武將後，舊存檔會殘留不存在的識別字；目前無害（圖鑑 UI 是迭代 `GLYPHS` 再比對 Set，
@@ -363,7 +363,7 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
 | 調某個道具的數值 | `data/shop.ts` 對應項的 `detail` + `apply` 兩個陣列 | 兩處等級數必須一致，且 `apply` 只准寫自己那一欄（`shop.test.ts:78-88` 會抓） |
-| 新增一種商城道具 | ① `sim/types.ts:342` 加 `Perks` 欄位 → ② `data/shop.ts:230` 加中性值 → ③ `SHOP` 加一項（`cost: stdCost(base)`）→ ④ 在 `sim/` 讀取點乘進去 → ⑤ 更新 `shop.test.ts:53-76` 的中性清單 | **中性值一定要是 1 或 0**；讀取點記得寫上「中性時為何無影響」的註解；跑 `npm run sim` 確認中位數沒變 |
+| 新增一種商城道具 | ① `sim/types.ts:349` 加 `Perks` 欄位 → ② `data/shop.ts:230` 加中性值 → ③ `SHOP` 加一項（`cost: stdCost(base)`）→ ④ 在 `sim/` 讀取點乘進去 → ⑤ 更新 `shop.test.ts:53-76` 的中性清單 | **中性值一定要是 1 或 0**；讀取點記得寫上「中性時為何無影響」的註解；跑 `npm run sim` 確認中位數沒變 |
 | 改道具價格 | `stdCost(base)` 的 base，或整條曲線（`data/shop.ts:44-46`） | 重算買滿總價，跟兵書的 1230 一起看；`shop.test.ts:45-49` 要求逐級遞增 |
 | 提高道具等級上限 | `MAX_ITEM_LEVEL`（`data/shop.ts:20`）+ 每項的 `detail`／`apply` 陣列補值 | `apply` 用 `[...][lv-1]` 索引，陣列長度不足會拿到 `undefined` → NaN 傳染整局 |
 | 調／新增兵書項目 | `data/upgrades.ts` 的 `UPGRADES` | `level()` 必須是 `apply()` 的反函數；新欄位要同步 `MetaProgress`＋兩份預設值＋`loadMeta` clamp |
@@ -378,10 +378,10 @@ meta.loadoutActive ? { glyphs, generals, seenGlyphs } : undefined   // sim/state
 | **新增一個成就** | `data/achievements.ts` 的 `ACHIEVEMENTS` 加一筆 | 只要有 `progress()` 與 `goal` 就完成，UI 與存檔清洗都會自動跟上。⚠ `scope: 'run'` 的 `progress()` 在 `state === null` 時必須回 0；獎勵改動會被總額守護測試擋下 |
 | 成就的獎勵額度／總額 | 各筆的 `renown` | 總額 2130 夾在兵書 1230 與商城 13590 之間，`achievements.test.ts` 有守護測試 |
 | 成就分區／分區順序 | `AchieveGroup` + `GROUP_LABEL` + `GROUP_ORDER`（`achievements.ts:26-35`） | 三者都是 `Record<AchieveGroup, …>`，漏填 tsc 會擋；不在 `GROUP_ORDER` 裡的分區**整區不會被畫出來**（有測試把關） |
-| 成就的檢查頻率 | `app.ts:211` 的 `achieveTimer = 0.5` | 調小會讓每幀成本上升（要掃全場單位），調大會讓 toast 變遲鈍 |
-| 跨局統計要多記一項 | `RunTotals`（`sim/state.ts:29-40`）＋ `EMPTY_TOTALS` ＋ `core/save.ts` 的 `totals()` ＋ `app.ts:198-203` 的累加 | 累加**只能**放在 `renownPaid` 區塊裡，否則同一局會被重複計入 |
+| 成就的檢查頻率 | `app.ts:217` 的 `achieveTimer = 0.5` | 調小會讓每幀成本上升（要掃全場單位），調大會讓 toast 變遲鈍 |
+| 跨局統計要多記一項 | `RunTotals`（`sim/state.ts:29-40`）＋ `EMPTY_TOTALS` ＋ `core/save.ts` 的 `totals()` ＋ `app.ts:204-209` 的累加 | 累加**只能**放在 `renownPaid` 區塊裡，否則同一局會被重複計入 |
 | 破壞性改存檔格式 | `core/save.ts:24-25`：`KEY` 升到 v4，把 v3 推進 `LEGACY_KEYS` | 舊 key 的資料會被當成 partial 解析，不相容的欄位靠 clamp／過濾吸收 |
-| 新增一個開發密技 | `core/devtools.ts` 加函式 → `ui/screens.ts:53-59` 的 host 介面 → `app.ts:401+` 轉接 → `:173` 的 `actions` 陣列加按鈕 | 改 `units`／`hand` 要 `recalcUnits`；改 `meta` 要 `saveMeta` |
+| 新增一個開發密技 | `core/devtools.ts` 加函式 → `ui/screens.ts:53-59` 的 host 介面 → `app.ts:407+` 轉接 → `:173` 的 `actions` 陣列加按鈕 | 改 `units`／`hand` 要 `recalcUnits`；改 `meta` 要 `saveMeta` |
 
 ## 相關頁面
 

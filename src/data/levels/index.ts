@@ -56,7 +56,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 26,
     lives: 4,
     maxWave: 12,
-    hpMul: 0.55,
+    hpMul: 0.85,
     pool: { support: 2, generals: 3 },
     // 教學關不設偏好：先讓玩家認識最基本的賊與盾賊
     bias: [],

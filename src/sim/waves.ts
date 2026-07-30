@@ -9,7 +9,13 @@ import { BOSSES, ENEMY_BY_KEY, REGULARS } from '../data/enemies'
 import { pickWeighted } from '../core/rng'
 import type { EnemyDef, EnemyTrait, SpawnEntry } from './types'
 
-export const BASE_HP = 20
+/**
+ * 第 0 波的基準血量。**線性項**：它整條曲線等比例上下移，所以是用來抵銷
+ * 「玩家整體戰力變了」的對應旋鈕（`HP_GROWTH` 管的是成長率，不是水位）。
+ * 20 → 32：非姓名配方從 17 種擴到 42 種之後，兵器×兵器、兵種×兵種都能組將，
+ * 傻 AI 在每一波的戰力約 +78%，用血量水位等比例補回來。
+ */
+export const BASE_HP = 32
 /**
  * 每波血量成長率。這是全專案最敏感的難度旋鈕。
  * 1.18 → 1.19（M3 技能與光環）→ 1.21（M4b 武將可持續疊字，玩家後期戰力變成指數成長）

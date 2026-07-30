@@ -228,6 +228,12 @@ function burstAndFood(mul: number, extra: number, food: number): SkillFn {
 
 // ── 武將主動技註冊表 ──────────────────────────────────
 export const SKILLS: Record<string, SkillFn> = {
+  // 非姓名配方（兵器／兵種／謀略組合）。倍率刻意低於同階的姓名武將——
+  // 它們的字永遠在池內、湊起來容易得多，技能只是「錦上添花」而不是主力
+  戟斧: burst(1.6, 0.6, { stunDur: 0.7 }),
+  火雷: burst(1.7, 0.9, { burn: { mul: 0.8, dur: 4 }, chain: 2 }),
+  雷車: lineStrike(1.5, 2.0, { chain: 2 }),
+
   // 謀略
   火計: burst(1.8, 1.0, { burn: { mul: 0.9, dur: 4 } }),
   毒計: crowd({ burn: { mul: 1.1, dur: 5 }, slowDur: 2 }, 1.2),

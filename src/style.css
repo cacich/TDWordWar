@@ -342,6 +342,22 @@ body {
   letter-spacing: calc(var(--ui) * 0.14);
 }
 
+/* 「可組成」清單：字牌詳情最下方，告訴玩家這個字還能往哪裡發展 */
+.info-recipes {
+  border-top: 1px dashed #c9bfa8;
+  margin-top: calc(var(--ui) * 0.42);
+  padding-top: calc(var(--ui) * 0.35);
+}
+
+.info-recipes .hint-row {
+  font-size: calc(var(--ui) * 0.82);
+  line-height: 1.5;
+}
+
+.info-recipes .hint-row span:first-child {
+  font-weight: 700;
+}
+
 .info-actions {
   display: flex;
   gap: calc(var(--ui) * 0.55);

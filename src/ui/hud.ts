@@ -3,7 +3,7 @@
  * 每幀呼叫 update()，內部只在值有變動時寫 DOM。
  */
 import { GLYPH_BY_CHAR, qualityName } from '../data/glyphs'
-import { GENERAL_BY_NAME } from '../data/generals'
+import { GENERAL_BY_NAME, generalsUsing } from '../data/generals'
 import { recruitCost, rerollCost } from '../sim/economy'
 import { TIER_COLOR, TIER_LABEL, qualityColor } from '../render/theme'
 import type { GameState, GlyphCategory, OnHit, Unit } from '../sim/types'
@@ -16,7 +16,7 @@ export interface HudHost {
   setMode(m: Mode): void
   /** 選取的格子上的字牌 */
   getSelectedGlyph(): Unit | null
-  /** 選取的格子上的武將（0～2 個） */
+  /** 選取的格子上的武將（0 個以上，上限不是 2） */
   getSelectedForms(): Unit[]
   isPaused(): boolean
   getSpeed(): number
@@ -354,9 +354,35 @@ export class Hud {
         '</div>'
     }
 
+    // 「這個字還能組成什麼」——只列本局字池湊得出來的，否則會給出做不到的建議
+    if (g) html += recipeHints(g.chars[0], this.host.getState().pool, forms)
+
     el('info-desc').innerHTML = html
     el('info-target').textContent = `索敵：${TARGET_LABEL[(forms[0] ?? head).targeting]}`
   }
+}
+
+/**
+ * 這個字能組成哪些武將。**只列本局字池內湊得出來的**——列出池外的配方等於給玩家
+ * 一個做不到的目標，比不列更糟。已經在這一格組成的武將會排除掉（上面已經列過了）。
+ *
+ * 每一列標出還缺哪幾個字（把該字本身與已組成的部分區隔開），
+ * 這樣玩家不必自己回頭比對配方。
+ */
+function recipeHints(char: string, pool: readonly string[], forms: Unit[]): string {
+  const formed = new Set(forms.map((f) => f.defKey))
+  const list = generalsUsing(char, pool).filter((d) => !formed.has(d.name))
+  if (!list.length) return ''
+  const rows = list
+    .slice(0, 6)
+    .map((d) => {
+      const recipe = d.recipe.map((c) => (c === char ? `<b>${c}</b>` : c)).join('＋')
+      return `<div class="hint-row"><span style="color:${TIER_COLOR[d.tier]}">${d.name}</span>` +
+        ` <span class="muted">${recipe}</span></div>`
+    })
+    .join('')
+  const more = list.length > 6 ? `<div class="hint-row muted">…另有 ${list.length - 6} 種</div>` : ''
+  return `<div class="info-recipes"><div class="muted">可組成（本局字池）</div>${rows}${more}</div>`
 }
 
 function statsOf(u: Unit): string[] {

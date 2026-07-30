@@ -8,7 +8,7 @@
 > | `src/sim/mapgen.ts` | 109 行 | `generateMap()`：由構造保證合法的蛇形走廊隨機地圖 |
 > | `src/data/levels/index.ts` | 215 行 | `LevelDef` 型別 + 9 個關卡的難度旋鈕與 `bias` + `LEVEL_ORDER` |
 >
-> **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:20-30；`EnemyTrait`，types.ts:196）、
+> **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:20-30；`EnemyTrait`，types.ts:203）、
 > `core/rng.ts`（`randInt`，mapgen.ts:20）。
 > `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:14），仍是純資料。
 >
@@ -16,14 +16,14 @@
 > `sim/combat.ts:49-94`（射程與敵人座標）、
 > `sim/step.ts:115-139`（敵人前進與漏怪）、`sim/combine.ts:33-56`（相鄰判定）、
 > `sim/actions.ts:137,189`（落點合法性）、`sim/actions.ts:300`（`bias` → `buildWave`）、
-> `input/pointer.ts:243`、`render/renderer.ts:82-175`、
+> `input/pointer.ts:246`、`render/renderer.ts:82-175`、
 > `ui/screens.ts:492-517`（選關卡片，含「建議帶」標籤）、`tools/autobalance.ts:22-34`。
 
 ## 這個模組解決什麼問題
 
 1. 把人類可讀的地圖字串轉成執行期資料結構，**並在轉換時就強制驗證**（列長、字元合法、S→C 連通）。
 2. 把「敵人怎麼走」壓縮成一維：`board.path` 是 cell 索引陣列，敵人只有一個純量 `Enemy.dist`
-   （types.ts:219-220，單位＝路徑段數，float）。執行期**不做任何尋路**，效能可預測、可重現。
+   （types.ts:226-227，單位＝路徑段數，float）。執行期**不做任何尋路**，效能可預測、可重現。
 3. 提供「每局地形都不同」的關卡，且**不可能生出死路**——因為路徑是先畫出來的，不是事後檢查的。
 
 ## 核心概念
@@ -57,7 +57,7 @@
 - `cellCenter(idx) = { x: col + 0.5, y: row + 0.5 }` —— 單位是「格」，**回傳格中心**，
   給射程（combat.ts:53,76）、敵人插值座標（combat.ts:91-93）、粒子特效用。整數座標是格的左上角。
 - `inBounds(board, col, row)` 收的是 **col/row 不是 idx**；`cellCol/cellRow` 完全不檢查邊界。
-  畫布 px → cell 的轉換在 `renderer.ts:93-99`，越界回傳 `-1`，呼叫端必須自己擋（pointer.ts:243）。
+  畫布 px → cell 的轉換在 `renderer.ts:93-99`，越界回傳 `-1`，呼叫端必須自己擋（pointer.ts:246）。
 - `neighbors4()`（board.ts:76-86）目前只被 `findPath` 用；留給未來的洪水填充。
 
 ### 路徑是「BFS 找出的單一路徑」
@@ -152,7 +152,7 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
    `LEVELS[k].gen` 的關卡，目前 6 關；mapgen.test.ts:11-23 對每顆種子做 3 條斷言）。
    `minPathLen` 訂太高 → 測試紅字，不是執行期錯誤。
    現行比例可當基準：9×14 → 44、9×15 → 48~50、9×16 → 52~54、9×17 → 58（約 `rows × 3.2~3.4`）。
-8. **`isPlot()` 是唯一落點閘門**（actions.ts:137,189；pointer.ts:243）。若將來要允許在路上放東西，
+8. **`isPlot()` 是唯一落點閘門**（actions.ts:137,189；pointer.ts:246）。若將來要允許在路上放東西，
    改的是這三處呼叫端，不是 `board.ts`。
 9. `board.path`／`board.tiles` 在開局後視為 **immutable**。沒有任何程式碼支援中途改地形。
 10. `sim/` 與 `data/` 不得 import render/ui/input（CLAUDE.md 鐵則）。`levels/index.ts` 目前零 import，
@@ -174,14 +174,14 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 ```
 level.bias ──→ state.bias (state.ts:151) ──→ buildWave (actions.ts:300)
    │                                            └→ weightOf(): 帶該特徵的敵人與 BOSS 權重 ×BIAS_WEIGHT
-   │                                               （waves.ts:70-71,83-85,102；BIAS_WEIGHT = 4，waves.ts:30）
+   │                                               （waves.ts:76-77,89-91,108；BIAS_WEIGHT = 4，waves.ts:36）
    └──→ countersFor(level.bias) (enemies.ts:179-185) ──→ 選關卡片的「建議帶」標籤（screens.ts:499-501,510）
 ```
 
 推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:28-36）
 把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:38-45）給中文字。
 **關卡資料裡不要再手寫一份推薦清單**，否則會出現兩份不同步的真相。
-合法特徵是 `EnemyTrait`（types.ts:196）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
+合法特徵是 `EnemyTrait`（types.ts:203）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
 新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:47-55），
 `enemies-ext.test.ts:131-139` 會抓漏。
 
@@ -238,7 +238,7 @@ level.bias ──→ state.bias (state.ts:151) ──→ buildWave (actions.ts:3
 | 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性 |
 | 這一關偏好哪些敵人／卡片上顯示什麼「建議帶」 | 同檔對應關卡的 `bias` | 一改兩動：敵種加權（×`BIAS_WEIGHT`）與 UI 標籤都跟著變；標籤是推導出來的，別另外手寫 |
 | 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:28-36） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
-| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:496）與過關後的下一關（app.ts:538-539）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
+| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:496）與過關後的下一關（app.ts:544-545）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
 | 新的地形種類 | `TileKind`（types.ts:20）→ `CHAR_TO_KIND`（board.ts:7-13）→ `WALKABLE`（board.ts:47）→ `drawTiles`（renderer.ts:127-175）→ 若可放置再改 `isPlot` | 四處都要改，漏一處會是「解析成功但畫不出來」或「敵人穿牆」 |
 | 生成演算法（走廊形狀） | `sim/mapgen.ts` 的 `carve()` | 必須維持 induced path 性質，否則 mapgen.test.ts:25-35 紅字；別忘了 rng 消耗次數（陷阱 5） |
 | 讓障礙阻擋射線 | `sim/combat.ts` 的 `pickTarget`／`effectiveRange` | 這是刻意的設計決定 #2，改動等於改遊戲手感，先確認需求 |
@@ -261,7 +261,7 @@ level.bias ──→ state.bias (state.ts:151) ──→ buildWave (actions.ts:3
   },
 ```
 
-`bias` 只填 `EnemyTrait`（types.ts:196）；上例會自動推出「控場／範圍攻擊／貫穿」三個標籤，
+`bias` 只填 `EnemyTrait`（types.ts:203）；上例會自動推出「控場／範圍攻擊／貫穿」三個標籤，
 **不要**再補一個推薦欄位。教學性質的關卡才寫 `bias: []`。
 
 固定地圖版本把 `gen:` 那一行整個換成 `map:`（`cols`/`rows` 由陣列本身決定，每列長度必須一致）：
@@ -302,7 +302,7 @@ export const LEVEL_ORDER = [
 | 位置 | 假設內容 |
 |---|---|
 | `src/sim/types.ts:26-29` | `Board.path: number[]`（單一陣列）、`spawn: number`、`camp: number`（單值） |
-| `src/sim/types.ts:219-220` | `Enemy.dist` 是「沿 path 的段數」，沒有 pathId 欄位 |
+| `src/sim/types.ts:226-227` | `Enemy.dist` 是「沿 path 的段數」，沒有 pathId 欄位 |
 | `src/sim/board.ts:23-24,36-37,40` | 掃描時只記一個 spawn／camp，重複的 `S`/`C` 被靜默覆寫 |
 | `src/sim/board.ts:42-43,49-74` | `parseMap` 只算一條 BFS 路徑並塞進 `board.path` |
 | `src/sim/mapgen.ts:99-100` | `paint()` 只寫一個 `S`、一個 `C` |
@@ -314,7 +314,7 @@ export const LEVEL_ORDER = [
 | `src/sim/skills.ts:101-128` | `lineStrike` 以 `dist` 區間取範圍 |
 | `src/sim/skills.ts:130-145` | `charge` 用 `dist` 排序取「最前方」 |
 | `src/sim/step.ts:50-58` | `stepMeteor` 先用 `dist` 挑最前方敵人（之後才轉歐氏距離） |
-| `src/app.ts:287-288,294-296` | `combo`／`leak` 粒子座標直接用 `board.camp` 當發生地點 |
+| `src/app.ts:293-294,300-302` | `combo`／`leak` 粒子座標直接用 `board.camp` 當發生地點 |
 | `tools/autobalance.ts:22-34` | 傻 AI 的落點評分只算「到 `b.path` 的最近距離」 |
 | `src/sim/__tests__/mapgen.test.ts:25-35` | 「可走格數 == path 長度」的不變量在多路徑下必須改寫 |
 

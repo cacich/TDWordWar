@@ -46,8 +46,14 @@ export class App implements HudHost, PointerHost, ScreensHost {
   audio: Audio
   private loop: LoopHandle
   private mode: Mode = 'normal'
-  /** 選取的是格子（一格上可能同時有字牌與一到兩個武將） */
+  /**
+   * 選取的格子（一格上可能同時有字牌與一到兩個武將）。**只負責棋盤上的選取框**。
+   * 刻意與 `infoCell` 分開：放置／搬移後要標出落點，但不該彈出詳情面板——
+   * 連續放置時每次都得先關掉面板才能繼續操作。
+   */
   private selectedCell: number | null = null
+  /** 詳情面板要顯示哪一格。**只有真正點擊字牌才會設定**（見 input/pointer.ts 的 onUp） */
+  private infoCell: number | null = null
   private speedIndex = 0
   private lastFrame = performance.now()
   private metaDirty = false
@@ -324,7 +330,7 @@ export class App implements HudHost, PointerHost, ScreensHost {
   // ── 心願單 ──────────────────────────────────────────
   openWishPanel(): void {
     this.audio.play('ui')
-    this.selectedCell = null
+    this.select(null)
     this.wishPanel.show()
   }
   closeWishPanel(): void {
@@ -524,7 +530,7 @@ export class App implements HudHost, PointerHost, ScreensHost {
    * 漏掉任何一項都會留下上一局的殘留（選取框、粒子、心願面板、畫布尺寸）。
    */
   private afterRunStart(): void {
-    this.selectedCell = null
+    this.select(null)
     this.mode = 'normal'
     this.renownPaid = false
     this.renderer.particles.clear()
@@ -548,18 +554,27 @@ export class App implements HudHost, PointerHost, ScreensHost {
   }
   setMode(m: Mode): void {
     this.mode = m
-    if (m !== 'normal') this.selectedCell = null
+    if (m !== 'normal') this.select(null)
   }
   getSelectedGlyph(): Unit | null {
-    return this.selectedCell === null ? null : glyphAt(this.state, this.selectedCell) ?? null
+    return this.infoCell === null ? null : glyphAt(this.state, this.infoCell) ?? null
   }
   getSelectedForms(): Unit[] {
-    return this.selectedCell === null ? [] : formsAt(this.state, this.selectedCell)
+    return this.infoCell === null ? [] : formsAt(this.state, this.infoCell)
   }
   select(cell: number | null): void {
     this.selectedCell = cell
+    this.infoCell = cell
     // 心願面板與資訊面板都占畫面底部，不能同時開
     if (cell !== null) this.wishPanel.hide()
+  }
+  /**
+   * 標記落點但不開詳情。放置／搬移後走這條路。
+   * 順手把面板關掉：剛放下新字，還開著上一個字的詳情只會造成誤讀。
+   */
+  highlight(cell: number): void {
+    this.selectedCell = cell
+    this.infoCell = null
   }
   isPaused(): boolean {
     return this.loop.paused
@@ -605,7 +620,7 @@ export class App implements HudHost, PointerHost, ScreensHost {
     if (!g) return
     const res = sellGlyph(this.state, g.id)
     if (res.msg) this.hud.toast(res.msg)
-    this.selectedCell = null
+    this.select(null)
   }
   /** 索敵模式套在「實際會出手的單位」上：有武將就改武將，否則改字牌 */
   cycleTargeting(): void {

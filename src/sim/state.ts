@@ -193,7 +193,7 @@ export function glyphAt(state: GameState, cell: number): Unit | undefined {
   return state.units.find((u) => u.kind === 'glyph' && u.cells[0] === cell)
 }
 
-/** 覆蓋該格的武將（可能 0～2 個） */
+/** 覆蓋該格的武將（0 個以上；⚠ 上限不是 2，見 types.ts 的 `Unit.formIds`） */
 export function formsAt(state: GameState, cell: number): Unit[] {
   return state.units.filter((u) => u.kind === 'general' && u.cells.includes(cell))
 }
