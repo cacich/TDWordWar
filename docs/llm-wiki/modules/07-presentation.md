@@ -13,11 +13,11 @@
 > | `src/render/fx.ts` | 225 行 | 10 種 `FxKind` 的攻擊特效畫法與顏色 |
 > | `src/render/particles.ts` | 193 行 | 極簡粒子（上限 240 顆，固定種子偽隨機） |
 > | `src/ui/hud.ts` | 401 行 | DOM HUD：狀態列、手牌、操作列、羈絆條、資訊面板、toast |
-> | `src/ui/screens.ts` | 820 行 | 九個全螢幕畫面（menu／codex／forge／shop／loadout／achieve／daily／endless／dev） |
+> | `src/ui/screens.ts` | 822 行 | 九個全螢幕畫面（menu／codex／forge／shop／loadout／achieve／daily／endless／dev） |
 > | `src/ui/wish.ts` | 85 行 | 心願單挑選面板（列本局字池，不是全字表） |
 > | `src/input/pointer.ts` | 281 行 | Pointer Events：拖放、點選待放置、鏟除、疊合、交換 |
 > | `index.html` | 213 行 | 全部 DOM 節點（HUD 與九個 `.screen` 都寫死在這裡，JS 只填內容） |
-> | `src/style.css` | 1209 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
+> | `src/style.css` | 1221 行 | 全部尺寸都是 `calc(var(--ui) * k)` 的等比 UI |
 >
 > **上游依賴**：`sim/`（讀 `GameState`、呼叫 `sim/actions.ts`）、`data/`（顯示名稱、配方、商城／兵書／編隊表）、`core/save.ts`
 > **下游使用者**：只有 `src/main.ts`（建 `App`、註冊 SW、掛 `__game` / `__dev`）
@@ -225,6 +225,7 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 | 加一個 HUD 按鈕觸發遊戲動作 | `HudHost`（`hud.ts:13`）加方法 → `hud.ts:150` 的 `bind()` 綁 click → `App` 實作並呼叫 `sim/actions.ts` | 別讓 `hud.ts` 直接 import `sim/actions` |
 | 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:445`），這是刻意的。最近一例：無盡畫面（`screens.ts` 的 `renderEndless`） |
 | 選單再加一個入口 | `index.html` 的 `.nav-grid` 加按鈕 → `style.css` 加 `.nav-xxx` 底色 | 網格是 3 欄；第 7 個入口用 `.nav-row`（`grid-column: 1/-1`）獨占一整列，否則第三列會只有一格看起來像漏了東西 |
+| 在新畫面裡放關卡卡片 | 直接用 `.level-card`（`renderEndless`／`renderDaily` 都是） | ⚠ `.codex-body` 是**純 block 容器**：`<button>` 會 shrink-to-fit，卡片寬度隨文字長短參差、右側 `.lv-meta` 被壓成兩行擠在一起。`.level-card { width: 100% }` 與 `.codex-body .level-card + .level-card` 的 `margin-top` 就是在補這件事（在 flex 的 `.level-list` 裡是 no-op）。說明文字（`.codex-detail`）一律放**卡片之後**——手機一頁只看得到約 4 張卡 |
 | 改選關卡／圖鑑／兵書／商城／編隊的呈現 | `ui/screens.ts` 對應 `renderXxx()` | 資料表本身在 `data/`（見 [02-data-tables.md](../02-data-tables.md)） |
 | 改 UI 整體大小或斷點 | `app.ts:134` 的除數（27 / 56）與 clamp（9.5 / 18）、`app.ts:137` 的 320px | 改除數會同時影響所有 DOM 尺寸 |
 | 極窄視窗要隱藏更多東西 | `style.css:78` 的 `#app[data-compact='true']` 區塊 | 不要改成 media query：斷點看的是 `#app` 而非視窗（`#app` 有 `max-width: 560px`） |

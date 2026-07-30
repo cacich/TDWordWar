@@ -677,6 +677,13 @@ body {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: calc(var(--ui) * 0.55);
+  /**
+   * ★ 必須寫 width:100%。關卡卡片除了 `.level-list`（flex column，本來就會拉滿）之外，
+   * 也出現在 `.codex-body` 這種**純 block 容器**裡（無盡、每日挑戰）——
+   * `<button>` 在 block 容器裡是 shrink-to-fit，卡片寬度會隨文字長短參差不齊，
+   * 右側的 `.lv-meta` 也跟著被壓扁成兩行擠在一起。在 flex column 裡這條是 no-op。
+   */
+  width: 100%;
   border: 2px solid var(--ink);
   border-radius: calc(var(--ui) * 0.7);
   background: #fffdf4;
@@ -743,6 +750,11 @@ body {
 
 .level-card.random {
   background: linear-gradient(105deg, #fffdf4 60%, #f3ead2);
+}
+
+/* block 容器（無盡、每日挑戰）沒有 flex 的 gap，卡片之間要自己撐開 */
+.codex-body .level-card + .level-card {
+  margin-top: calc(var(--ui) * 0.55);
 }
 
 .screen-foot {

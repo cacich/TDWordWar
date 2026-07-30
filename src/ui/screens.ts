@@ -197,15 +197,6 @@ export class Screens {
     const meta = this.host.getMeta()
     this.endlessBody.innerHTML = ''
 
-    const note = document.createElement('div')
-    note.className = 'codex-detail'
-    note.innerHTML =
-      '無盡＝<b>同一關，但沒有終點</b>：地形、字池、敵人偏好與難度倍率全部沿用原關，敵人血量每波持續指數成長，撐到守不住為止。<br>' +
-      '<span class="muted">難度弧一律用 40 波的長度攤開，<b>與原關的波數無關</b>——所以波數短的關卡（黃巾 12 波）' +
-      '在無盡裡反而是最平緩的一條路。兵書、商城道具與編隊<b>照常生效</b>（這點跟每日挑戰相反），' +
-      '成績記在獨立的無盡榜上，不會影響選關畫面的最佳波數。</span>'
-    this.endlessBody.appendChild(note)
-
     const openCount = LEVEL_ORDER.filter((k) => meta.cleared.includes(k)).length
     this.endlessBody.appendChild(section(`可挑戰的戰場　${openCount}/${LEVEL_ORDER.length}`))
 
@@ -235,6 +226,17 @@ export class Screens {
       if (unlocked) card.addEventListener('click', () => this.host.startEndless(key))
       this.endlessBody.appendChild(card)
     }
+
+    // 說明放在卡片之後（與每日／商城／兵書一致）：手機上一頁只看得到約 4 張卡片，
+    // 把四行說明擺在最上面會把「可以按的東西」全部推到捲軸外。
+    const note = document.createElement('div')
+    note.className = 'codex-detail'
+    note.innerHTML =
+      '無盡＝<b>同一關，但沒有終點</b>：地形、字池、敵人偏好與難度倍率全部沿用原關，敵人血量每波持續指數成長，撐到守不住為止。<br>' +
+      '<span class="muted">難度弧一律用 40 波的長度攤開，<b>與原關的波數無關</b>——所以波數短的關卡（黃巾 12 波）' +
+      '在無盡裡反而是最平緩的一條路。兵書、商城道具與編隊<b>照常生效</b>（這點跟每日挑戰相反），' +
+      '成績記在獨立的無盡榜上，不會影響選關畫面的最佳波數。</span>'
+    this.endlessBody.appendChild(note)
   }
 
   /**
