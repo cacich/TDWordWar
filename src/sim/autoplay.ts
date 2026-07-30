@@ -29,6 +29,7 @@ import {
   recruit,
   rerollHand,
   sellGlyph,
+  smelt,
   toggleWish,
 } from './actions'
 import { ANTI_AIR_RANGE } from '../data/enemies'
@@ -72,6 +73,11 @@ const MIN_GAIN = 1
  * 佔位成本：好格子（覆蓋路徑多）是稀缺資源，任何單位站上去都要付這個代價。
  * 它的唯一作用是把經濟字與光環字趕到邊緣，把靠路的格子留給會打的單位——
  * 少了它，AI 會把糧倉蓋在最好的射擊位上。
+ *
+ * ⚠ 它**必須**跟收益端量在同一把尺上，也就是同樣吃飽和折扣（見 occupyCost）。
+ * 這是踩過的坑：本來用生覆蓋（不折扣），於是收益被 `SAT/(SAT+load)` 一路壓到剩 15%
+ * 而成本一直是滿額 56～70，中期之後**每一個落點都算成負分**，AI 就在「有牌、有空位、
+ * 有糧」的狀態下整局不動了。佔位成本的本意是機會成本——一格對別人沒價值時就不該收錢。
  */
 const OCCUPY_COST = 7
 const OCCUPY_RADIUS = 3
@@ -150,7 +156,7 @@ export function autoThink(brain: AutoBrain, state: GameState): number {
   // 沿用 runActions 最後建的那份 ctx（它是在「已經沒有值得做的事」時建的，所以與現況一致）。
   // buildCtx 會列舉全部窗格，是整輪最貴的一步，能省一次就省一次。
   syncWishes(brain, state, geom, run.fresh)
-  if (acted === 0) acted += idleTurn(state)
+  if (acted === 0) acted += idleTurn(brain, state, geom, run.fresh)
   return acted
 }
 
@@ -215,15 +221,6 @@ function geomOf(brain: AutoBrain, board: Board): Geom {
   const geom: Geom = { board, pts, dists, plots }
   brain.geom = geom
   return geom
-}
-
-/** 射程 r 內的路徑點個數（給佔位成本用；不看飽和） */
-function coverage(geom: Geom, cell: number, r: number): number {
-  if (r <= 0) return 0
-  const a = geom.dists[cell]
-  let n = 0
-  for (let k = 0; k < a.length; k++) if (a[k] <= r) n++
-  return n
 }
 
 /**
@@ -304,6 +301,14 @@ function auraValue(ctx: Ctx, geom: Geom, cell: number, aura: Aura, m: number): n
   return sum * mul
 }
 
+/**
+ * 佔一格的機會成本。跟收益端一樣吃飽和折扣，兩者才能相減（見 OCCUPY_COST 的警告）：
+ * 這一格附近的路段已經火力滿載時，把它讓給別人也換不到什麼，所以佔位幾乎免費。
+ */
+function occupyCost(geom: Geom, cell: number, load: Float64Array | null): number {
+  return OCCUPY_COST * satCoverage(geom, cell, OCCUPY_RADIUS, load)
+}
+
 /** 一枚字牌單獨站在某格的價值（含佔位成本，所以可能是負的） */
 function glyphSpotValue(
   state: GameState,
@@ -323,7 +328,7 @@ function glyphSpotValue(
   }
   if (def.aura) v += auraValue(ctx, geom, cell, def.aura, m)
   if (def.income) v += def.income * level * TUNE.FOOD
-  return v - OCCUPY_COST * coverage(geom, cell, OCCUPY_RADIUS)
+  return v - occupyCost(geom, cell, ctx.pathLoad)
 }
 
 /** 場上單位「現在」的輸出價值（吃飽和覆蓋）。已被武將接手的字牌回傳 0（它不再單獨出手） */
@@ -352,7 +357,7 @@ function liveValue(geom: Geom, ctx: Ctx, u: Unit): number {
     v += auraValue(ctx, geom, u.cells[0], u.aura, levelMul(u.level))
   }
   if (u.income > 0) v += u.income * TUNE.FOOD
-  return v - OCCUPY_COST * coverage(geom, u.cells[0], OCCUPY_RADIUS)
+  return v - occupyCost(geom, u.cells[0], ctx.pathLoad)
 }
 
 /**
@@ -889,12 +894,19 @@ function ensureAntiAirWish(state: GameState): void {
 /**
  * 這一輪什麼都做不了時的收尾。
  *   - 整手都是沒有用處的一階字 → 重抽（比放到爛格子上有價值）
+ *   - 手牌全滿又無事可做 → 分解最沒用的一張（死鎖出口，見下）
  *   - 佈陣階段無事可做 → 提前開戰，把剩下的佈陣時間換成糧
+ *
+ * ★ 這裡是整支 AI 的**活性保證**（liveness）：手牌全滿時 `recruit` 會被擋
+ * （「手牌已滿」），所以「全滿 ＋ 這一輪沒動作」是一個真正的死鎖——手牌不會變、
+ * 場上只有敵人在動，下一輪算出的決策一模一樣，於是 AI 永遠停在那裡（實測見過
+ * 連續十幾波不動、糧堆到 1300 的局）。因此**只要處在那個狀態就必須動一張牌**，
+ * 讓下一輪的輸入不同。動不了的話請確保這個函式仍有出口，別讓它回傳 0。
  */
-function idleTurn(state: GameState): number {
+function idleTurn(brain: AutoBrain, state: GameState, geom: Geom, reuse: Ctx | null): number {
   // 放不下又快塞爆手牌時，先把同字同階併掉，至少換來更高階的牌留著之後用
-  const full = state.hand.filter((h) => h === null).length <= 1
-  if (full) {
+  const empty = state.hand.filter((h) => h === null).length
+  if (empty <= 1) {
     const merged = mergeHandPairs(state)
     if (merged) return merged
   }
@@ -906,7 +918,50 @@ function idleTurn(state: GameState): number {
   ) {
     if (rerollHand(state).ok) return 1
   }
+  // 死鎖出口：把「放到哪裡都只會讓棋盤變差」的死牌分解掉，空出格子讓下一輪征兵換別的字。
+  // 比重抽溫和（重抽會把整手打回一階），而且只要有一張二階牌，重抽那條路本來就走不通。
+  // ⚠ 手牌全滿時門檻放成無限大——那是真死鎖（征兵被擋），無論如何都得動一張牌。
+  if (smeltWorstCard(brain, state, geom, reuse, empty === 0 ? Infinity : 0)) return 1
   // ⚠ 刻意**不**提前開戰：搶那點提前開戰的糧不值得——佈陣時間是免費的反應緩衝，
   // 提早招來下一波只會在戰力還沒到位時把自己送死。讓 prepTimer 自然歸零即可。
   return 0
+}
+
+/**
+ * 分解「最好的去處也最差」的那張手牌。排序用的是同一把估值尺（落點分含窗格加分、
+ * 或疊高既有字牌的增益），所以窗格正在等的字與能疊高主力的字會自動被留下來。
+ *
+ * @param maxScore 只分解分數不高於此值的牌。手牌沒滿時取 0（分數還是正的就代表這張牌
+ *   至少有個不虧的去處，值得再留一輪）；全滿時取 Infinity，因為那時不動就是死鎖。
+ */
+function smeltWorstCard(
+  brain: AutoBrain,
+  state: GameState,
+  geom: Geom,
+  reuse: Ctx | null,
+  maxScore: number,
+): boolean {
+  const ctx = reuse ?? buildCtx(brain, state, geom)
+  let worst = -1
+  let worstScore = Infinity
+  for (let h = 0; h < state.hand.length; h++) {
+    const card = state.hand[h]
+    if (!card) continue
+    let score = -Infinity
+    for (const cell of ctx.emptyPlots) {
+      score = Math.max(
+        score,
+        glyphSpotValue(state, geom, ctx, card.char, card.level, cell) + slotBonus(ctx, cell, card.char),
+      )
+    }
+    for (const [, g] of ctx.glyphByCell) {
+      if (g.chars[0] !== card.char || g.level !== card.level || g.level >= MAX_GLYPH_LEVEL) continue
+      score = Math.max(score, stackGain(state, geom, ctx, g))
+    }
+    if (score < worstScore) {
+      worstScore = score
+      worst = h
+    }
+  }
+  return worst >= 0 && worstScore <= maxScore && smelt(state, worst).ok
 }

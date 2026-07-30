@@ -15,7 +15,7 @@
 
 ```bash
 npm run dev             # 開發伺服器（http://localhost:5188）
-npm test                # 250 個單元測試，改完務必跑
+npm test                # 255 個單元測試，改完務必跑
 npm run typecheck       # tsc --noEmit
 npm run sim             # 難度儀表板：傻 AI 跑 30 局，印陣亡波次中位數與「目標的偏差」
 npm run econ            # 經濟儀表板：逐波印收入拆解與征兵次數（設計目標 1～2 次/波）
@@ -111,6 +111,13 @@ M6 PWA ✅（可安裝、離線可玩，Service Worker 由 `vite.config.ts` 的 
 節奏是「**想得少、一次做完**」：`THINK_INTERVAL`（1.2 模擬秒）是手機發熱的主旋鈕，而一輪決策**沒有動作數上限**——
 `runActions` 會一直做到沒有值得做的事。想省電就把間隔往上加，不要去限制每輪的動作數（那只會讓擺陣落後於敵人）。
 ⚠ 間隔吃模擬時間，所以 3× 速時實際思考頻率也是 3 倍。
+⚠ **估值的成本端與收益端必須量在同一把尺上**：收益吃飽和折扣（`SAT/(SAT+load)`），
+所以佔位成本也要吃（`occupyCost` 走 `satCoverage`）。踩過的坑是佔位成本用生覆蓋，
+中期收益被折到 15% 而成本仍是滿額，**每個落點都算成負分**，AI 就在「手牌全滿、棋盤有空位、
+糧堆到上千」的狀態下整局不動了。另外 `idleTurn` 是**活性保證**：手牌全滿時 `recruit` 會被擋，
+所以那個狀態下每一輪都必須動一張牌（併牌／重抽／分解死牌），否則下一輪的輸入不變＝永久卡死。
+現況九關波數中位數：黃巾 7・董卓 13・巨鹿 20・官渡 15・赤壁 22・五丈原 30・襄陽 24・漢中 27・洛陽 28
+（`npm run ai` 八局／關，耗時 ≈84s）。
 
 未實作項目與已知陷阱列在 [docs/llm-wiki/04-invariants.md](docs/llm-wiki/04-invariants.md)。
 新增技能／控場狀態的步驟在 [03-change-recipes.md](docs/llm-wiki/03-change-recipes.md) §10、§10b。
