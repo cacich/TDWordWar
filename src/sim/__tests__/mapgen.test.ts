@@ -4,6 +4,7 @@ import { LEVELS, LEVEL_ORDER } from '../../data/levels'
 import { parseMap } from '../board'
 import { generateMap } from '../mapgen'
 import { createGame } from '../state'
+import { WAVE_REF, enemyBaseHp } from '../waves'
 
 const GEN_LEVELS = LEVEL_ORDER.filter((k) => LEVELS[k].gen)
 
@@ -65,10 +66,54 @@ describe('隨機地圖生成', () => {
   })
 })
 
+describe('固定地圖', () => {
+  /**
+   * 每一格路都要在敵人真正會走的那條路上。
+   *
+   * ⚠ 這條測試存在的理由：黃巾之亂原本把大營放在右下角，而最後一段路是往左走的，
+   * 於是第 9 列往左的 8 格變成沒有出口的死路——玩家看到一條走到底卻什麼都沒有的路，
+   * 敵人卻在半路轉下去進營。地圖畫錯不會拋錯（findPath 照樣找得到營），只會安靜地誤導人。
+   */
+  it('沒有走不到的路格（畫出來的路 == 敵人走的路）', () => {
+    for (const key of LEVEL_ORDER) {
+      const map = LEVELS[key].map
+      if (!map) continue
+      const board = parseMap(map, key)
+      const onPath = new Set(board.path)
+      const orphan = board.tiles
+        .map((t, i) => ({ t, i }))
+        .filter((x) => x.t === 'path' && !onPath.has(x.i))
+        .map((x) => `(${x.i % board.cols},${Math.floor(x.i / board.cols)})`)
+      expect(orphan, `${key} 有走不到的路格`).toEqual([])
+    }
+  })
+})
+
 describe('關卡難度', () => {
   it('hpMul 會套用到敵人血量', () => {
     const easy = createGame('huangjin', 5)
     const hard = createGame('wuzhang', 5)
     expect(easy.hpMul).toBeLessThan(hard.hpMul)
+  })
+
+  /**
+   * 難度曲線的契約：`arc`（難度弧長度）才是難度旋鈕，`maxWave` 只是長度。
+   * 曾經沒有 arc、九關一律走完整條參考弧，於是九關的難度完全一樣平
+   * （傻 AI 在每一關都死在正中間），而最短的教學關反而是最陡的一段。
+   */
+  it('主線九關的 arc 逐關不遞減，最後一關明顯比教學關長', () => {
+    const arcs = LEVEL_ORDER.map((k) => LEVELS[k].arc)
+    for (let i = 1; i < arcs.length; i++) {
+      expect(arcs[i], `${LEVEL_ORDER[i]} 的 arc 不該比前一關短`).toBeGreaterThanOrEqual(arcs[i - 1])
+    }
+    expect(arcs[arcs.length - 1]).toBeGreaterThan(arcs[0] * 1.5)
+  })
+
+  it('教學關的每波血量成長遠比舊版（整條參考弧壓進 12 波）平緩', () => {
+    const lv = LEVELS.huangjin
+    const step = (arc: number) =>
+      enemyBaseHp(2, lv.maxWave, arc) / enemyBaseHp(1, lv.maxWave, arc)
+    expect(step(lv.arc)).toBeLessThan(1.45)
+    expect(step(WAVE_REF)).toBeGreaterThan(1.9) // 舊版：每波幾乎兩倍
   })
 })

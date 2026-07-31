@@ -133,8 +133,8 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
   **易傷刻意無法免疫**，否則控場流會對 BOSS 完全失效
 - ⚠ **灼燒無視防禦**（走 `damageEnemy` 不經 `mitigate`），所以「高防」的解法是持續傷害；
   `burnImmune` 是唯一能封掉這條路、逼玩家改帶高單擊的手段
-- 實際血量 = `enemyBaseHp(wave, maxWave) × hpMul`。⚠ **指數吃的是「走完關卡的百分比」**，
-  所以同一個 `hpMul` 在 12 波的關卡遠比 40 波的硬，見 [modules/05](modules/05-economy-and-waves.md)
+- 實際血量 = `enemyBaseHp(wave, maxWave, arc) × hpMul`。⚠ **指數吃的是「走完難度弧的百分比」**
+  （`wave × arc / maxWave`），難度看關卡的 `arc` 不是波數，見 [modules/05](modules/05-economy-and-waves.md)
 
 ### traits 與推薦手段
 
@@ -159,7 +159,8 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
 BASE_HP = 32         // 第 0 波基準。**線性項**，用來抵銷「玩家整體戰力變了」
                      // （20 → 32：字組合從 17 擴到 43 種後傻 AI 每波戰力約 +78%）
 HP_GROWTH = 1.23     // 每波 ×1.23。⚠ 必須貼著玩家戰力成長率，不是自由參數
-WAVE_REF   = 40      // 血量指數 = wave × WAVE_REF / maxWave ← 吃「相對進度」不是絕對波次
+WAVE_REF   = 40      // 弧的「參考」長度。血量指數 = wave × level.arc / maxWave ← 吃相對進度
+                     // arc 省略或無盡模式時就取 WAVE_REF（= 走完整條弧）
 enemyCount(w) = 6 + floor(w × 1.4)
 PREP_SECONDS = 12    // 佈陣時間
 isBossWave(w) = w % 5 === 0
@@ -168,9 +169,10 @@ composition(w)       // 該波可出現的一般兵（依各敵人的 minWave �
 pickBoss(w, rng, bias)  // BOSS 波從合格 BOSS 中依 bias 加權隨機挑一隻
 ```
 
-**難度旋鈕的優先順序**：單關太硬／太軟先動該關的 `maxWave`（它同時是長度與弧的陡度）→
+**難度旋鈕的優先順序**：單關太硬／太軟先動該關的 `arc`（難度弧長度，唯一的主旋鈕）→
 全部關卡一起動才碰 `HP_GROWTH`（⚠ 它必須貼著玩家戰力的成長率，不是自由參數）→
 `enemyCount` → 各敵人的 `minWave` → 該關 `hpMul` 做最後 ±20% 微調。
+⚠ **不要用 `maxWave` 調難度**：它現在只是「打幾波」。
 
 ⚠ `buildWave` 會**消耗 rng**（抽敵種與 BOSS）。要做「波次預覽」不能直接呼叫它，
 詳見 [06-roadmap.md](06-roadmap.md) §2。
@@ -239,7 +241,7 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 ## src/data/levels/index.ts — 關卡
 
 ```ts
-{ key, name, subtitle, startFood, lives, maxWave, hpMul,
+{ key, name, subtitle, startFood, lives, maxWave, arc, hpMul,   // arc = 難度弧長度，★ 必填
   pool: { support: number; generals: number },             // ★ 必填，別漏掉
   bias?: EnemyTrait[],                                     // 偏好的敵人特徵
   map?: string[],                                          // 固定地圖
@@ -261,26 +263,31 @@ S 出兵口   C 大營   # 路   P 空地   . 障礙
   推導只有一個來源（`data/enemies.ts` 的 `TRAIT_COUNTERS`）。
 - `map` 與 `gen` 二選一（有測試檢查每關至少有一個）
 - 固定地圖每一列長度必須相等，否則 `parseMap()` 會拋錯（有測試）
-- `hpMul` 是該關的難度旋鈕，乘在敵人血量上
+- **`arc` 是該關的難度主旋鈕**（難度弧長度，單位是參考波）：越大越難，`maxWave` 只管長度。
+  `hpMul` 是乘在血量上的 ±20% 微調
 - 關卡順序與解鎖條件由 `LEVEL_ORDER` 決定（前一關通關才解鎖下一關）；**無盡變體刻意不在 `LEVEL_ORDER` 裡**
-- `maxWave` 為 `Infinity` 就是無盡：難度弧退回 `WAVE_REF`（40 波），成績記在 `meta.endless`
+- `maxWave` 為 `Infinity` 就是無盡：改走絕對波次曲線（等同 `arc` = 40），成績記在 `meta.endless`
 - 設計決定 #2：**障礙不阻擋射線**，`.` 只影響可放置性與視覺
 
-各關偏好與傻 AI 中位數（**目標 = 該關波數的一半**，±20% 內算達標）：
+各關偏好與傻 AI 中位數（**目標 ≈ `maxWave × 20 / arc`**，±20% 內算達標；`npm run sim 12 all`）：
 
-| 關卡 | 波數 | hpMul | bias | 建議帶 | 目標 | sim 中位數 |
-|---|---|---|---|---|---|---|
-| 黃巾之亂 | 12 | 0.85 | —（教學） | — | 6 | 6 |
-| 討伐董卓 | 18 | 1.00 | flying | 對空 | 9 | 9 |
-| 巨鹿 | 30 | 1.15 | swarm | 範圍、貫穿 | 15 | 15 |
-| 官渡 | 24 | 1.10 | fast | 控場 | 12 | 12 |
-| 赤壁 | 30 | 1.20 | armored | 持續傷害、單體高傷 | 15 | 14 |
-| 五丈原 | 40 | 1.10 | healer, tanky | 單體高傷、持續傷害 | 20 | 20 |
-| 襄陽 | 32 | 1.25 | swarm, splitter | 範圍、貫穿 | 16 | 17 |
-| 漢中 | 32 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 16 | 15 |
-| 洛陽 | 40 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 20 | 19 |
+| 關卡 | 波數 | arc | hpMul | bias | 建議帶 | sim 中位數 | 比例 |
+|---|---|---|---|---|---|---|---|
+| 黃巾之亂 | 12 | 20 | 0.85 | —（教學） | — | 12 | 1.00 |
+| 討伐董卓 | 18 | 23 | 1.00 | flying | 對空 | 15 | 0.83 |
+| 巨鹿 | 30 | 28 | 1.15 | swarm | 範圍、貫穿 | 24 | 0.80 |
+| 官渡 | 24 | 31 | 1.10 | fast | 控場 | 17 | 0.71 |
+| 赤壁 | 30 | 31 | 1.20 | armored | 持續傷害、單體高傷 | 19 | 0.63 |
+| 五丈原 | 40 | 31 | 1.10 | healer, tanky | 單體高傷、持續傷害 | 24 | 0.60 |
+| 襄陽 | 32 | 39 | 1.25 | swarm, splitter | 範圍、貫穿 | 17 | 0.53 |
+| 漢中 | 32 | 39 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 15 | 0.47 |
+| 洛陽 | 40 | 41 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 18 | 0.45 |
 
-無盡變體沿用同一份 `hpMul`／`bias`／字池，目標一律 `WAVE_REF/2 = 20`：黃巾 22・巨鹿 21・洛陽 19。
+★ **「比例」一路遞減才是難度曲線**（1.00 → 0.45）。九關的 `arc` 因此逐關不遞減；
+它不是等差，因為生命數與字池也算難度（2 條命的五丈原用的弧比襄陽短）。
+
+無盡變體沿用同一份 `hpMul`／`bias`／字池，弧一律 40（絕對波次），目標 `WAVE_REF/2 = 20`：
+黃巾 22・巨鹿 21・洛陽 19。
 
 ## src/sim/mapgen.ts — 隨機地形
 

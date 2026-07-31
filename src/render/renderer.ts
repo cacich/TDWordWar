@@ -60,6 +60,17 @@ export class Renderer {
   private memberTier = new Map<number, Tier>()
   /** 每幀重建的衍生查表：字牌格 → 提示種類（來自 state.hintCells） */
   private hintKind = new Map<number, 'upgrade' | 'combine'>()
+  /**
+   * 地形底圖的離屏快取。棋盤在一局內完全不變，但它是每幀最貴的一段
+   * （上百格 fillRect + strokeRect + 虛線），所以畫一次存起來，之後每幀只 drawImage。
+   * 失效條件放在 tileKey：換棋盤或改變版面（resize）就重畫。
+   */
+  private tiles: HTMLCanvasElement | null = null
+  private tileKey = ''
+  /** resize() 當時用的 devicePixelRatio（上限 2）。地形快取要用同一個值才不會與其他層錯開 */
+  private dpr = 1
+  /** 提示光暈的脈動相位，每幀算一次（原本每一格都各自呼叫 performance.now()） */
+  private pulse = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -70,7 +81,7 @@ export class Renderer {
   }
 
   resize(state: GameState): void {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = (this.dpr = Math.min(window.devicePixelRatio || 1, 2))
     const rect = this.canvas.getBoundingClientRect()
     const w = Math.max(1, Math.floor(rect.width))
     const h = Math.max(1, Math.floor(rect.height))
@@ -112,8 +123,9 @@ export class Renderer {
     ctx.clearRect(0, 0, w, h)
     ctx.fillStyle = THEME.paper
     ctx.fillRect(0, 0, w, h)
+    this.pulse = 0.5 + 0.5 * Math.sin(performance.now() / 320)
 
-    this.drawTiles(state)
+    this.drawTileLayer(state)
     this.drawHintCells(state)
     this.drawRangeIndicator(state)
     this.drawUnits(state)
@@ -124,8 +136,32 @@ export class Renderer {
     this.drawDrag()
   }
 
-  private drawTiles(state: GameState): void {
+  /** 地形：命中快取時只是一次 drawImage（見 this.tiles） */
+  private drawTileLayer(state: GameState): void {
+    const { cell, ox, oy, w, h } = this.view
+    const key = `${state.levelKey}:${state.board.tiles.length}:${cell}:${ox}:${oy}:${w}:${h}`
+    if (this.tileKey !== key || !this.tiles) {
+      const off = this.tiles ?? document.createElement('canvas')
+      off.width = this.canvas.width
+      off.height = this.canvas.height
+      const octx = off.getContext('2d')
+      if (!octx) return
+      // 用 resize() 當時的 dpr，才會與其他層畫在完全一樣的座標上
+      octx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+      octx.clearRect(0, 0, w, h)
+      this.drawTiles(octx, state)
+      this.tiles = off
+      this.tileKey = key
+    }
+    // 貼圖時暫時關掉 dpr 變換：像素對像素，1px 的格線才不會被重新取樣成灰邊
     const ctx = this.ctx
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(this.tiles, 0, 0)
+    ctx.restore()
+  }
+
+  private drawTiles(ctx: CanvasRenderingContext2D, state: GameState): void {
     const { cell } = this.view
     const b = state.board
     for (let i = 0; i < b.tiles.length; i++) {
@@ -304,17 +340,26 @@ export class Renderer {
     ctx.fill()
   }
 
-  /** 場上動作提示光暈：脈動描邊 + 柔光，畫在可疊合／可湊將的字牌外緣 */
+  /**
+   * 場上動作提示光暈：脈動描邊，畫在可疊合／可湊將的字牌外緣。
+   *
+   * ⚠ 刻意**不用** shadowBlur：canvas 的陰影是逐像素的模糊，成本比同樣範圍的實心繪製
+   * 高一個量級，而這個光暈同時可能出現在十幾格上、每幀都要重畫（實測是手機發熱的一大來源）。
+   * 改成「外圈淡粗描邊 + 內圈實描邊」兩道 stroke 疊出擴散感，遠看幾乎一樣。
+   */
   private drawHintHalo(x: number, y: number, w: number, h: number, color: string): void {
     const ctx = this.ctx
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 320)
+    const pulse = this.pulse
+    const r = this.view.cell * 0.14
     ctx.save()
-    ctx.globalAlpha = 0.35 + pulse * 0.4
     ctx.strokeStyle = color
+    ctx.globalAlpha = (0.35 + pulse * 0.4) * 0.4
+    ctx.lineWidth = (2 + pulse * 1.4) * 2.4
+    roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, r)
+    ctx.stroke()
+    ctx.globalAlpha = 0.35 + pulse * 0.4
     ctx.lineWidth = 2 + pulse * 1.4
-    ctx.shadowColor = color
-    ctx.shadowBlur = this.view.cell * (0.18 + pulse * 0.12)
-    roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, this.view.cell * 0.14)
+    roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, r)
     ctx.stroke()
     ctx.restore()
   }

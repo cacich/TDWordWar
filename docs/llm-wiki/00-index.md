@@ -27,7 +27,7 @@
 
 | 任務 | 讀這頁 |
 |---|---|
-| 難度太難／太簡單 | [03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 → **改完必跑 `npm run sim`**（目標＝該關波數的一半） |
+| 難度太難／太簡單 | [03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 → 單關動該關的 `arc`（難度弧長度）→ **改完必跑 `npm run sim 12 all`**（九關的「比例」要一路遞減） |
 | **糧太多／太少** | [modules/05](modules/05-economy-and-waves.md) 的經濟節 → **改完必跑 `npm run econ`**（目標＝一波征兵 1～2 次） |
 | 波次血量／數量成長 | [modules/05](modules/05-economy-and-waves.md)（`HP_GROWTH` 是最敏感的旋鈕） |
 | 經濟（徵兵花費、收入、退款） | [modules/05](modules/05-economy-and-waves.md) |
@@ -44,7 +44,7 @@
 | 改**棋盤／路徑／地形生成** | [modules/03](modules/03-board-and-mapgen.md) |
 | 改**局外進度／存檔** | [modules/06](modules/06-meta-progression.md) |
 | 改**每日挑戰／續玩存檔** | [modules/06](modules/06-meta-progression.md)。⚠ 每日挑戰必須用中性 meta，否則無法重現 |
-| 改**無盡模式** | [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」（關卡側）＋ [modules/06](modules/06-meta-progression.md) 的「獨立的高分榜」（局外側）。⚠ 無盡的難度弧與原關波數無關 |
+| 改**無盡模式** | [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」（關卡側）＋ [modules/06](modules/06-meta-progression.md) 的「獨立的高分榜」（局外側）。⚠ 無盡的難度弧與原關的 `maxWave`／`arc` 都無關 |
 | 改 **UI／畫面／渲染／音效** | [modules/07](modules/07-presentation.md) |
 | 加**音效或粒子**觸發 | [modules/07](modules/07-presentation.md) 的事件佇列機制 |
 | 改 **PWA／離線** | [03-change-recipes.md](03-change-recipes.md) §10g |
@@ -100,6 +100,7 @@
 - 敵人沿預先算好的單一路徑從「寨」走到「營」，抵達就扣生命。
 - 9 關，其中 6 關**每局隨機生成地形**（由構造保證沒有死路，見 `sim/mapgen.ts`）。
 - 每關通關後開放**無盡變體**（`endless_<key>`）：`maxWave = Infinity`，血量照 40 波的參考弧一路長上去。
+- 難度由每關的 `arc`（難度弧長度）決定，九關 20 → 41 遞增；`maxWave` 只是長度。見 [modules/03](modules/03-board-and-mapgen.md)。
 - 每關宣告 `bias`（偏好的敵人特徵），加權該類敵人與 BOSS 的出現率，並自動推導出選單的「建議帶」標籤。
 - 全部視覺由 Canvas 2D 繪製，**零外部圖片／字型資產**；音效由 Web Audio 即時合成，**零音檔**。
 - 抽卡有四層收斂：**編隊**（玩家手動指定）→ 每局字池 → 熟悉度加權 → 心願單。
@@ -148,7 +149,8 @@ src/
   main.ts      啟動 + __dev 除錯掛載點
 tools/
   dumb-ai.ts       傻 AI 的固定策略（sim 與 econ 共用，改它等於改難度量尺）
-  autobalance.ts   npm run sim（難度儀表板：陣亡中位數 vs 該關波數的一半）
+  autobalance.ts   npm run sim（難度儀表板：陣亡中位數 vs 該關 arc 換算的目標；`sim 12 all` 看整條曲線）
+  perf-report.ts   npm run perf（效能儀表板：AI 每輪決策成本與模擬每步成本＝發熱量表）
   econ-report.ts   npm run econ（經濟儀表板：逐波收入拆解與征兵次數）
   make-icons.html  用瀏覽器開啟即可重新產生 PWA 圖示
 public/

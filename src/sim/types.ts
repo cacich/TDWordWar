@@ -429,6 +429,11 @@ export interface GameState {
   maxLives: number
   wave: number
   maxWave: number
+  /**
+   * 難度弧長度（參考波）。血量的指數吃 `wave × arc / maxWave`，
+   * 所以它是「這一關有多難」的主旋鈕，與 `maxWave`（有多長）互相獨立。見 sim/waves.ts。
+   */
+  arc: number
   phase: Phase
 
   /** prep 階段剩餘秒數 */

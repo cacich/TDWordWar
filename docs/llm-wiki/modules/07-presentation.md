@@ -146,19 +146,28 @@ ui = clamp(9.5, 18, min(#app 寬 / 27, #app 高 / 56))   // app.ts:134
 ### 每幀（`core/loop.ts:26-41`）
 
 ```
-elapsed = min(now - last, 0.25s)          // loop.ts:27 分頁切回來不要一次補算幾百步
+elapsed = min(now - last, 0.25s)          // loop.ts 分頁切回來不要一次補算幾百步
 acc += elapsed * speed                     // 倍速就是往累加器多灌時間
-while (acc >= 1/60 && steps < 8) step(1/60) // loop.ts:32-36
-if (steps === 8) acc = 0                    // loop.ts:37 掉幀保護：放棄補算
-render(acc / FIXED_DT)                      // loop.ts:39 每幀恰好一次
+while (acc >= 1/60 && steps < 8) step(1/60) // 固定步長
+if (steps === 8) acc = 0                    // 掉幀保護：放棄補算
+sinceDraw += elapsed
+if (sinceDraw >= MIN_FRAME) render(...)     // ★ 省電節流：繪製最多 1/12ms ≈ 83fps
 ```
 
 - **為什麼固定步長**：`sim/` 的行為必須與畫面幀率脫鉤，否則同一顆種子在 60Hz 與 144Hz 機器上會跑出不同結果，`npm run sim` 與單元測試（都用 `stepGame(s, 1/60)` 迴圈）也就不再能代表真實對局。
 - **為什麼要 `MAX_STEPS_PER_FRAME = 8`**：慢機器上若堅持補完落後的步數，每幀的模擬時間會越長 → 落後更多 → 死亡螺旋。上限 8 步（約 133ms 模擬）之後把 `acc` 歸零，寧可讓遊戲「慢動作」也不要卡死。
+- ★ **`MIN_FRAME = 0.012` 是省電旋鈕**（`loop.ts`）：90／120Hz 的手機上 rAF 每秒叫 90～120 次，
+  但同一份 state 畫兩次肉眼看不出差別，電池與溫度卻真的付了。門檻 12ms 讓 120Hz 隔幀繪製（≈60fps），
+  60Hz（間隔 16.7ms）完全不受影響。**模擬照跑，只跳過繪製**——所以不影響任何邏輯與重現性。
+  `setPaused()` 會把 `sinceDraw` 補滿，暫停／回到遊戲的那一刻立刻重畫。
 - `render` 收到的 `alpha`（插值係數）**目前沒被使用**：`app.ts:110-120` 的 render callback 自己用 `performance.now()` 算 `frameDt`（同樣 clamp 0.25s，`app.ts:112`）餵給粒子與 toast 計時。沒有做位置插值——格狀塔防的視覺誤差看不出來。
 
-render callback 的固定順序（`app.ts:110-120`）：寫入 `renderer.view.selectedCell` → `drainEvents()` → `renderer.draw(state, frameDt)` → `hud.update(frameDt)` → `wishPanel.update()`（僅開啟時）→ `syncProgress(frameDt)`。
+render callback 的固定順序（`app.ts` 的 render callback）：`drainEvents()` → （選單沒開著時）寫入
+`renderer.view.selectedCell` + `renderer.draw(state, frameDt)` → `hud.update(frameDt)` →
+`wishPanel.update()`（僅開啟時）→ `syncProgress(frameDt)`。
 **`drainEvents()` 必須在 `draw()` 之前**：粒子要在同一幀就被 `particles.step()` 推進與畫出。
+⚠ **選單／圖鑑開著時不畫棋盤**（模擬本來就凍結了，棋盤又被完全蓋住），但 **`hud.update()` 照跑**——
+toast 的倒數在那裡，跳過它會讓「獲得聲望」之類的訊息卡在畫面上不消失。
 
 ### 畫面切換與凍結
 
@@ -170,9 +179,14 @@ render callback 的固定順序（`app.ts:110-120`）：寫入 `renderer.view.se
 ### 渲染分層（`renderer.ts:109-125`）
 
 ```
-clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIndicator
+clearRect + 紙底 → drawTileLayer → drawHintCells(拖曳落點) → drawRangeIndicator
 → drawUnits（三趟）→ drawEnemies → drawEffects → particles.step + draw → drawDrag
 ```
+
+★ **地形是離屏快取的一張圖**（`drawTileLayer`）：棋盤在一局內完全不變，但逐格
+`fillRect` + `strokeRect` + 虛線是每幀最貴的一段，所以畫一次存進 `this.tiles`，之後每幀只
+`drawImage`。失效鍵 `tileKey` 收了 `levelKey`／格數／`cell`／`ox`／`oy`／畫布尺寸——
+**新增任何會改變地形外觀的東西（例如地形隨波次變色）都必須進這個鍵**，否則畫面會停在舊圖。
 
 `drawUnits()`（`renderer.ts:224-249`）刻意分三趟：
 
@@ -187,7 +201,10 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 - `memberTier`（`renderer.ts:60`，建於 226-233）：字牌格 → 所屬武將的**最高**階級，決定成員字牌底色
 - `hintKind`（`renderer.ts:61`，建於 234-238）：消費 `state.hintCells`（`sim/types.ts:460-471`），一格同時可升級與可湊將時 **upgrade 優先**（更直接可做）
 
-`drawHintHalo`（`renderer.ts:308-320`）用 `Math.sin(performance.now() / 320)` 做脈動描邊 + 柔光。顏色來自 `HINT_COLOR`（`render/theme.ts:51-54`）：
+`drawHintHalo` 用脈動描邊做出光暈，相位 `this.pulse` 每幀算一次（`Math.sin(performance.now()/320)`）。
+⚠ **刻意不用 `shadowBlur`**：canvas 的陰影是逐像素模糊，成本比同範圍的實心繪製高一個量級，
+而這個光暈可能同時出現在十幾格上、每幀重畫（實測是手機發熱的一大來源）。
+現在改成「外圈淡粗描邊 + 內圈實描邊」兩道 stroke 疊出擴散感。顏色來自 `HINT_COLOR`（`render/theme.ts:51-54`）：
 
 - `upgrade = '#1fb6c9'`（青）——**刻意避開二階品質色的綠 `#3f8f4f`**（`QUALITY_COLOR[1]`，`theme.ts:57`）。原本用綠色時，二階字牌自己的綠描邊與提示光暈疊在一起完全分不清
 - `combine = '#d9a520'`（金，同 `THEME.gold`）
@@ -198,7 +215,11 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 
 每幀做四件事，全在 app 層而**不在 sim 層——這樣 `sim/` 完全不知道 localStorage 與 `MetaProgress` 的存在**，`npm run sim` 也就不會污染玩家存檔：
 
-1. 掃 `state.hand` 與 `state.units` 寫入 `meta.seenGlyphs` / `seenGenerals`（`app.ts:148-164`）
+1. 圖鑑登錄 `syncCodex()`：掃 `state.hand`／`state.units`／`state.enemies` 寫入
+   `meta.seenGlyphs` / `seenGenerals` / `seenEnemies`。
+   ⚠ **由 0.5 秒的輪詢呼叫，不是每幀**（跟成就檢查共用同一個 `achieveTimer`）：它是三層迴圈套
+   `Array.includes`（`seenGlyphs` 有 71 項），場上單位一多就是每幀上千次字串比對。
+   代價是「同一次輪詢之內生成又死掉的敵種」要等下一次出現才登錄——圖鑑只在局外看，可以接受。
 2. `meta.best[levelKey]`，**只在 `wave > 1` 才記**（`app.ts:175`），否則一進關卡就顯示「最佳 1 波」
 3. `phase === 'won'` 時補 `meta.cleared`（`app.ts:195-198`）
 4. 聲望結算：`renownPaid` 旗標保證一局只結一次（`app.ts:201-223`），數值由 `renownFor()`（`sim/state.ts:137`）算，並 toast 通知。`startLevel()` 會把旗標重設（`app.ts:555`）
@@ -226,7 +247,13 @@ clearRect + 紙底 → drawTiles → drawHintCells(拖曳落點) → drawRangeIn
 2. **`renderer.view.drag` 是 input 寫、render 讀的共享可變狀態**（`renderer.ts:14-26`）。`input/pointer.ts` 直接 `Object.assign(this.drag, {...})`。取消拖曳一定要走 `cancel()`（`pointer.ts:230-236`），否則會留下永久的拖曳影。
 3. **`input/` 唯一碰 DOM 的地方是 `handIndexAtPoint()`**（`pointer.ts:279-284`，用 `document.elementFromPoint` 找 `.card[data-index]`）。這也代表 `hud.buildHand()` 產生的卡片**必須帶 `data-index`**（`hud.ts:157`），否則「拖手牌到另一張手牌上疊合」會靜默失效。
 4. **手牌卡片的 `pointerdown` 要 `setPointerCapture`**（`hud.ts:165-172`）：卡片內容每幀可能被重繪，不鎖指標的話手指移出卡片就收不到 move/up。
-5. **HUD 的差異更新靠 `dataset.sig`**（手牌 `hud.ts:298`、心願列 `hud.ts:269`、羈絆條 `hud.ts:333`、羈絆詳情 `hud.ts:387`）。清空卡片時**必須 `delete card.dataset.sig`**（`hud.ts:288-293`），否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
+5. **HUD 的差異更新靠 `dataset.sig`**（手牌、心願列、羈絆條、羈絆詳情）與 `infoSig`（字牌詳情）。清空卡片時**必須 `delete card.dataset.sig`**，否則下次抽到同字同階會被誤判「沒變動」而不重繪。加新的視覺狀態（例如新角標）就要把它併進 sig 字串。
+    ★ **所有讀數都走 `setText()` / `setHidden()`**（`hud.ts` 檔頭）：寫 `textContent` 會換掉文字節點、
+    瀏覽器一律重排該子樹，就算內容一模一樣也一樣——而這個 HUD 每幀更新十幾個幾秒才變一次的讀數。
+    ⚠ `fitLevelName()` 讀 `scrollWidth`／`clientWidth` 是**強制排版**，所以只在「位數變了」或
+    `onResized()`（app 的 resize 監聽會呼叫）之後才量一次，寬度本身不進 key。
+    ⚠ 字牌詳情面板整段是 `innerHTML`（含配方建議），**一開著就每幀重建會直接吃掉一台手機**，
+    所以 `infoSig` 要收進所有顯示出來的數字（屬性受羈絆／光環影響會變、技能冷卻每秒變一次）。
 6. ★ **「選取框」與「詳情面板」是兩個獨立的狀態**（`app.ts` 的 `selectedCell` 與 `infoCell`）。
    `select(cell)` 兩者都設，**只有「真的點擊字牌」這條路徑會呼叫它**（`input/pointer.ts` 的 `onUp`，
    `src.kind === 'unit' && !this.moved`）；放置與搬移改走 `highlight(cell)`，只標落點、不開面板。

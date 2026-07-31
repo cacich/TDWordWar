@@ -36,31 +36,38 @@ export const PREP_SECONDS = 12
 export const BIAS_WEIGHT = 4
 
 /**
- * ★ 難度弧的參考長度。血量的指數吃的是**相對進度**而不是絕對波次：
+ * ★ 難度弧的參考長度，也是「無盡模式」與省略 `arc` 時的預設弧長。
  *
- *     exponent = wave × WAVE_REF / maxWave
+ * 血量的指數吃的是**相對進度**而不是絕對波次：
  *
- * 12 波的關卡因此把整條 40 波的弧壓縮進 12 波，40 波的關卡則維持原速。
- * 這是「傻 AI 中位數 ≈ 總波數的一半」能對**每一關同時成立**的機制來源：
- * 陣亡點大約落在弧上的第 20 個參考波，換算回去就是 maxWave × 20/40 = 一半。
+ *     exponent = wave × arc / maxWave
+ *
+ * 也就是「這一關要在 maxWave 波之內走完 arc 個參考波」。arc = WAVE_REF = 40
+ * 的關卡等於走完整條參考弧；arc 越小，同樣的波數只走過弧的一小段 → 這一關越簡單。
+ *
+ * ⚠ 歷史（別再走回去）：`arc` 曾經**不存在**，公式固定用 `WAVE_REF / maxWave`，
+ * 於是「關卡長度」與「難度」是同一個數字——每一關都剛好走完整條弧，
+ * 傻 AI 在每一關都死在正中間，九關的難度**完全一樣平**（實測比例 0.47～0.54）。
+ * 更糟的是短關卡被壓得極陡：12 波的黃巾等於每波血量 ×1.99，教學關反而是全遊戲最陡的一段。
+ * 現在兩件事分開了：`maxWave` 只管長度，`arc` 只管難度，難度曲線寫在關卡表裡（見 data/levels）。
  *
  * ⚠ 為什麼不能改用 `hpMul` 達成同一件事：陣亡波次是「血量曲線」與「玩家戰力曲線」
  * 的交點，而兩者幾乎平行（見 HP_GROWTH 的註解），所以整個 hpMul 區間只值約 2 波。
- * `hpMul` 現在的定位回到單純的「這一關比較難／比較簡單」微調，不背負關卡長度。
+ * `hpMul` 的定位是單純的「這一關的敵人硬一點／軟一點」微調，難度弧才是主旋鈕。
  */
 export const WAVE_REF = 40
 
 /**
- * 該波的基準血量。`maxWave` 預設為 `WAVE_REF`，所以 `enemyBaseHp(w)` 等同於
- * 舊版的 `BASE_HP × HP_GROWTH^w`——測試與「參考長度關卡」都不受影響。
+ * 該波的基準血量。`maxWave` 與 `arc` 都預設為 `WAVE_REF`，所以 `enemyBaseHp(w)`
+ * 等同於舊版的 `BASE_HP × HP_GROWTH^w`——測試與「參考長度關卡」都不受影響。
  *
  * ⚠ 無盡模式的 `maxWave` 是 `Infinity`，相對進度會恆等於 0（血量永不成長，
- * 敵人永遠是第 0 波的強度）。因此非有限的 `maxWave` 一律退回 `WAVE_REF`：
- * 無盡走的就是「絕對波次」那條原始曲線，也是本專案調得最久的那一條。
+ * 敵人永遠是第 0 波的強度）。因此非有限的 `maxWave` 一律退回「absolute 波次」那條
+ * 原始曲線（弧長與關長都取 `WAVE_REF`），也是本專案調得最久的那一條。
  */
-export function enemyBaseHp(wave: number, maxWave: number = WAVE_REF): number {
-  const ref = Number.isFinite(maxWave) ? maxWave : WAVE_REF
-  return BASE_HP * Math.pow(HP_GROWTH, (wave * WAVE_REF) / ref)
+export function enemyBaseHp(wave: number, maxWave: number = WAVE_REF, arc: number = WAVE_REF): number {
+  if (!Number.isFinite(maxWave)) return BASE_HP * Math.pow(HP_GROWTH, wave)
+  return BASE_HP * Math.pow(HP_GROWTH, (wave * arc) / maxWave)
 }
 
 /**
@@ -110,9 +117,10 @@ export function buildWave(
   hpMul = 1,
   bias: readonly EnemyTrait[] = [],
   maxWave: number = WAVE_REF,
+  arc: number = WAVE_REF,
 ): SpawnEntry[] {
   const out: SpawnEntry[] = []
-  const base = enemyBaseHp(wave, maxWave) * hpMul
+  const base = enemyBaseHp(wave, maxWave, arc) * hpMul
   const pool = composition(wave)
   const n = enemyCount(wave)
   const gap = 0.75

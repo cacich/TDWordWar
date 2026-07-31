@@ -64,6 +64,9 @@ export const TUNE = { SAT: 350, STACK: 2.2, FOOD: 22 }
  * 現值 1.2 秒一輪：12 秒的佈陣期還有 10 輪，而**一輪不再有動作數上限**（見 runActions），
  * 所以「少想幾次」不等於「少做幾件事」——該擺的陣還是會在同一輪裡擺完。
  * 想再省電就往上加；往下調之前先想清楚為什麼「一輪做完」不夠。
+ *
+ * 另一半的省電來自「一輪本身變便宜」（見 Cov 的覆蓋快取與 Geom.runs 的線段預算），
+ * 那條路不影響行為，所以優先走那邊——間隔一拉長，AI 的反應就真的變鈍。
  */
 const THINK_INTERVAL = 1.2
 /** 增益低於這個值就不值得動手（單位同上：一趟路的傷害量） */
@@ -203,7 +206,16 @@ interface Geom {
   /** 索引 = cell，值 = 到各路徑點的距離（依 pts 順序，未排序，供逐點加權） */
   dists: Float64Array[]
   plots: number[]
+  /**
+   * 「連續 n 格、全是空地、依正讀順序」的線段，索引 = n。**棋盤靜態，一局算一次。**
+   * 窗格列舉本來是每個配方都重掃一遍整個棋盤（40 個配方 × 300 個起點 × 逐格 isPlot），
+   * 掃出來的東西每次都一樣；改成先算好線段，列舉就只剩「這條線上的字對不對得上配方」。
+   */
+  runs: number[][][]
 }
+
+/** 配方最長幾個字——`Geom.runs` 只需要算到這個長度 */
+const MAX_RECIPE = GENERALS.reduce((n, d) => Math.max(n, d.recipe.length), 1)
 
 function geomOf(brain: AutoBrain, board: Board): Geom {
   if (brain.geom && brain.geom.board === board) return brain.geom
@@ -218,9 +230,32 @@ function geomOf(brain: AutoBrain, board: Board): Geom {
     dists[i] = arr
     if (isPlot(board, i)) plots.push(i)
   }
-  const geom: Geom = { board, pts, dists, plots }
+  const geom: Geom = { board, pts, dists, plots, runs: plotRuns(board) }
   brain.geom = geom
   return geom
+}
+
+/** 依長度分組的全空地線段（橫向左→右、縱向上→下，即 `Unit.cells` 要求的正讀順序） */
+function plotRuns(board: Board): number[][][] {
+  const runs: number[][][] = []
+  for (let len = 0; len <= MAX_RECIPE; len++) runs.push([])
+  for (let vertical = 0; vertical < 2; vertical++) {
+    const span = vertical ? board.rows : board.cols
+    const other = vertical ? board.cols : board.rows
+    for (let o = 0; o < other; o++) {
+      for (let s = 0; s < span; s++) {
+        // 從 s 開始往前推，一路都是空地就記下每個長度的線段（長度 1 用不到，從 2 起）
+        const cells: number[] = []
+        for (let i = 0; i < MAX_RECIPE && s + i < span; i++) {
+          const cell = vertical ? cellIndex(board, o, s + i) : cellIndex(board, s + i, o)
+          if (!isPlot(board, cell)) break
+          cells.push(cell)
+          if (cells.length >= 2) runs[cells.length].push([...cells])
+        }
+      }
+    }
+  }
+  return runs
 }
 
 /**
@@ -236,25 +271,45 @@ function geomOf(brain: AutoBrain, board: Board): Geom {
  * 一旦整條路都飽和，鋪新塔不再划算，多出來的糧就會轉去**疊高**既有單位——
  * 那正是本作「後期戰力指數成長」的設計出口（見 CLAUDE.md 的 HP_GROWTH 註解）。
  *
- * ⚠ `load` 由 ctx.pathLoad 提供（每輪重算）；為 null 時退回線性覆蓋（開局還沒有塔）。
+ * ⚠ `load` 在一輪內固定不變（buildCtx 算一次），所以同一組 (格, 射程) 的答案也固定——
+ * 見 Cov：整輪的估值幾乎全在問這個問題，快取起來是最大的一項省電。
  */
 
-function satCoverage(geom: Geom, cell: number, r: number, load: Float64Array | null): number {
-  if (r <= 0) return 0
-  const a = geom.dists[cell]
-  let sum = 0
-  for (let k = 0; k < a.length; k++) {
-    if (a[k] > r) continue
-    sum += load ? TUNE.SAT / (TUNE.SAT + load[k]) : 1
-  }
-  return sum
-}
+/**
+ * 飽和覆蓋的快取。一輪決策會問上萬次「這一格、這個射程蓋到多少路徑」，
+ * 但不同的問法只有「格 × 該關出現的幾種射程」這麼多種（百來個），
+ * 其餘全是重複——所以整輪只算一次，後面都是查表。
+ *
+ * ⚠ 一個 Cov 綁一份 `load`（也就是綁一次 buildCtx）。棋盤一動 load 就變，
+ * 快取必須跟著丟掉，所以它是 Ctx 的欄位而不是 brain 的。
+ * 內層用「射程原值」當鍵（不做四捨五入），答案與沒有快取時逐位相同。
+ */
+class Cov {
+  private cache = new Map<number, Map<number, number>>()
+  constructor(private geom: Geom, private load: Float64Array) {}
 
-/** 多格單位取「最靠路徑的那一格」量起——`effectiveRange` 已把中心外移補回射程 */
-function bestSatCoverage(geom: Geom, cells: readonly number[], r: number, load: Float64Array | null): number {
-  let best = 0
-  for (const c of cells) best = Math.max(best, satCoverage(geom, c, r, load))
-  return best
+  at(cell: number, r: number): number {
+    if (r <= 0) return 0
+    let byRange = this.cache.get(cell)
+    if (!byRange) this.cache.set(cell, (byRange = new Map()))
+    const hit = byRange.get(r)
+    if (hit !== undefined) return hit
+    const a = this.geom.dists[cell]
+    let sum = 0
+    for (let k = 0; k < a.length; k++) {
+      if (a[k] > r) continue
+      sum += TUNE.SAT / (TUNE.SAT + this.load[k])
+    }
+    byRange.set(r, sum)
+    return sum
+  }
+
+  /** 多格單位取「最靠路徑的那一格」量起——`effectiveRange` 已把中心外移補回射程 */
+  best(cells: readonly number[], r: number): number {
+    let best = 0
+    for (const c of cells) best = Math.max(best, this.at(c, r))
+    return best
+  }
 }
 
 // ── 估值 ──────────────────────────────────────────────
@@ -305,8 +360,8 @@ function auraValue(ctx: Ctx, geom: Geom, cell: number, aura: Aura, m: number): n
  * 佔一格的機會成本。跟收益端一樣吃飽和折扣，兩者才能相減（見 OCCUPY_COST 的警告）：
  * 這一格附近的路段已經火力滿載時，把它讓給別人也換不到什麼，所以佔位幾乎免費。
  */
-function occupyCost(geom: Geom, cell: number, load: Float64Array | null): number {
-  return OCCUPY_COST * satCoverage(geom, cell, OCCUPY_RADIUS, load)
+function occupyCost(cov: Cov, cell: number): number {
+  return OCCUPY_COST * cov.at(cell, OCCUPY_RADIUS)
 }
 
 /** 一枚字牌單獨站在某格的價值（含佔位成本，所以可能是負的） */
@@ -323,19 +378,19 @@ function glyphSpotValue(
   let v = 0
   if (def.atk > 0 && def.aps > 0) {
     const air = ctx.flyingThreat && def.range < ANTI_AIR_RANGE ? NO_AIR_PENALTY : 1
-    v += def.atk * m * def.aps * satCoverage(geom, cell, glyphRangeOf(state, def.range), ctx.pathLoad) *
+    v += def.atk * m * def.aps * ctx.cov.at(cell, glyphRangeOf(state, def.range)) *
       utilityMul(def.shape, def.onHit) * air
   }
   if (def.aura) v += auraValue(ctx, geom, cell, def.aura, m)
   if (def.income) v += def.income * level * TUNE.FOOD
-  return v - occupyCost(geom, cell, ctx.pathLoad)
+  return v - occupyCost(ctx.cov, cell)
 }
 
 /** 場上單位「現在」的輸出價值（吃飽和覆蓋）。已被武將接手的字牌回傳 0（它不再單獨出手） */
-function attackValueOf(geom: Geom, u: Unit, load: Float64Array | null): number {
+function attackValueOf(cov: Cov, u: Unit): number {
   if (u.kind === 'glyph' && u.formIds.length > 0) return 0
   if (u.atk <= 0 || u.aps <= 0) return 0
-  return u.atk * u.aps * bestSatCoverage(geom, u.cells, u.range, load) * utilityMul(u.shape, u.onHit)
+  return u.atk * u.aps * cov.best(u.cells, u.range) * utilityMul(u.shape, u.onHit)
 }
 
 /** 這座單位對每個路徑點貢獻的原始 dps（atk×aps），加進 pathLoad。多格取最近的一格 */
@@ -352,12 +407,21 @@ function addToLoad(geom: Geom, u: Unit, load: Float64Array): void {
 
 /** 場上單位的總價值：輸出 + 光環 + 產糧。鏟除決策看的就是這個 */
 function liveValue(geom: Geom, ctx: Ctx, u: Unit): number {
-  let v = attackValueOf(geom, u, ctx.pathLoad)
+  let v = attackValueOf(ctx.cov, u)
   if (u.aura && !(u.kind === 'glyph' && u.formIds.length > 0)) {
     v += auraValue(ctx, geom, u.cells[0], u.aura, levelMul(u.level))
   }
   if (u.income > 0) v += u.income * TUNE.FOOD
-  return v - occupyCost(geom, u.cells[0], ctx.pathLoad)
+  return v - occupyCost(ctx.cov, u.cells[0])
+}
+
+/** 一輪之內羈絆狀態不變，所以同一個配方只算一次（窗格列舉會重複問幾千次） */
+function bondMulOf(ctx: Ctx, def: GeneralDef): number {
+  const hit = ctx.bondMuls.get(def)
+  if (hit !== undefined) return hit
+  const v = bondMul(ctx, def)
+  ctx.bondMuls.set(def, v)
+  return v
 }
 
 /**
@@ -399,27 +463,57 @@ interface Win {
  * 完成這個窗格後的估值。屬性算法與 `recomputeForm` 一致
  * （atk = Σ成員 atk × atkMul、aps = 平均 aps × apsMul），空格以一階字估。
  */
-function winValue(state: GameState, geom: Geom, ctx: Ctx, def: GeneralDef, cells: number[], have: (Unit | undefined)[]): number {
-  let atkSum = 0
-  let apsSum = 0
+function winValue(state: GameState, ctx: Ctx, def: GeneralDef, cells: number[], have: (Unit | undefined)[]): number {
+  const info = defInfo(def)
+  // 以「全部一階」為底，只把已就位且升過階的成員補上差額——省掉逐格查字表
+  let atkSum = info.atkBase
   for (let i = 0; i < cells.length; i++) {
-    const d = GLYPH_BY_CHAR[def.recipe[i]]
     const lv = have[i]?.level ?? 1
-    atkSum += d.atk * levelMul(lv)
-    apsSum += d.aps
+    if (lv > 1) atkSum += GLYPH_BY_CHAR[def.recipe[i]].atk * (levelMul(lv) - 1)
   }
   const atk = atkSum * def.atkMul
-  const aps = (apsSum / cells.length) * def.apsMul
-  const onHit = def.onHit ?? mergedOnHit(def)
+  const aps = info.apsAvg * def.apsMul
   let v = 0
   if (atk > 0 && aps > 0) {
     const air = ctx.flyingThreat && def.range < ANTI_AIR_RANGE ? NO_AIR_PENALTY : 1
-    v = atk * aps * bestSatCoverage(geom, cells, generalRangeOf(state, def.range), ctx.pathLoad) *
-      utilityMul(def.shape, onHit) * air
+    v = atk * aps * ctx.cov.best(cells, generalRangeOf(state, def.range)) * info.util * air
   }
   if (def.income) v += def.income * TUNE.FOOD
   const dup = Math.pow(DUP_DECAY, ctx.formed.get(def.name) ?? 0)
-  return v * bondMul(ctx, def) * dup
+  return v * bondMulOf(ctx, def) * dup
+}
+
+/**
+ * 配方的固定衍生值。全部只由資料表決定（與棋盤、局勢無關），
+ * 但窗格列舉每一輪要問上萬次——所以整局只算一次。
+ */
+interface DefInfo {
+  /** 全部一階時的 Σ 成員攻擊 */
+  atkBase: number
+  /** 成員攻速的平均 */
+  apsAvg: number
+  /** 攻擊型態與繼承控場換算出的加權（見 utilityMul） */
+  util: number
+}
+const DEF_INFO = new Map<GeneralDef, DefInfo>()
+
+function defInfo(def: GeneralDef): DefInfo {
+  let info = DEF_INFO.get(def)
+  if (info) return info
+  let atkBase = 0
+  let apsSum = 0
+  for (const ch of def.recipe) {
+    const d = GLYPH_BY_CHAR[ch]
+    atkBase += d.atk
+    apsSum += d.aps
+  }
+  info = {
+    atkBase,
+    apsAvg: apsSum / def.recipe.length,
+    util: utilityMul(def.shape, def.onHit ?? mergedOnHit(def)),
+  }
+  DEF_INFO.set(def, info)
+  return info
 }
 
 /** 武將未自訂 onHit 時會繼承成員的控場效果（見 state.ts 的 mergeOnHit），估值也要跟著算進去 */
@@ -446,50 +540,42 @@ function mergedOnHit(def: GeneralDef): OnHit | undefined {
  * 「有機會」= 每一格都是空地、已有的字都對得上配方、缺的字拿得到（手牌或本局字池）。
  * ⚠ 不要求窗格前後沒有其他字牌：`sim/combine.ts` 會掃過所有「包含變動格」的子串，
  * 所以線段更長不影響判定，兩個武將也可以共用字牌。
+ *
+ * 走訪順序刻意是「線段 → 配方」而不是「配方 → 線段」：一條線上目前有哪些字牌
+ * （最貴的那份查表）於是只查一次，同長度的所有配方共用；空地判定則整個消失，
+ * 因為 `geom.runs` 已經只收全空地的線段。
  */
 function enumerateWindows(state: GameState, geom: Geom, ctx: Ctx): Win[] {
-  const board = geom.board
   const out: Win[] = []
-  for (const def of ctx.defs) {
-    const n = def.recipe.length
-    for (let vertical = 0; vertical < 2; vertical++) {
-      const span = vertical ? board.rows : board.cols
-      const other = vertical ? board.cols : board.rows
-      if (n > span) continue
-      for (let o = 0; o < other; o++) {
-        for (let s = 0; s + n <= span; s++) {
-          const cells: number[] = []
-          const have: (Unit | undefined)[] = []
-          let filled = 0
-          let ok = true
-          for (let i = 0; i < n; i++) {
-            const cell = vertical ? cellIndex(board, o, s + i) : cellIndex(board, s + i, o)
-            if (!isPlot(board, cell)) {
-              ok = false
-              break
-            }
-            const g = ctx.glyphByCell.get(cell)
-            if (g) {
-              if (g.chars[0] !== def.recipe[i]) {
-                ok = false
-                break
-              }
-              filled++
-            } else if (!ctx.obtainable.has(def.recipe[i])) {
-              ok = false
-              break
-            }
-            cells.push(cell)
-            have.push(g)
+  const have: (Unit | undefined)[] = []
+  for (let n = 2; n < geom.runs.length; n++) {
+    const defs = ctx.defsByLen.get(n)
+    if (!defs) continue
+    for (const cells of geom.runs[n]) {
+      let filled = 0
+      for (let i = 0; i < n; i++) {
+        const g = ctx.glyphByCell.get(cells[i])
+        have[i] = g
+        if (g) filled++
+      }
+      if (filled === n) continue // 全滿表示已經成將（或正被別的武將占用）
+      for (const def of defs) {
+        let ok = true
+        for (let i = 0; i < n; i++) {
+          const g = have[i]
+          if (g ? g.chars[0] !== def.recipe[i] : !ctx.obtainable.has(def.recipe[i])) {
+            ok = false
+            break
           }
-          if (!ok || filled === n) continue // 全滿表示已經成將（或正被別的武將占用）
-          const value = winValue(state, geom, ctx, def, cells, have)
-          let standalone = 0
-          for (const g of have) if (g) standalone += attackValueOf(geom, g, ctx.pathLoad)
-          const gain = value - standalone
-          if (gain < MIN_GAIN) continue
-          out.push({ def, cells, have, filled, gain })
         }
+        if (!ok) continue
+        const slice = have.slice(0, n)
+        const value = winValue(state, ctx, def, cells, slice)
+        let standalone = 0
+        for (const g of slice) if (g) standalone += attackValueOf(ctx.cov, g)
+        const gain = value - standalone
+        if (gain < MIN_GAIN) continue
+        out.push({ def, cells, have: slice, filled, gain })
       }
     }
   }
@@ -501,33 +587,40 @@ function enumerateWindows(state: GameState, geom: Geom, ctx: Ctx): Win[] {
  * 完成度以平方折算：只差最後一格時給滿分（那就是真的會成將），
  * 半途則只給一小部分，免得 AI 為了遙遠的配方把好格子全部占住。
  *
- * `completeOnly` 版只收「差最後一格」的窗格，給**搬動**用。
+ * 第二份（`complete`）只收「差最後一格」的窗格，給**搬動**用。
  * ⚠ 這個區分是必要的：半完成窗格的加分是一個「跟著空格跑」的位置吸子——
  * 搬走一枚字會讓它原本的格子重新變成空缺、加分又冒出來，於是一枚孤字會在
  * 兩個窗格槽之間無限來回搬動。只認「這一步就成將」的窗格才不會震盪：成將後窗格消失。
+ *
+ * 兩份在同一趟裡建好：窗格清單有上千筆，掃兩次純粹是白花的電。
  */
-function slotBonusMap(wins: Win[], completeOnly = false): Map<number, Map<string, number>> {
-  const out = new Map<number, Map<string, number>>()
+function slotBonusMaps(wins: Win[]): { slot: SlotMap; complete: SlotMap } {
+  const slot: SlotMap = new Map()
+  const complete: SlotMap = new Map()
+  const bump = (out: SlotMap, cell: number, char: string, bonus: number) => {
+    let byChar = out.get(cell)
+    if (!byChar) out.set(cell, (byChar = new Map()))
+    if ((byChar.get(char) ?? 0) < bonus) byChar.set(char, bonus)
+  }
   for (const w of wins) {
     const n = w.cells.length
-    if (completeOnly && w.filled + 1 !== n) continue
-    const weight = w.filled + 1 === n ? 1 : Math.pow((w.filled + 1) / n, 2) * 0.6
-    const bonus = w.gain * weight
+    const last = w.filled + 1 === n
+    const bonus = w.gain * (last ? 1 : Math.pow((w.filled + 1) / n, 2) * 0.6)
     for (let i = 0; i < n; i++) {
       if (w.have[i]) continue
-      const cell = w.cells[i]
-      const char = w.def.recipe[i]
-      let byChar = out.get(cell)
-      if (!byChar) out.set(cell, (byChar = new Map()))
-      if ((byChar.get(char) ?? 0) < bonus) byChar.set(char, bonus)
+      bump(slot, w.cells[i], w.def.recipe[i], bonus)
+      if (last) bump(complete, w.cells[i], w.def.recipe[i], bonus)
     }
   }
-  return out
+  return { slot, complete }
 }
+
+type SlotMap = Map<number, Map<string, number>>
 
 // ── 每輪重建的決策脈絡 ────────────────────────────────
 interface Ctx {
-  defs: GeneralDef[]
+  /** 依配方長度分組的可湊配方，供 enumerateWindows 走「線段 → 配方」 */
+  defsByLen: Map<number, GeneralDef[]>
   glyphByCell: Map<number, Unit>
   /** 拿得到的字：手牌上的 + 本局字池 */
   obtainable: Set<string>
@@ -537,8 +630,10 @@ interface Ctx {
   activeBonds: Set<string>
   /** 場上會攻擊的單位（供光環估值） */
   attackers: { x: number; y: number; value: number }[]
-  /** 每個路徑點目前承受的總 dps，飽和覆蓋的依據（見 satCoverage） */
-  pathLoad: Float64Array
+  /** 飽和覆蓋（含快取）。綁著這一輪的路徑火力分佈，見 Cov */
+  cov: Cov
+  /** 這一輪的羈絆加分快取（見 bondMulOf） */
+  bondMuls: Map<GeneralDef, number>
   /** 這一關有沒有飛行威脅（關卡 bias 宣告，或場上已出現飛賊）→ 逼 AI 準備對空 */
   flyingThreat: boolean
   emptyPlots: number[]
@@ -560,20 +655,25 @@ function buildCtx(brain: AutoBrain, state: GameState, geom: Geom): Ctx {
   const glyphByCell = new Map<number, Unit>()
   const formed = new Map<string, number>()
   const tagCount = new Map<string, number>()
+  /** 場上出現過的字。配方裡有「既拿不到、場上也沒有」的字時整個配方可以直接剔掉 */
+  const onBoard = new Set<string>()
   // 先算 pathLoad（原始 dps），飽和覆蓋才有依據；attacker 的「價值」要等它算完才能算
   const pathLoad = new Float64Array(geom.pts.length)
   for (const u of state.units) {
-    if (u.kind === 'glyph') glyphByCell.set(u.cells[0], u)
-    else {
+    if (u.kind === 'glyph') {
+      glyphByCell.set(u.cells[0], u)
+      onBoard.add(u.chars[0])
+    } else {
       formed.set(u.defKey, (formed.get(u.defKey) ?? 0) + 1)
       for (const t of u.tags) tagCount.set(t, (tagCount.get(t) ?? 0) + 1)
     }
     addToLoad(geom, u, pathLoad)
   }
+  const cov = new Cov(geom, pathLoad)
 
   const attackers: { x: number; y: number; value: number }[] = []
   for (const u of state.units) {
-    const v = attackValueOf(geom, u, pathLoad)
+    const v = attackValueOf(cov, u)
     if (v > 0) {
       const c = unitCenter(geom.board, u)
       attackers.push({ x: c.x, y: c.y, value: v })
@@ -585,15 +685,25 @@ function buildCtx(brain: AutoBrain, state: GameState, geom: Geom): Ctx {
 
   const emptyPlots = geom.plots.filter((c) => !glyphByCell.has(c))
 
+  // 缺的字要拿得到、已有的字要在場上——兩者都不成立的配方連線段都不必掃
+  const defsByLen = new Map<number, GeneralDef[]>()
+  for (const def of brain.defs) {
+    if (!def.recipe.every((ch) => obtainable.has(ch) || onBoard.has(ch))) continue
+    const list = defsByLen.get(def.recipe.length)
+    if (list) list.push(def)
+    else defsByLen.set(def.recipe.length, [def])
+  }
+
   const ctx: Ctx = {
-    defs: brain.defs,
+    defsByLen,
     glyphByCell,
     obtainable,
     formed,
     tagCount,
     activeBonds: new Set(state.activeBonds.map((b) => b.name)),
     attackers,
-    pathLoad,
+    cov,
+    bondMuls: new Map(),
     flyingThreat: state.bias.includes('flying') || state.enemies.some((e) => e.flying && e.hp > 0),
     emptyPlots,
     wins: [],
@@ -602,8 +712,9 @@ function buildCtx(brain: AutoBrain, state: GameState, geom: Geom): Ctx {
   }
   const wins = enumerateWindows(state, geom, ctx)
   ctx.wins = wins
-  ctx.slot = slotBonusMap(wins)
-  ctx.complete = slotBonusMap(wins, true)
+  const maps = slotBonusMaps(wins)
+  ctx.slot = maps.slot
+  ctx.complete = maps.complete
   return ctx
 }
 
@@ -667,7 +778,7 @@ function stackGain(state: GameState, geom: Geom, ctx: Ctx, target: Unit): number
       if (m) atkSum += m.baseAtk
     }
     if (atkSum <= 0) continue
-    gain += attackValueOf(geom, form, ctx.pathLoad) * (delta / atkSum)
+    gain += attackValueOf(ctx.cov, form) * (delta / atkSum)
   }
   return gain * TUNE.STACK
 }

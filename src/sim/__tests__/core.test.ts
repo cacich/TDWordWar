@@ -106,29 +106,35 @@ describe('數值公式', () => {
   })
 
   /**
-   * 血量的指數吃的是「相對進度」而不是絕對波次，這是「傻 AI 中位數 ≈ 總波數一半」
-   * 能對每一關同時成立的機制來源。以下三條是它的完整契約。
+   * 血量的指數吃的是「相對進度」`wave × arc / maxWave`：
+   * `maxWave` 是關卡長度、`arc` 是難度（見 sim/waves.ts）。以下四條是它的完整契約。
    */
-  it('血量曲線吃相對進度：同樣的進度百分比 → 同樣的血量', () => {
-    // 第 6/12 波 與 第 20/40 波 都是「走完一半」，血量必須相同
-    expect(enemyBaseHp(6, 12)).toBeCloseTo(enemyBaseHp(20, 40), 6)
-    expect(enemyBaseHp(3, 12)).toBeCloseTo(enemyBaseHp(10, 40), 6)
+  it('血量曲線吃相對進度：走完同樣比例的弧 → 同樣的血量', () => {
+    // 12 波走完 40 的弧、40 波走完 40 的弧，各自走到一半時血量必須相同
+    expect(enemyBaseHp(6, 12, 40)).toBeCloseTo(enemyBaseHp(20, 40, 40), 6)
+    expect(enemyBaseHp(3, 12, 40)).toBeCloseTo(enemyBaseHp(10, 40, 40), 6)
   })
 
-  it('短關卡把同一條弧壓縮得更陡', () => {
-    // 同一個絕對波次，12 波的關卡遠比 40 波的關卡硬
-    expect(enemyBaseHp(6, 12)).toBeGreaterThan(enemyBaseHp(6, 40) * 5)
+  it('arc 是難度旋鈕：同一關同一波，弧越長越硬', () => {
+    expect(enemyBaseHp(6, 12, 40)).toBeGreaterThan(enemyBaseHp(6, 12, 20) * 3)
   })
 
-  it('maxWave 預設為 WAVE_REF，省略時等同舊的絕對波次公式', () => {
-    expect(enemyBaseHp(7)).toBeCloseTo(enemyBaseHp(7, WAVE_REF), 6)
+  it('maxWave 不再單獨決定難度：短關卡配短弧，跟長關卡一樣平緩', () => {
+    // 12 波走 20 的弧、24 波走 40 的弧，每波的成長率相同
+    const shortStep = enemyBaseHp(2, 12, 20) / enemyBaseHp(1, 12, 20)
+    const longStep = enemyBaseHp(2, 24, 40) / enemyBaseHp(1, 24, 40)
+    expect(shortStep).toBeCloseTo(longStep, 6)
+  })
+
+  it('maxWave 與 arc 預設為 WAVE_REF，省略時等同舊的絕對波次公式', () => {
+    expect(enemyBaseHp(7)).toBeCloseTo(enemyBaseHp(7, WAVE_REF, WAVE_REF), 6)
     expect(enemyBaseHp(7)).toBeCloseTo(BASE_HP * Math.pow(HP_GROWTH, 7), 6)
   })
 
-  it('buildWave 會把 maxWave 傳進血量計算（漏傳會讓短關卡整個變簡單）', () => {
-    const short = buildWave(6, mulberry32(1), 1, [], 12)
-    const long = buildWave(6, mulberry32(1), 1, [], 40)
-    expect(short[0].hp).toBeGreaterThan(long[0].hp * 5)
+  it('buildWave 會把 maxWave 與 arc 傳進血量計算（漏傳會讓關卡難度整個跑掉）', () => {
+    const hard = buildWave(6, mulberry32(1), 1, [], 12, 40)
+    const easy = buildWave(6, mulberry32(1), 1, [], 12, 20)
+    expect(hard[0].hp).toBeGreaterThan(easy[0].hp * 3)
   })
 })
 

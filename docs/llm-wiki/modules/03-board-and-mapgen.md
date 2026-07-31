@@ -165,7 +165,9 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 | `key` / `name` / `subtitle` | ✓ | `key` 必須與 `LEVELS` 的物件鍵一致（`state.levelKey` 由它回填，state.ts:157） |
 | `map?: string[]` | 二選一 | 固定地圖。優先於 `gen`（state.ts:147） |
 | `gen?: { cols, rows, minPathLen, blockRate? }` | 二選一 | 隨機地形參數，`blockRate` 預設 0.07 |
-| `startFood` / `lives` / `maxWave` / `hpMul` | ✓ | 難度四旋鈕。`maxWave` 為 `Infinity` 時就是無盡（見下方「無盡變體」） |
+| `startFood` / `lives` / `hpMul` | ✓ | 容錯度與 ±20% 的難度微調 |
+| `maxWave` | ✓ | **只是關卡長度**（打幾波）。`Infinity` 時就是無盡（見下方「無盡變體」） |
+| `arc` | ✓ | **難度主旋鈕**：要在 `maxWave` 波內走完幾個參考波。越大越難；預期傻 AI 中位數 ≈ `maxWave × 20 / arc` |
 | `pool: { support, generals }` | ✓ | 本局字池大小（pool.ts:63-66）；漏填直接 TS 編譯失敗 |
 | `bias?: EnemyTrait[]` | 實質必填 | 這一關偏好哪些敵人特徵 |
 | `endless?: boolean` | ✗ | 只有 UI 讀它（顯示「∞」、成績記在哪份榜上）；sim 一律只看 `maxWave === Infinity` |
@@ -190,25 +192,28 @@ level.bias ──→ state.bias (state.ts:160) ──→ buildWave (actions.ts:3
 
 3 關固定地圖（教學弧 + 巨鹿）+ 6 關隨機地形。
 
-| 順序 | key | 名稱 | 地形 | 尺寸 | startFood | lives | maxWave | hpMul | pool (support/generals) | `bias` | 建議帶（推導結果） | 目標(=半) | sim 中位數 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `huangjin` | 黃巾之亂 | 固定 `map` | 9×11 | 26 | 4 | 12 | 0.85 | 2 / 3 | `[]` | 無（教學關刻意不給） | 6 | 6 |
-| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 1.00 | 3 / 4 | `flying` | 對空 | 9 | 9 |
-| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 15 | 15 |
-| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 1.10 | 5 / 6 | `fast` | 控場 | 12 | 12 |
-| 5 | `chibi` | 赤壁 | `gen` minPathLen 48, blockRate 0.13 | 9×15 | 26 | 3 | 30 | 1.20 | 6 / 7 | `armored` | 持續傷害、單體高傷 | 15 | 14 |
-| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 1.10 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 20 | 20 |
-| 7 | `xiangyang` | 襄陽 | `gen` minPathLen 50 | 9×15 | 28 | 3 | 32 | 1.25 | 7 / 8 | `swarm` `splitter` | 範圍攻擊、貫穿 | 16 | 17 |
-| 8 | `hanzhong` | 漢中 | `gen` minPathLen 54, blockRate 0.10 | 9×16 | 30 | 3 | 32 | 1.20 | 7 / 8 | `armored` `tanky` | 持續傷害、單體高傷 | 16 | 15 |
-| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 20 | 19 |
+| 順序 | key | 名稱 | 地形 | 尺寸 | startFood | lives | maxWave | **arc** | hpMul | pool (support/generals) | `bias` | 建議帶（推導結果） | sim 中位數 | 比例 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `huangjin` | 黃巾之亂 | 固定 `map`（C 在**左下**） | 9×11 | 26 | 4 | 12 | 20 | 0.85 | 2 / 3 | `[]` | 無（教學關刻意不給） | 12 | 1.00 |
+| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 23 | 1.00 | 3 / 4 | `flying` | 對空 | 15 | 0.83 |
+| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 28 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 24 | 0.80 |
+| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 31 | 1.10 | 5 / 6 | `fast` | 控場 | 17 | 0.71 |
+| 5 | `chibi` | 赤壁 | `gen` minPathLen 48, blockRate 0.13 | 9×15 | 26 | 3 | 30 | 31 | 1.20 | 6 / 7 | `armored` | 持續傷害、單體高傷 | 19 | 0.63 |
+| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 31 | 1.10 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 24 | 0.60 |
+| 7 | `xiangyang` | 襄陽 | `gen` minPathLen 50 | 9×15 | 28 | 3 | 32 | 39 | 1.25 | 7 / 8 | `swarm` `splitter` | 範圍攻擊、貫穿 | 17 | 0.53 |
+| 8 | `hanzhong` | 漢中 | `gen` minPathLen 54, blockRate 0.10 | 9×16 | 30 | 3 | 32 | 39 | 1.20 | 7 / 8 | `armored` `tanky` | 持續傷害、單體高傷 | 15 | 0.47 |
+| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 41 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 18 | 0.45 |
 
 「建議帶」那一欄是 `countersFor(bias)` 的輸出，**不是資料表裡的欄位**——列在這裡只為了方便對照，
 改 `bias` 時不需要（也不該）另外改它。順序依 `TRAIT_COUNTERS` 的宣告順序去重。
 
-中位數＝傻 AI（`npm run sim`）的陣亡波次中位數。**設計目標是該關 `maxWave` 的一半**（±20% 內達標）。
-⚠ **`maxWave` 同時是關卡長度與難度弧的陡度**：血量指數吃「相對進度」（`waves.ts` 的 `WAVE_REF`），
-所以把一關改短等於把同一條弧壓得更陡，不是只是少打幾波。舊註（前兩關是教學弧，
-傻 AI 打得完是刻意的。**改任何數值（含 `bias`——加權會改變敵種組成）後跑 `npm run sim 30 <key>` 對照這張表**，
+中位數＝傻 AI（`npm run sim 12 all`）的陣亡波次中位數，「比例」是它除以 `maxWave`。
+**設計目標由該關的 `arc` 換算**（≈ `maxWave × 20 / arc`，±20% 內達標），而
+★ **真正的驗收是「比例」一路遞減**（1.00 → 0.45）——那一欄就是難度曲線本身。
+⚠ 血量指數吃「相對進度」`wave × arc / maxWave`（`waves.ts`），所以 **`maxWave` 只是長度、`arc` 才是難度**。
+以前沒有 `arc`（弧長寫死 `WAVE_REF`），九關的比例全是 0.5、難度一樣平，而 12 波的教學關被壓成
+每波血量 ×1.99，是全遊戲最陡的一段——第一關比最終關難就是那個公式的必然結果。
+**改任何數值（含 `bias`——加權會改變敵種組成）後跑 `npm run sim 12 all` 對照這張表**，
 並同步更新 CLAUDE.md 的「難度儀表板」段落。
 
 後三關（levels/index.ts:188 的分隔註解起）的設計意圖是「每關針對一組特徵，把該帶什麼的答案收窄」，
@@ -241,9 +246,10 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
 2. **不可以放進 `LEVEL_ORDER`**。那條陣列是「流程」，被解鎖鏈（screens.ts:565）、
    每日挑戰輪替（daily.ts:47）與「天下歸心」成就門檻（achievements.ts:317）共用，
    混進去會同時弄壞這三件事。所有掃過 `LEVEL_ORDER` 的測試也因此不受影響。
-3. **難度弧與原關的 `maxWave` 無關**：`Infinity` 會讓「相對進度」恆等於 0，
-   所以 `enemyBaseHp` 對非有限的 `maxWave` 退回 `WAVE_REF`（waves.ts:61-64）。
-   推論——12 波的黃巾，無盡版反而是最平緩的一條路（原關把同一條 40 波弧壓縮了 3.3 倍）。
+3. **難度弧與原關的 `maxWave`／`arc` 都無關**：`Infinity` 會讓「相對進度」恆等於 0，
+   所以 `enemyBaseHp` 對非有限的 `maxWave` 直接改走絕對波次（`HP_GROWTH^wave`，waves.ts），
+   `endlessOf()` 也把 `arc` 明寫成 40 以免誤讀。
+   推論——弧最短的黃巾（20），無盡版反而是最平緩的一條路。
    無盡的難度只由 `hpMul`／`lives`／字池區分。
 4. **無盡不會通關**：`checkWaveEnd` 的 `wave >= maxWave` 對 `Infinity` 永遠不成立
    （step.ts:227，刻意不另外寫分支）。落敗是唯一的結束方式。
@@ -268,10 +274,10 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
 
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
-| 關卡難度 | ★ 先動 `maxWave`（同時是長度與弧的陡度，中位數目標會自動跟著變）；`hpMul`/`startFood`/`lives` 做微調 | 改完跑 `npm run sim 30 <key>`，工具會直接印出與「一半」的偏差 |
+| 關卡難度 | ★ 動 `arc`（難度弧長度；預期中位數 = `maxWave × 20 / arc`）；`hpMul`/`startFood`/`lives` 做微調。⚠ 不要拿 `maxWave` 當難度旋鈕 | 改完跑 `npm run sim 30 <key>` 看單關偏差，或 `npm run sim 12 all` 看整條曲線 |
 | 本局字池大小 | 同檔 `pool: { support, generals }` | `generals` 是「幾組姓名配方」不是幾個字（pool.ts:63-66）；數字大＝變化多但難疊高 |
 | 隨機地形的路長／破碎度 | 同檔 `gen.minPathLen` / `gen.blockRate` | `minPathLen` 上限見〈契約與陷阱〉7；`blockRate` 只影響落點多寡，不影響射線 |
-| 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性 |
+| 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性**與「沒有走不到的路格」**（黃巾曾經把 `C` 放在錯的角落，於是最後一列有 8 格死路，見 mapgen.test.ts） |
 | 這一關偏好哪些敵人／卡片上顯示什麼「建議帶」 | 同檔對應關卡的 `bias` | 一改兩動：敵種加權（×`BIAS_WEIGHT`）與 UI 標籤都跟著變；標籤是推導出來的，別另外手寫 |
 | 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:28-36） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
 | 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:565）與過關後的下一關（app.ts:565-566）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
@@ -289,7 +295,8 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
     subtitle: '★ 隨機地形。窄路久攻，快賊繞不完',
     startFood: 30,
     lives: 3,
-    maxWave: 32,
+    maxWave: 32,                              // 打幾波（長度）
+    arc: 38,                                  // ← 難度：32 波內走完 38 個參考波，必填
     hpMul: 1.22,
     pool: { support: 7, generals: 8 },        // ← 必填，漏了會 TS 編譯失敗
     bias: ['fast', 'swarm'],                  // ← 敵種加權 + 卡片「建議帶」都靠這一行

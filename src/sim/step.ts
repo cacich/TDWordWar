@@ -53,7 +53,7 @@ function stepMeteor(state: GameState, dt: number): void {
   let front = alive[0]
   for (const e of alive) if (e.dist > front.dist) front = e
   const c = enemyPos(state.board, front)
-  const dmg = 0.7 * enemyBaseHp(state.wave, state.maxWave) * state.hpMul
+  const dmg = 0.7 * enemyBaseHp(state.wave, state.maxWave, state.arc) * state.hpMul
   for (const e of alive) {
     const p = enemyPos(state.board, e)
     if (Math.hypot(p.x - c.x, p.y - c.y) > 1.5) continue

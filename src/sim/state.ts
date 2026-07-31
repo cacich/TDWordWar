@@ -175,6 +175,7 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     maxLives: level.lives + meta.extraLives + perks.extraLives,
     wave: 1,
     maxWave: level.maxWave,
+    arc: level.arc,
     phase: 'prep',
     prepTimer: PREP_SECONDS,
     spawnQueue: [],

@@ -5,10 +5,19 @@
  *
  * 有 `map` 就是固定地圖；有 `gen` 就是每局隨機生成（同種子 → 同地圖，見 sim/mapgen.ts）。
  *
- * 平衡基準：**傻 AI 的陣亡中位數應落在該關 maxWave 的一半**（`npm run sim`，±20% 內算達標）。
- * 這件事之所以能對每一關同時成立，是因為血量的指數吃「相對進度」而不是絕對波次
- * （見 sim/waves.ts 的 WAVE_REF）——所以 `maxWave` 同時是「關卡長度」與「難度弧的陡度」。
- * ⚠ 推論：**改 maxWave 會同時改難度**。把一關改短等於把同一條弧壓得更陡，不是只是少打幾波。
+ * ★ 難度由 `arc`（難度弧長度，單位是「參考波」）決定，`maxWave` 只決定長度：
+ *   血量的指數吃 `wave × arc / maxWave`（見 sim/waves.ts），所以
+ *   **`arc` 越大這一關越難**，而改 `maxWave` 只是改「打幾波」，不再連帶改陡度。
+ *
+ * 平衡基準：`npm run sim 12 all` 量傻 AI 在九關的陣亡中位數，`arc` 直接換算成預期比例——
+ *   傻 AI 大約死在弧上的第 20 個參考波，所以 **中位數 ≈ maxWave × 20 / arc**。
+ *   arc = 40 → 死在一半；arc = 20 → 剛好打到底（教學關要的就是這個）。
+ *
+ * ⚠ 九關的 arc 刻意**逐關不遞減**（20 → 41），量出來的「抵達比例」因此一路遞減
+ *   （1.00 → 0.45），這才是「越後面越難」的來源。以前沒有 arc、九關一律走完整條參考弧，
+ *   九關難度一樣平（比例全是 0.5），而最短的教學關反而是全遊戲最陡的一段（每波血量 ×1.99）。
+ * ⚠ arc 不是「照關卡順序等差」就會對：生命數與字池也算難度，
+ *   所以 2 條命的五丈原用的弧比 3 條命的襄陽短。看的是量出來的比例，不是 arc 本身好不好看。
  * hpMul 退居微調（整個 0.55～1.28 區間只值約 2 個參考波），lives 則是容錯度。
  */
 import type { EnemyTrait } from '../../sim/types'
@@ -24,11 +33,17 @@ export interface LevelDef {
   startFood: number
   lives: number
   /**
-   * 總波數。打完這一波就通關。
+   * 總波數。打完這一波就通關。**只管長度，不管難度**（難度看 `arc`）。
    * **無盡模式是 `Infinity`**（見本檔最後的「無盡模式」節）——`checkWaveEnd` 的
-   * `wave >= maxWave` 因此永遠不成立，而 `enemyBaseHp` 會退回 `WAVE_REF` 當弧長。
+   * `wave >= maxWave` 因此永遠不成立，而 `enemyBaseHp` 會退回絕對波次那條曲線。
    */
   maxWave: number
+  /**
+   * 難度弧長度（參考波）。這一關要在 `maxWave` 波之內走完 `arc` 個參考波，
+   * 所以它是**唯一的難度主旋鈕**：40 = 完整參考弧（傻 AI 死在中間），越小越簡單。
+   * 預期的傻 AI 陣亡中位數 ≈ `maxWave × 20 / arc`，改完請跑 `npm run sim` 對一下。
+   */
+  arc: number
   /**
    * 無盡變體的標記。**只有 UI 讀它**（顯示「∞」與成績記在哪一份榜上），
    * sim 一律只看 `maxWave === Infinity`——沿用 Perks「中性預設值」的分層慣例，
@@ -67,10 +82,16 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 26,
     lives: 4,
     maxWave: 12,
+    // 全遊戲最短的弧：教學關要讓「照直覺玩」的人打得完，血量每波只成長 ×1.41
+    // （同一張表在有 arc 之前是 ×1.99——教學關比最終關還陡，這是本作最久的一個平衡錯誤）
+    arc: 20,
     hpMul: 0.85,
     pool: { support: 2, generals: 3 },
     // 教學關不設偏好：先讓玩家認識最基本的賊與盾賊
     bias: [],
+    // ⚠ 大營在左下角，因為最後一段路是「往左走完第 9 列」。
+    //   營若放在右下角（曾經如此），第 9 列往左的那 8 格就變成沒有出口的死路：
+    //   畫面上看得到一條走到底卻什麼都沒有的路，敵人卻在半路就轉下去進營。
     map: [
       'S########',
       'PPPPPPPP#',
@@ -82,7 +103,7 @@ export const LEVELS: Record<string, LevelDef> = {
       'PPPPPPPP#',
       'PPPPPPPP#',
       '#########',
-      'PPPPPPPPC',
+      'CPPPPPPPP',
     ],
   },
 
@@ -93,6 +114,8 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 24,
     lives: 3,
     maxWave: 18,
+    // 第二關開始拉：弧比黃巾長，但仍遠短於參考弧
+    arc: 23,
     hpMul: 1.0,
     pool: { support: 3, generals: 4 },
     // 飛賊變多，逼玩家準備射程 >= 2 的單位
@@ -121,6 +144,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 22,
     lives: 3,
     maxWave: 30,
+    arc: 28,
     hpMul: 1.15,
     pool: { support: 4, generals: 6 },
     // 蟻賊成群，範圍攻擊的價值第一次浮現
@@ -150,6 +174,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 24,
     lives: 3,
     maxWave: 24,
+    arc: 31,
     hpMul: 1.1,
     pool: { support: 5, generals: 6 },
     // 快賊與疾風賊居多，需要控場攔下
@@ -164,6 +189,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 26,
     lives: 3,
     maxWave: 30,
+    arc: 31,
     hpMul: 1.2,
     pool: { support: 6, generals: 7 },
     // 重甲當道；灼燒無視防禦，火系在這關最強
@@ -178,6 +204,8 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 28,
     lives: 2,
     maxWave: 40,
+    // 只有 2 條命，所以弧跟赤壁一樣長就已經比它難（漏一隻的代價高一倍）
+    arc: 31,
     hpMul: 1.1,
     pool: { support: 7, generals: 9 },
     // 妖道與高血敵人並存，考驗集火與持續輸出
@@ -193,6 +221,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 28,
     lives: 3,
     maxWave: 32,
+    arc: 39,
     hpMul: 1.25,
     pool: { support: 7, generals: 8 },
     bias: ['swarm', 'splitter'],
@@ -206,6 +235,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 30,
     lives: 3,
     maxWave: 32,
+    arc: 39,
     hpMul: 1.2,
     pool: { support: 7, generals: 8 },
     bias: ['armored', 'tanky'],
@@ -219,6 +249,7 @@ export const LEVELS: Record<string, LevelDef> = {
     startFood: 32,
     lives: 2,
     maxWave: 40,
+    arc: 41,
     hpMul: 1.28,
     pool: { support: 8, generals: 10 },
     bias: ['flying', 'fast', 'healer'],
@@ -234,13 +265,14 @@ export const JULU = LEVELS.julu
  * 只把 `maxWave` 換成 `Infinity`。所以它不是 9 個新關卡，而是 9 個既有關卡的**推導變體**
  * （`endlessOf()`）——原關改數值，無盡版自動跟著改，不會出現兩份會不同步的真相。
  *
- * ★ 難度弧：血量的指數吃「相對進度」`wave × WAVE_REF / maxWave`（見 sim/waves.ts），
+ * ★ 難度弧：血量的指數吃「相對進度」`wave × arc / maxWave`（見 sim/waves.ts），
  *   而 `Infinity` 會讓相對進度永遠是 0、血量永不成長。因此 `enemyBaseHp` 對非有限的
- *   `maxWave` 退回 `WAVE_REF`，也就是**無盡一律走 40 波的參考弧**（`HP_GROWTH^wave`）。
+ *   `maxWave` 一律改走絕對波次（`HP_GROWTH^wave`），也就是**無盡都是 40 波的參考弧**。
+ *   `endlessOf()` 因此把 `arc` 明寫成 `WAVE_REF`，免得沿用原關的值造成誤讀。
  *
  * ⚠ 推論（反直覺，但是刻意的）：無盡的難度只由 `hpMul`／`lives`／字池區分，
- *   **與原關的 `maxWave` 無關**。黃巾（12 波）的無盡版反而是最長的一條路——
- *   它的原關把同一條 40 波的弧壓縮了 3.3 倍，攤平回來自然變長。
+ *   **與原關的 `maxWave` 與 `arc` 都無關**。黃巾的無盡版因此是最長的一條路——
+ *   它的原關只走 20 個參考波，攤平成完整的 40 波參考弧自然變長。
  *
  * 為什麼不註冊進 `LEVEL_ORDER`：那條陣列是「流程」，被解鎖鏈、每日挑戰輪替與
  * 「天下歸心」成就的門檻共用。無盡是支線，混進去會同時弄壞這三件事。
@@ -261,7 +293,15 @@ export function baseKeyOf(key: string): string {
 }
 
 function endlessOf(base: LevelDef): LevelDef {
-  return { ...base, key: endlessKeyOf(base.key), name: `${base.name}・無盡`, maxWave: Infinity, endless: true }
+  return {
+    ...base,
+    key: endlessKeyOf(base.key),
+    name: `${base.name}・無盡`,
+    maxWave: Infinity,
+    // = sim/waves.ts 的 WAVE_REF。刻意寫成字面值：data 層只從 sim 取型別，不取值
+    arc: 40,
+    endless: true,
+  }
 }
 
 /** 無盡關卡的顯示順序，與 `LEVEL_ORDER` 一一對應 */

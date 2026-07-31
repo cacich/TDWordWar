@@ -90,7 +90,7 @@ BOSS（加 `boss: true`，慣例上都給 `ccImmune`）：
 ```ts
 myLevel: {
   key: 'myLevel', name: '街亭', subtitle: '窄路，落點極少',
-  startFood: 24, lives: 3, maxWave: 20, hpMul: 1.1,
+  startFood: 24, lives: 3, maxWave: 20, arc: 30, hpMul: 1.1,   // arc = 難度弧長度，★ 必填
   pool: { support: 4, generals: 5 },   // ★ 必填，漏掉會 TS 編譯錯誤
   map: ['S########', 'PPPPPPPP#', '#########', /* … 每列長度必須一致 */],
 }
@@ -98,6 +98,10 @@ myLevel: {
 
 `pool` 決定本局字池大小：`support` = 抽幾個謀略／經濟字，`generals` = 抽幾組姓名配方
 （成組加入，不會產生湊不成配方的孤兒字）。教學關用小數字（2/3），後期關卡用大數字（7/9）。
+
+`arc` 決定難度（不是 `maxWave`）：這一關要在 `maxWave` 波內走完幾個參考波。
+先照它在流程上的位置在 20（教學）～41（最終關）之間挑一個，再用 `npm run sim` 校正——
+預期的傻 AI 中位數 ≈ `maxWave × 20 / arc`。
 
 隨機地形：把 `map` 換成 `gen`，其他欄位（含 `pool`）都一樣。
 
@@ -118,7 +122,7 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 |---|---|
 | 整體變難／變簡單（全九關） | `sim/waves.ts` 的 `HP_GROWTH`（目前 1.23）。⚠ 它必須貼著玩家戰力的成長率，不是自由參數 |
 | 敵人變多 | `sim/waves.ts` 的 `enemyCount()`（有 `MAX_WAVE_ENEMIES = 90` 上限，只有無盡模式碰得到） |
-| **某一關太硬／太軟** | 該關的 `maxWave`（`data/levels/index.ts`）→ 中位數目標是它的一半，會自動跟著走 |
+| **某一關太硬／太軟** | 該關的 `arc`（`data/levels/index.ts`）→ 預期中位數 = `maxWave × 20 / arc`，會自動跟著走。⚠ **不要改 `maxWave`**，那只是關卡長度 |
 | **糧累積得太快／太慢** | `data/enemies.ts` 的 `bounty`（佔收入 65%）＋ `economy.ts` 的 `waveIncome`／`recruitCost` 斜率，用 `npm run econ` 驗收 |
 | 玩家整體戰力 | `data/glyphs.ts` 的 `atk` 欄等比例縮放 |
 | 某類敵人出現更頻繁 | 該關的 `bias`（`data/levels/index.ts`）或 `BIAS_WEIGHT`（`sim/waves.ts`，目前 4） |
@@ -129,8 +133,10 @@ gen: { cols: 9, rows: 14, minPathLen: 44, blockRate: 0.1 }
 | 佈陣時間 | `sim/waves.ts` 的 `PREP_SECONDS` |
 | 塔打得到的範圍 | `sim/combat.ts` 的 `RANGE_MUL`（全域射程倍率，越大越簡單）／`GENERAL_RANGE_BONUS`（武將額外）／`GLYPH_RANGE_MUL`（單個字的收斂倍率，越小越鼓勵組將） |
 
-改完跑 `npm run sim`：**傻 AI 的陣亡中位數應落在該關 `maxWave` 的一半**（±20% 內算達標，
-工具會直接把偏差算給你看）。調到經濟數值時另外跑 `npm run econ` 看「征兵」欄是否還在 1～2。
+改完跑 `npm run sim 12 all`：印出九關的中位數與「比例」，**比例要一路遞減**（1.00 → 0.45）；
+單關偏離自己的 `arc` 目標超過 ±20% 就調那一關的 `arc`。整條曲線一起偏移＝玩家端的平衡動了，
+那時改 `tools/autobalance.ts` 的 `DEATH_REF`，不要九關一起改。
+調到經濟數值時另外跑 `npm run econ` 看「征兵」欄是否還在 1～2。
 
 ## 7. 改視覺
 

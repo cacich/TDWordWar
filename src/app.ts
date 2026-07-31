@@ -92,6 +92,7 @@ export class App implements HudHost, PointerHost, ScreensHost {
     const onResize = () => {
       this.syncUiScale()
       this.renderer.resize(this.state)
+      this.hud.onResized()
     }
     window.addEventListener('resize', onResize)
     window.addEventListener('orientationchange', onResize)
@@ -118,9 +119,13 @@ export class App implements HudHost, PointerHost, ScreensHost {
         const now = performance.now()
         const frameDt = Math.min((now - this.lastFrame) / 1000, 0.25)
         this.lastFrame = now
-        this.renderer.view.selectedCell = this.selectedCell
         this.drainEvents()
-        this.renderer.draw(this.state, frameDt)
+        // 開著選單／圖鑑時棋盤完全被蓋住，畫它是純粹的浪費（模擬也早已凍結）。
+        // HUD 仍要更新，否則 toast 不會消失。
+        if (!this.screens.visible) {
+          this.renderer.view.selectedCell = this.selectedCell
+          this.renderer.draw(this.state, frameDt)
+        }
         this.hud.update(frameDt)
         if (this.wishPanel.visible) this.wishPanel.update()
         this.syncProgress(frameDt)
@@ -152,30 +157,6 @@ export class App implements HudHost, PointerHost, ScreensHost {
   private syncProgress(dt: number): void {
     if (this.screens.visible) return
     const meta = this.meta
-    for (const h of this.state.hand) {
-      if (h && !meta.seenGlyphs.includes(h.char)) {
-        meta.seenGlyphs.push(h.char)
-        this.metaDirty = true
-      }
-    }
-    for (const u of this.state.units) {
-      if (u.kind === 'glyph') {
-        if (!meta.seenGlyphs.includes(u.defKey)) {
-          meta.seenGlyphs.push(u.defKey)
-          this.metaDirty = true
-        }
-      } else if (!meta.seenGenerals.includes(u.defKey)) {
-        meta.seenGenerals.push(u.defKey)
-        this.metaDirty = true
-      }
-    }
-    // 敵人圖鑑：只要在場上出現過就算見過（不必打死，否則被漏過的敵種永遠不會登錄）
-    for (const e of this.state.enemies) {
-      if (!meta.seenEnemies.includes(e.defKey)) {
-        meta.seenEnemies.push(e.defKey)
-        this.metaDirty = true
-      }
-    }
 
     const key = this.state.levelKey
     const reached = this.state.wave
@@ -222,10 +203,11 @@ export class App implements HudHost, PointerHost, ScreensHost {
       this.checkAchievements()
     }
 
-    // 成就輪詢：0.5 秒一次就足夠即時，又不必每幀掃全場單位
+    // 圖鑑登錄與成就輪詢：0.5 秒一次就足夠即時，又不必每幀掃全場單位與敵人
     this.achieveTimer -= dt
     if (this.achieveTimer <= 0) {
       this.achieveTimer = 0.5
+      this.syncCodex()
       this.checkAchievements()
     }
 
@@ -236,6 +218,41 @@ export class App implements HudHost, PointerHost, ScreensHost {
     this.saveTimer = 2
     this.metaDirty = false
     saveMeta(meta)
+  }
+
+  /**
+   * 把手牌／場上單位／場上敵人登錄進圖鑑。
+   *
+   * ⚠ 由 syncProgress 的 0.5 秒輪詢呼叫，**不是每幀**：這裡是三層迴圈套
+   * `Array.includes`（seenGlyphs 有 71 項），場上單位一多就是每幀上千次字串比對。
+   * 圖鑑只在局外看得到，慢半秒沒有任何差別。
+   */
+  private syncCodex(): void {
+    const meta = this.meta
+    for (const h of this.state.hand) {
+      if (h && !meta.seenGlyphs.includes(h.char)) {
+        meta.seenGlyphs.push(h.char)
+        this.metaDirty = true
+      }
+    }
+    for (const u of this.state.units) {
+      if (u.kind === 'glyph') {
+        if (!meta.seenGlyphs.includes(u.defKey)) {
+          meta.seenGlyphs.push(u.defKey)
+          this.metaDirty = true
+        }
+      } else if (!meta.seenGenerals.includes(u.defKey)) {
+        meta.seenGenerals.push(u.defKey)
+        this.metaDirty = true
+      }
+    }
+    // 敵人圖鑑：只要在場上出現過就算見過（不必打死，否則被漏過的敵種永遠不會登錄）
+    for (const e of this.state.enemies) {
+      if (!meta.seenEnemies.includes(e.defKey)) {
+        meta.seenEnemies.push(e.defKey)
+        this.metaDirty = true
+      }
+    }
   }
 
   /**
