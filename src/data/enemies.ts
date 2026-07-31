@@ -15,6 +15,11 @@
  *   所以「高防」敵人的解法是持續傷害或高單擊，而不是多打幾下。
  *   `burnImmune` 是唯一能封掉這條路、逼玩家改帶高單擊的手段，只給少數 BOSS。
  *
+ * ⚠ **敵方光環（`healAura` / `buffAura`）一律有疊加上限**，實作在 sim/step.ts。
+ *   治療者之間也不互相治療——沒有這兩條，一群妖道會互奶成打不死的鐵板，
+ *   配上玩家的擊退就會出現「這一波清不掉、敵人也走不到大營」的無限卡波。
+ *   新增帶光環的敵人時不要繞過那一段。
+ *
  * ⚠ `bounty` 是全遊戲最大的糧食來源（約佔總收入 65%）。經濟的設計目標是
  *   「一波只夠征兵 1～2 次」，所以**動這一欄之前先跑 `npm run econ`**，
  *   它比 `waveIncome` 更能左右玩家的滾雪球速度。
@@ -63,9 +68,13 @@ export const ENEMIES: EnemyDef[] = [
 
   // 新敵種：每一種都對應一個玩家既有工具，讓後期的敵人組成不再只是血量變多
   {
+    // ⚠ maxShare 是「同一波出太多妖道 → 卡波」的第二道防線（根治在 sim/step.ts）。
+    //   偏好 healer 的關卡加權 ×4，沒有這個上限時一波裡的妖道會佔到近兩成並連成一串。
     key: 'shaman', char: '妖', hpMul: 0.8, def: 5, speed: 0.8, flying: false, bounty: 3, damage: 1, troop: '步',
-    traits: ['healer'], minWave: 6, healAura: { radius: 2.4, hps: 0.05 },
-    desc: '妖道（步）：不攻擊，但每秒為周圍敵人回血。優先集火解決。',
+    // hps 0.05 → 0.06：妖道之間不再互奶之後單隻明顯變弱，用單體強度補回來一點。
+    // 兩隻疊在一起剛好頂到 HEAL_CAP_HPS，正好是「疊第三隻沒有意義」的分界
+    traits: ['healer'], minWave: 6, healAura: { radius: 2.4, hps: 0.06 }, maxShare: 0.12,
+    desc: '妖道（步）：不攻擊，但每秒為周圍敵人回血（妖道之間不互相回血）。優先集火解決。',
   },
   {
     key: 'armor', char: '甲', hpMul: 2.4, def: 75, speed: 0.6, flying: false, bounty: 3, damage: 1, troop: '步',
@@ -91,6 +100,15 @@ export const ENEMIES: EnemyDef[] = [
     key: 'stone', char: '磐', hpMul: 4.5, def: 30, speed: 0.4, flying: false, bounty: 4, damage: 1, troop: '步',
     traits: ['tanky'], minWave: 12,
     desc: '磐石賊（步）：極慢但血量厚重，考驗持續輸出而非瞬間爆發。',
+  },
+  {
+    // 妖道的「防禦版」：一樣是先拔掉的支援兵，但它撐的是防禦而不是血量，
+    // 所以解法從「集火」換成「灼燒」（灼燒無視防禦，見檔頭）。加防有疊加上限，不會卡波。
+    key: 'warden', char: '幡', hpMul: 1.2, def: 20, speed: 0.75, flying: false, bounty: 3, damage: 1, troop: '步',
+    // maxShare 的理由跟妖道不同：旗賊不會卡波，但它**很弱**，
+    // 放任它在「偏好重甲」的關卡佔到近兩成，等於把甲賊的位置換成軟柿子，整關反而變簡單
+    traits: ['armored'], minWave: 14, buffAura: { radius: 2.2, defAdd: 40 }, maxShare: 0.15,
+    desc: '旗賊（步）：不強，但為周圍賊眾大幅加防。灼燒無視防禦，或先拔掉它。',
   },
 
   // ── BOSS（每 5 波出現一隻，從合格者中隨機挑選） ────────
@@ -156,6 +174,14 @@ export const ENEMIES: EnemyDef[] = [
     key: 'bossWarlord', char: '霸', hpMul: 18, def: 80, speed: 0.7, flying: false, bounty: 17, damage: 3, troop: '騎',
     traits: ['armored', 'tanky'], boss: true, ccImmune: true, minWave: 25,
     desc: '霸將（騎）：高血高防又不慢，後期的綜合考驗。',
+  },
+  {
+    // 唯一一隻「把整批雜兵變快」的 BOSS：它自己不難打，難的是它讓後面那一串來不及攔。
+    // 與妖道首相反——妖道首拖長戰鬥，戰鼓將壓縮玩家的反應時間。
+    key: 'bossDrum', char: '鼓', hpMul: 12, def: 45, speed: 0.9, flying: false, bounty: 14, damage: 2, troop: '步',
+    traits: ['fast', 'tanky'], boss: true, ccImmune: true, minWave: 20,
+    buffAura: { radius: 3.2, speedMul: 1.6 },
+    desc: '戰鼓將（步）：擂鼓催進，周圍的賊眾全部大幅加速。不先攔下它，整批都會衝過防線。',
   },
 ]
 

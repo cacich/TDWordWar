@@ -297,5 +297,19 @@ export function beginBattle(state: GameState): void {
   state.phase = 'battle'
   state.waveTime = 0
   state.prepTimer = 0
-  state.spawnQueue = buildWave(state.wave, state.rng, state.hpMul, state.bias, state.maxWave, state.arc)
+  // 督戰是「本波」的僵局計量，每一波都要從零開始（見 sim/step.ts 的 stepFrenzy）
+  state.frenzy = 0
+  state.stallT = 0
+  state.stallMark = 0
+  state.stallKills = state.stats.kills
+  state.stallHp = Infinity
+  state.spawnQueue = buildWave(
+    state.wave,
+    state.rng,
+    state.hpMul,
+    state.bias,
+    state.maxWave,
+    state.arc,
+    state.mods,
+  )
 }

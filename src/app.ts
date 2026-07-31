@@ -332,6 +332,12 @@ export class App implements HudHost, PointerHost, ScreensHost {
         case 'waveClear':
           this.audio.play('wave')
           break
+        // 督戰：這一波僵住了，賊軍開始強行推進（見 sim/step.ts 的 stepFrenzy）。
+        // 一定要讓玩家看到，否則「敵人突然變快、控場突然失效」會像是 bug
+        case 'frenzy':
+          this.audio.play('leak')
+          this.hud.toast('賊軍督戰！敵軍加速推進，控場失效')
+          break
         case 'won':
           this.audio.play('win')
           break

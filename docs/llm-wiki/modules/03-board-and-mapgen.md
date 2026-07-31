@@ -6,18 +6,18 @@
 > |---|---|---|
 > | `src/sim/board.ts` | 106 行 | 地圖字串 → `Board`；BFS 算出 `path`；cell ↔ (col,row) 座標換算 |
 > | `src/sim/mapgen.ts` | 109 行 | `generateMap()`：由構造保證合法的蛇形走廊隨機地圖 |
-> | `src/data/levels/index.ts` | 271 行 | `LevelDef` 型別 + 9 個關卡的難度旋鈕與 `bias` + `LEVEL_ORDER` + 9 個無盡變體（`ENDLESS_ORDER`） |
+> | `src/data/levels/index.ts` | 413 行 | `LevelDef` 型別 + 12 個關卡的難度旋鈕／`bias`／`mods` + `modTags()` + `LEVEL_ORDER` + 12 個無盡變體（`ENDLESS_ORDER`） |
 >
 > **上游依賴**：`sim/types.ts`（`Board` / `TileKind`，types.ts:20-30；`EnemyTrait`，types.ts:203）、
 > `core/rng.ts`（`randInt`，mapgen.ts:20）。
-> `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:14），仍是純資料。
+> `board.ts` **零依賴**（只 import 型別）；`levels/index.ts` 只 `import type { EnemyTrait }`（levels/index.ts:27），仍是純資料。
 >
 > **下游使用者**：`sim/state.ts:147-148`（開局組裝）、`sim/state.ts:160`（`bias` 帶進 `GameState`）、
 > `sim/combat.ts:49-94`（射程與敵人座標）、
-> `sim/step.ts:115-139`（敵人前進與漏怪）、`sim/combine.ts:33-56`（相鄰判定）、
-> `sim/actions.ts:137,189`（落點合法性）、`sim/actions.ts:300`（`bias` → `buildWave`）、
+> `sim/step.ts:227-281`（敵人前進與漏怪）、`sim/combine.ts:33-56`（相鄰判定）、
+> `sim/actions.ts:137,189`（落點合法性）、`sim/actions.ts:307`（`bias`／`mods` → `buildWave`）、
 > `input/pointer.ts:246`、`render/renderer.ts:82-175`、
-> `ui/screens.ts:561-586`（選關卡片，含「建議帶」標籤）、`tools/autobalance.ts:22-34`。
+> `ui/screens.ts:564-592`（選關卡片，含「建議帶」標籤）、`tools/autobalance.ts:22-34`。
 
 ## 這個模組解決什麼問題
 
@@ -85,7 +85,7 @@ mulberry32(seed) ─┬─→ generateMap(rng, level.gen)   ← 只有 gen 關�
 → 陷阱：任何改動 `generateMap` 抽 rng 的**次數**，都會連帶改掉隨機關卡的字池結果（見下）。
 
 同一支 `createGame()` 還把關卡的敵人偏好搬進 state：`bias: level.bias ?? []`（state.ts:160），
-`beginBattle()` 再交給波次生成器 `buildWave(wave, rng, hpMul, state.bias)`（actions.ts:300）。
+`beginBattle()` 再交給波次生成器 `buildWave(wave, rng, hpMul, state.bias)`（actions.ts:307）。
 地形與敵種因此是兩條互不相干的旋鈕——改 `bias` 不會動到地圖，改 `gen` 不會動到敵種。
 
 ### `generateMap` 的兩階段（mapgen.ts:35-109）
@@ -116,7 +116,7 @@ mapgen.ts:8-13 的註解解釋了幾何條件（橫向段至少隔 2 列，垂�
 - 若走廊有分岔或兩段貼邊，BFS 會找到**比設計者畫出的更短的捷徑**，敵人的實際行走路線
   就不再是 `carve()` 畫的那條 → 關卡長度與 `minPathLen` 全部失效。
 - `Enemy.dist` 是沿 `path` 的一維進度；貼邊的走廊會讓「路徑上距離很遠、實際格子相鄰」
-  同時成立，`pierce`（combat.ts:302-311）與 `lineStrike`（skills.ts:101-128）以 `dist` 做的
+  同時成立，`pierce`（combat.ts:308-317）與 `lineStrike`（skills.ts:101-128）以 `dist` 做的
   範圍判定會出現視覺與判定不符。
 - 走廊兩側必然留有 `P`，塔的射程規劃（`RANGE_MUL`、`GENERAL_RANGE_BONUS`）才有意義；
   另有測試要求 `P` 至少 30 格（mapgen.test.ts:46-53）。
@@ -135,9 +135,9 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 1. **每一列長度必須等於 `cols`**（= `map[0].length`，board.ts:21,28-30）。
    少一個字元就拋 `地圖 X 第 N 列長度…`。測試：`core.test.ts:25-33` 解析所有固定地圖。
    注意 `cols` 取自第 0 列，所以第 0 列打錯會導致「其他每一列都報錯」。
-2. **`LevelDef.pool` 是必填欄位**（levels/index.ts:45）。舊版文件的範例漏了它，
+2. **`LevelDef.pool` 是必填欄位**（levels/index.ts:64）。舊版文件的範例漏了它，
    照抄會直接 TS 編譯失敗（`tsconfig` 嚴格 + `noUnusedLocals`）。
-   `bias` 型別上可省（levels/index.ts:54），但省掉等於「這關沒有偏好」，
+   `bias` 型別上可省（levels/index.ts:73），但省掉等於「這關沒有偏好」，
    選關卡片也就不會有「建議帶」標籤——除了教學關 `huangjin` 刻意寫 `bias: []`，其餘關卡都該填，
    `enemies-ext.test.ts:280-290` 會抓沒有推薦手段的關卡。
 3. **多個 `S` 或多個 `C` 不會報錯**：board.ts:36-37 是無條件覆寫，**最後出現的那個生效**，
@@ -158,7 +158,7 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 10. `sim/` 與 `data/` 不得 import render/ui/input（CLAUDE.md 鐵則）。`levels/index.ts` 目前零 import，
     請保持這樣——`ui/screens.ts` 是單向依賴它。
 
-## `LevelDef` 欄位（levels/index.ts:16-55）
+## `LevelDef` 欄位（levels/index.ts:29-82）
 
 | 欄位 | 必填 | 作用 |
 |---|---|---|
@@ -171,57 +171,85 @@ combat.ts:2-3 明文：索敵只算歐氏距離，不做視線判定。`.` 只�
 | `pool: { support, generals }` | ✓ | 本局字池大小（pool.ts:63-66）；漏填直接 TS 編譯失敗 |
 | `bias?: EnemyTrait[]` | 實質必填 | 這一關偏好哪些敵人特徵 |
 | `endless?: boolean` | ✗ | 只有 UI 讀它（顯示「∞」、成績記在哪份榜上）；sim 一律只看 `maxWave === Infinity` |
+| `mods?: LevelMods` | ✗ | **戰場特性**：`bossEvery` / `spawnGap` / `enemySpeedMul` / `rangeMul`，型別在 types.ts。全部是中性預設值（省略＝舊行為），所以既有關卡不受影響。⚠ 它會實質改變難度但 `arc` 換算的預期值不知道，加了一定要重跑 sim |
 
 ### `bias` 一個欄位驅動兩件事
 
 ```
-level.bias ──→ state.bias (state.ts:160) ──→ buildWave (actions.ts:300)
+level.bias ──→ state.bias (state.ts:160) ──→ buildWave (actions.ts:307)
    │                                            └→ weightOf(): 帶該特徵的敵人與 BOSS 權重 ×BIAS_WEIGHT
-   │                                               （waves.ts:89-90,89-91,108；BIAS_WEIGHT = 4，waves.ts:36）
-   └──→ countersFor(level.bias) (enemies.ts:179-185) ──→ 選關卡片的「建議帶」標籤（screens.ts:568-570,510）
+   │                                               （waves.ts:95-96,89-91,108；BIAS_WEIGHT = 4，waves.ts:36）
+   └──→ countersFor(level.bias) (enemies.ts:205-211) ──→ 選關卡片的「建議帶」標籤（screens.ts:571-573,510）
 ```
 
-推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:28-36）
-把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:38-45）給中文字。
+推導鏈只有**一個來源**：敵人在 `enemies.ts` 宣告 `traits`，`TRAIT_COUNTERS`（enemies.ts:33-41）
+把特徵映成應對手段，`COUNTER_LABEL`（enemies.ts:43-50）給中文字。
 **關卡資料裡不要再手寫一份推薦清單**，否則會出現兩份不同步的真相。
 合法特徵是 `EnemyTrait`（types.ts:203）：`swarm` / `armored` / `flying` / `fast` / `healer` / `splitter` / `tanky`。
-新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:47-55），
+新增特徵時要同步補 `TRAIT_COUNTERS`、`TRAIT_LABEL`（enemies.ts:52-60），
 `enemies-ext.test.ts:131-139` 會抓漏。
 
-## 9 個關卡一覽（levels/index.ts:62-227）
+## 12 個關卡一覽（levels/index.ts:108-360）
 
-3 關固定地圖（教學弧 + 巨鹿）+ 6 關隨機地形。
+4 關固定地圖（教學弧 + 巨鹿 + 虎牢關）+ 8 關隨機地形。
 
 | 順序 | key | 名稱 | 地形 | 尺寸 | startFood | lives | maxWave | **arc** | hpMul | pool (support/generals) | `bias` | 建議帶（推導結果） | sim 中位數 | 比例 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `huangjin` | 黃巾之亂 | 固定 `map`（C 在**左下**） | 9×11 | 26 | 4 | 12 | 20 | 0.85 | 2 / 3 | `[]` | 無（教學關刻意不給） | 12 | 1.00 |
-| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 23 | 1.00 | 3 / 4 | `flying` | 對空 | 15 | 0.83 |
-| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 28 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 24 | 0.80 |
-| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 31 | 1.10 | 5 / 6 | `fast` | 控場 | 17 | 0.71 |
+| 2 | `dongzhuo` | 討伐董卓 | 固定 `map`（S 在右上、含 `.`） | 9×13 | 24 | 3 | 18 | 23 | 1.00 | 3 / 4 | `flying` | 對空 | 16 | 0.89 |
+| 3 | `julu` | 巨鹿 | 固定 `map` | 9×14 | 22 | 3 | 30 | 28 | 1.15 | 4 / 6 | `swarm` | 範圍攻擊、貫穿 | 23 | 0.77 |
+| 4 | `guandu` | 官渡 | `gen` minPathLen 44 | 9×14 | 24 | 3 | 24 | 31 | 1.10 | 5 / 6 | `fast` | 控場 | 18 | 0.75 |
 | 5 | `chibi` | 赤壁 | `gen` minPathLen 48, blockRate 0.13 | 9×15 | 26 | 3 | 30 | 31 | 1.20 | 6 / 7 | `armored` | 持續傷害、單體高傷 | 19 | 0.63 |
-| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 31 | 1.10 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 24 | 0.60 |
+| 6 | `wuzhang` | 五丈原 | `gen` minPathLen 52 | 9×16 | 28 | 2 | 40 | 32 | 1.10 | 7 / 9 | `healer` `tanky` | 單體高傷、持續傷害 | 25 | 0.63 |
 | 7 | `xiangyang` | 襄陽 | `gen` minPathLen 50 | 9×15 | 28 | 3 | 32 | 39 | 1.25 | 7 / 8 | `swarm` `splitter` | 範圍攻擊、貫穿 | 17 | 0.53 |
 | 8 | `hanzhong` | 漢中 | `gen` minPathLen 54, blockRate 0.10 | 9×16 | 30 | 3 | 32 | 39 | 1.20 | 7 / 8 | `armored` `tanky` | 持續傷害、單體高傷 | 15 | 0.47 |
-| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 41 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 18 | 0.45 |
+| 9 | `luoyang` | 洛陽 | `gen` minPathLen 58, blockRate 0.08 | 9×17 | 32 | 2 | 40 | 44 | 1.28 | 8 / 10 | `flying` `fast` `healer` | 對空、控場、單體高傷 | 20 | 0.50 |
+| 10 | `hefei` | 合肥 | `gen` minPathLen 54 | 9×16 | 30 | 3 | 36 | 45 | 1.20 | 8 / 9 | `swarm` `fast` | 範圍攻擊、貫穿、控場 | 15 | 0.42 |
+| 11 | `hulao` | 虎牢關 | 固定 `map`（15 列蛇形關隘） | 9×15 | 30 | 3 | 30 | 47 | 1.15 | 8 / 9 | `tanky` `armored` | 持續傷害、單體高傷 | 12 | 0.40 |
+| 12 | `xuchang` | 許昌 | `gen` minPathLen 60, blockRate 0.08 | 9×17 | 34 | 2 | 40 | 49 | 1.30 | 9 / 11 | `healer` `armored` `fast` | 單體高傷、持續傷害、控場 | 14 | 0.35 |
+
+**戰場特性**（`mods`，見下一節）只有終盤三關宣告：
+合肥 `spawnGap: 0.4`（出怪間隔剩一半）、虎牢關 `bossEvery: 3`（BOSS 從每 5 波變每 3 波）、
+許昌 `rangeMul: 0.85` + `enemySpeedMul: 1.1`（夜霧壓境）。
 
 「建議帶」那一欄是 `countersFor(bias)` 的輸出，**不是資料表裡的欄位**——列在這裡只為了方便對照，
 改 `bias` 時不需要（也不該）另外改它。順序依 `TRAIT_COUNTERS` 的宣告順序去重。
 
-中位數＝傻 AI（`npm run sim 12 all`）的陣亡波次中位數，「比例」是它除以 `maxWave`。
+中位數＝傻 AI（`npm run sim 16 all`）的陣亡波次中位數，「比例」是它除以 `maxWave`。
 **設計目標由該關的 `arc` 換算**（≈ `maxWave × 20 / arc`，±20% 內達標），而
-★ **真正的驗收是「比例」一路遞減**（1.00 → 0.45）——那一欄就是難度曲線本身。
+★ **真正的驗收是「比例」一路遞減**（1.00 → 0.35）——那一欄就是難度曲線本身。
 ⚠ 血量指數吃「相對進度」`wave × arc / maxWave`（`waves.ts`），所以 **`maxWave` 只是長度、`arc` 才是難度**。
-以前沒有 `arc`（弧長寫死 `WAVE_REF`），九關的比例全是 0.5、難度一樣平，而 12 波的教學關被壓成
+以前沒有 `arc`（弧長寫死 `WAVE_REF`），每一關的比例全是 0.5、難度一樣平，而 12 波的教學關被壓成
 每波血量 ×1.99，是全遊戲最陡的一段——第一關比最終關難就是那個公式的必然結果。
-**改任何數值（含 `bias`——加權會改變敵種組成）後跑 `npm run sim 12 all` 對照這張表**，
+**改任何數值（含 `bias`——加權會改變敵種組成）後跑 `npm run sim 16 all` 對照這張表**，
 並同步更新 CLAUDE.md 的「難度儀表板」段落。
 
-後三關（levels/index.ts:188 的分隔註解起）的設計意圖是「每關針對一組特徵，把該帶什麼的答案收窄」，
-所以它們的 `bias` 都是 2～3 個特徵，而不是難度單靠 `hpMul` 往上疊。
+⚠ **「偏差」那一欄對 `arc` 不敏感**：實際比例 ≈ k/arc、預期比例 = 20/arc，兩者同時吃 `arc`，
+所以偏差量的其實是 k（這一關的地圖／生命／字池讓傻 AI 比參考值多撐了幾成）。要修的是**排序**。
+⚠ **洛陽的分佈是雙峰的**（2 條命 + 隨機地形：一部分種子在前 5 波就崩、一部分撐到 20+），
+中位數因此會在 15 與 20 之間跳，`arc` 44 → 45 就足以讓它整格翻面。
+它與漢中之間 0.47／0.50 的先後在 16 局的取樣下屬於雜訊，不值得再往上疊 `arc` 去追。
 
-`JULU = LEVELS.julu`（levels/index.ts:229）是測試與 `createGame()` 的預設關卡（state.ts:141）。
+終盤三關（合肥／虎牢關／許昌）的設計意圖與前面不同：前面靠 `bias` 收窄「該帶什麼」，
+這三關改用**戰場特性**動一條與血量無關的規則（出怪節奏／BOSS 密度／我方射程），
+所以就算血量曲線一樣，玩家要換的東西完全不同。
 
-### 無盡變體（levels/index.ts:231-271）
+### `mods` 一個欄位驅動兩件事（與 `bias` 同一個慣例）
+
+```
+level.mods ──→ state.mods (state.ts:161) ──→ buildWave（spawnGap / bossEvery，actions.ts:307）
+   │                                     ├→ moveEnemies（enemySpeedMul，step.ts:290-318）
+   │                                     └→ recalcUnits（rangeMul，state.ts:426）
+   └──→ modTags(level)（levels/index.ts:88-101）──→ 選關／無盡卡片上的「戰場」標籤（screens.ts）
+```
+
+**不要在關卡的 `subtitle` 之外再手寫一份特性說明**——`modTags()` 是唯一的真相來源。
+新增一個旋鈕時要同時補：`LevelMods` 欄位（types.ts）、讀它的那一處 sim、`modTags()` 的一行說明，
+以及 `level-mods.test.ts` 的「中性預設值」測試。
+
+`JULU = LEVELS.julu`（levels/index.ts:362）是測試與 `createGame()` 的預設關卡（state.ts:141）。
+
+### 無盡變體（levels/index.ts:364-413）
 
 9 關各有一個**推導**出來的無盡版：`endlessOf(base)` 只改三個欄位（`key` 前綴 `endless_`、
 `name` 加「・無盡」、`maxWave = Infinity`、`endless = true`），其餘全部沿用原關。
@@ -234,16 +262,16 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
 
 | helper | 用途 |
 |---|---|
-| `endlessKeyOf('julu')` → `'endless_julu'` | `app.startEndless()` 開局用（app.ts:526-536） |
+| `endlessKeyOf('julu')` → `'endless_julu'` | `app.startEndless()` 開局用（app.ts:532-542） |
 | `baseKeyOf('endless_julu')` → `'julu'` | 成績記在 `meta.endless[原關 key]`（app.ts:173-181） |
 | `isEndlessKey(key)` | 決定成績寫進 `meta.best` 還是 `meta.endless` |
 | `ENDLESS_ORDER` | 無盡畫面的顯示順序，與 `LEVEL_ORDER` 一一對應 |
 
 **四個陷阱**
 
-1. **無盡變體必須註冊進 `LEVELS`**（levels/index.ts:271 的迴圈）——`createGame` 與續玩還原
+1. **無盡變體必須註冊進 `LEVELS`**（levels/index.ts:413 的迴圈）——`createGame` 與續玩還原
    都只認得 `LEVELS`，沒註冊就開不起來（`restoreRun` 會回 `null`）。
-2. **不可以放進 `LEVEL_ORDER`**。那條陣列是「流程」，被解鎖鏈（screens.ts:565）、
+2. **不可以放進 `LEVEL_ORDER`**。那條陣列是「流程」，被解鎖鏈（screens.ts:568）、
    每日挑戰輪替（daily.ts:47）與「天下歸心」成就門檻（achievements.ts:317）共用，
    混進去會同時弄壞這三件事。所有掃過 `LEVEL_ORDER` 的測試也因此不受影響。
 3. **難度弧與原關的 `maxWave`／`arc` 都無關**：`Infinity` 會讓「相對進度」恆等於 0，
@@ -252,7 +280,7 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
    推論——弧最短的黃巾（20），無盡版反而是最平緩的一條路。
    無盡的難度只由 `hpMul`／`lives`／字池區分。
 4. **無盡不會通關**：`checkWaveEnd` 的 `wave >= maxWave` 對 `Infinity` 永遠不成立
-   （step.ts:227，刻意不另外寫分支）。落敗是唯一的結束方式。
+   （step.ts:373，刻意不另外寫分支）。落敗是唯一的結束方式。
 
 `npm run sim 20 endless_julu` 可以直接量它——工具對無盡把目標改成 `WAVE_REF/2 = 20`
 （autobalance.ts:57-59）。現況：黃巾 22・巨鹿 21・洛陽 19。
@@ -267,7 +295,7 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
 
 兩者互斥且至少要有一個：`core.test.ts:35-41` 斷言 `Boolean(map) || Boolean(gen)`。
 `state.ts:147` 用 `level.map ?? generateMap(rng, level.gen!)`——`map` 優先，兩個都給 `gen` 會被忽略。
-`ui/screens.ts:573` 用 `level.gen` 決定選關卡片是否加上 `random` 樣式（`subtitle` 自己寫「★ 隨機地形」）。
+`ui/screens.ts:578` 用 `level.gen` 決定選關卡片是否加上 `random` 樣式（`subtitle` 自己寫「★ 隨機地形」）。
 目前的分配是前 3 關固定（教得動的教學弧）、後 6 關隨機（重玩性）。
 
 ## 我想改 X → 動哪裡
@@ -279,8 +307,8 @@ LEVELS['endless_julu']  maxWave ∞    ← 由前者推導，只出現在 ENDLES
 | 隨機地形的路長／破碎度 | 同檔 `gen.minPathLen` / `gen.blockRate` | `minPathLen` 上限見〈契約與陷阱〉7；`blockRate` 只影響落點多寡，不影響射線 |
 | 手改固定地圖 | 同檔 `map` 陣列 | 每列等長；恰好一個 `S`、一個 `C`；改完 `npm test` 會驗連通性**與「沒有走不到的路格」**（黃巾曾經把 `C` 放在錯的角落，於是最後一列有 8 格死路，見 mapgen.test.ts） |
 | 這一關偏好哪些敵人／卡片上顯示什麼「建議帶」 | 同檔對應關卡的 `bias` | 一改兩動：敵種加權（×`BIAS_WEIGHT`）與 UI 標籤都跟著變；標籤是推導出來的，別另外手寫 |
-| 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:28-36） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
-| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:565）與過關後的下一關（app.ts:565-566）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
+| 某個特徵該用什麼手段應對 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（enemies.ts:33-41） | 全部關卡的標籤一起變。新特徵要同步補 `TRAIT_LABEL` 與 `COUNTER_LABEL` |
+| 新增一關 | `data/levels/index.ts`（`LEVELS` + `LEVEL_ORDER`） | `LEVEL_ORDER` 決定解鎖鏈（screens.ts:568）與過關後的下一關（app.ts:571-572）；插在中間會改變既有玩家的解鎖順序，新關卡一律往後接。別忘了 `pool` 與 `bias` |
 | 新的地形種類 | `TileKind`（types.ts:20）→ `CHAR_TO_KIND`（board.ts:7-13）→ `WALKABLE`（board.ts:47）→ `drawTiles`（renderer.ts:127-175）→ 若可放置再改 `isPlot` | 四處都要改，漏一處會是「解析成功但畫不出來」或「敵人穿牆」 |
 | 生成演算法（走廊形狀） | `sim/mapgen.ts` 的 `carve()` | 必須維持 induced path 性質，否則 mapgen.test.ts:25-35 紅字；別忘了 rng 消耗次數（陷阱 5） |
 | 讓障礙阻擋射線 | `sim/combat.ts` 的 `pickTarget`／`effectiveRange` | 這是刻意的設計決定 #2，改動等於改遊戲手感，先確認需求 |
@@ -349,14 +377,14 @@ export const LEVEL_ORDER = [
 | `src/sim/board.ts:23-24,36-37,40` | 掃描時只記一個 spawn／camp，重複的 `S`/`C` 被靜默覆寫 |
 | `src/sim/board.ts:42-43,49-74` | `parseMap` 只算一條 BFS 路徑並塞進 `board.path` |
 | `src/sim/mapgen.ts:99-100` | `paint()` 只寫一個 `S`、一個 `C` |
-| `src/sim/step.ts:87` | 敵人生成時 `dist: 0`，沒有「屬於哪條路」的欄位 |
-| `src/sim/step.ts:116,123-125` | `goal = state.board.path.length - 1`，漏怪判定綁單一路徑長度 |
+| `src/sim/step.ts:88` | 敵人生成時 `dist: 0`，沒有「屬於哪條路」的欄位 |
+| `src/sim/step.ts:290-318` | `goal = state.board.path.length - 1`，漏怪判定綁單一路徑長度 |
 | `src/sim/combat.ts:85-94` | `enemyPos()` 直接索引 `board.path` |
 | `src/sim/combat.ts:140` | targeting `'first'` 用 `e.dist` 跨敵人比大小——不同路徑的 dist 不可比 |
-| `src/sim/combat.ts:302-311` | `pierce` 用 `|e.dist - target.dist| <= 1.3` 判定同一直線 |
+| `src/sim/combat.ts:308-317` | `pierce` 用 `|e.dist - target.dist| <= 1.3` 判定同一直線 |
 | `src/sim/skills.ts:101-128` | `lineStrike` 以 `dist` 區間取範圍 |
 | `src/sim/skills.ts:130-145` | `charge` 用 `dist` 排序取「最前方」 |
-| `src/sim/step.ts:50-58` | `stepMeteor` 先用 `dist` 挑最前方敵人（之後才轉歐氏距離） |
+| `src/sim/step.ts:51-59` | `stepMeteor` 先用 `dist` 挑最前方敵人（之後才轉歐氏距離） |
 | `src/app.ts:296-297,300-302` | `combo`／`leak` 粒子座標直接用 `board.camp` 當發生地點 |
 | `tools/autobalance.ts:22-34` | 傻 AI 的落點評分只算「到 `b.path` 的最近距離」 |
 | `src/sim/__tests__/mapgen.test.ts:25-35` | 「可走格數 == path 長度」的不變量在多路徑下必須改寫 |

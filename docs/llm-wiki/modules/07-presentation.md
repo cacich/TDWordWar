@@ -42,10 +42,10 @@
 
 ### 2. ★ 事件佇列：`sim` 說發生了什麼，app 決定聽起來／看起來怎樣
 
-`sim/` 只呼叫 `emit(state, ev)`（`sim/events.ts:9`）把純資料塞進 `state.events`，上限 `MAX_EVENTS = 64`（`sim/types.ts:318`），超量直接丟棄。
+`sim/` 只呼叫 `emit(state, ev)`（`sim/events.ts:9`）把純資料塞進 `state.events`，上限 `MAX_EVENTS = 64`（`sim/types.ts:341`），超量直接丟棄。
 app 每幀 `drainEvents()`（`app.ts:258-320`）翻譯成音效與粒子，最後 `evs.length = 0`（`app.ts:319`）清空。
 
-**目前 12 種 `SimEvent`（定義在 `sim/types.ts:303-315`）與各自的呈現**：
+**目前 12 種 `SimEvent`（定義在 `sim/types.ts:324-338`）與各自的呈現**：
 
 | 事件 | 音效 | 粒子／其他 | 程式碼 |
 |---|---|---|---|
@@ -62,7 +62,7 @@ app 每幀 `drainEvents()`（`app.ts:258-320`）翻譯成音效與粒子，最�
 | `won` | `win` | — | app.ts:311 |
 | `lost` | `lose` | — | app.ts:314 |
 
-`attackSfx()`（`app.ts:668-683`）把 10 種 `FxKind` 收斂成 5 個攻擊音：`blade`/`thrust` → `attackBlade`、`arrow` → `attackArrow`、`fire`/`venom` → `attackFire`、`bolt` → `attackBolt`、其餘（`gale`/`plan`/`charge`/`none`）→ `attackSoft`。
+`attackSfx()`（`app.ts:674-689`）把 10 種 `FxKind` 收斂成 5 個攻擊音：`blade`/`thrust` → `attackBlade`、`arrow` → `attackArrow`、`fire`/`venom` → `attackFire`、`bolt` → `attackBolt`、其餘（`gale`/`plan`/`charge`/`none`）→ `attackSoft`。
 
 未被消費的 payload：`kill.bounty`、`waveClear.wave`、`dissolve.name`、`skill.name`、`combine.name`——想加飄字或提示直接拿來用，不必改 sim。
 
@@ -70,10 +70,10 @@ app 每幀 `drainEvents()`（`app.ts:258-320`）翻譯成音效與粒子，最�
 
 | | `state.effects`（`Effect[]`） | `Particles` |
 |---|---|---|
-| 誰產生 | `sim/`（`pushEffect()`，`sim/combat.ts:240`） | app 層 drainEvents |
-| 誰推進 | `sim/`（`stepEffects()`，`sim/combat.ts:341`，固定步長） | `Particles.step(frameDt)`，在 `renderer.draw()` 裡（`renderer.ts:122`） |
+| 誰產生 | `sim/`（`pushEffect()`，`sim/combat.ts:246`） | app 層 drainEvents |
+| 誰推進 | `sim/`（`stepEffects()`，`sim/combat.ts:347`，固定步長） | `Particles.step(frameDt)`，在 `renderer.draw()` 裡（`renderer.ts:122`） |
 | 誰畫 | `renderer.drawEffects()`（`renderer.ts:477`）＋ `render/fx.ts` | `particles.draw()`（`renderer.ts:123`） |
-| 上限 | 240（`combat.ts:242`） | 240（`particles.ts:10`，`add()` 在 47-50 直接 return） |
+| 上限 | 240（`combat.ts:248`） | 240（`particles.ts:10`，`add()` 在 47-50 直接 return） |
 | 在 Node 模擬時 | 會被建立與遞減（純資料，無害） | 完全不存在 |
 
 兩邊超量都直接丟棄而非覆蓋：**特效只是視覺，少畫幾個沒人看得出來；但無上限成長會讓 `npm run sim` 的記憶體與 GC 爆掉**。
@@ -171,8 +171,8 @@ toast 的倒數在那裡，跳過它會讓「獲得聲望」之類的訊息卡�
 
 ### 畫面切換與凍結
 
-`App.show(screen)`（`app.ts:440-446`）= `screens.show(screen)` + `loop.setPaused(screen !== null)`。
-`Screens.show()`（`ui/screens.ts:167-288`）把八個 `.screen` 的 `hidden` 全設好（一次只顯示一個）再呼叫對應的 render 方法。`screen === null` 代表回對局。
+`App.show(screen)`（`app.ts:446-452`）= `screens.show(screen)` + `loop.setPaused(screen !== null)`。
+`Screens.show()`（`ui/screens.ts:167-291`）把八個 `.screen` 的 `hidden` 全設好（一次只顯示一個）再呼叫對應的 render 方法。`screen === null` 代表回對局。
 雙重保險：`step` callback 另外檢查 `this.screens.visible`（`app.ts:107`），`syncProgress` 也在畫面開著時直接 return（`app.ts:146`）。
 `dev` 畫面的入口是彩蛋：選單標題 2.5 秒內連點 7 下（`ui/screens.ts:156-165`）。
 
@@ -199,7 +199,7 @@ clearRect + 紙底 → drawTileLayer → drawHintCells(拖曳落點) → drawRan
 ### 每幀重建的兩張衍生查表
 
 - `memberTier`（`renderer.ts:60`，建於 226-233）：字牌格 → 所屬武將的**最高**階級，決定成員字牌底色
-- `hintKind`（`renderer.ts:61`，建於 234-238）：消費 `state.hintCells`（`sim/types.ts:460-471`），一格同時可升級與可湊將時 **upgrade 優先**（更直接可做）
+- `hintKind`（`renderer.ts:61`，建於 234-238）：消費 `state.hintCells`（`sim/types.ts:519-530`），一格同時可升級與可湊將時 **upgrade 優先**（更直接可做）
 
 `drawHintHalo` 用脈動描邊做出光暈，相位 `this.pulse` 每幀算一次（`Math.sin(performance.now()/320)`）。
 ⚠ **刻意不用 `shadowBlur`**：canvas 的陰影是逐像素模糊，成本比同範圍的實心繪製高一個量級，
@@ -222,13 +222,13 @@ clearRect + 紙底 → drawTileLayer → drawHintCells(拖曳落點) → drawRan
    代價是「同一次輪詢之內生成又死掉的敵種」要等下一次出現才登錄——圖鑑只在局外看，可以接受。
 2. `meta.best[levelKey]`，**只在 `wave > 1` 才記**（`app.ts:175`），否則一進關卡就顯示「最佳 1 波」
 3. `phase === 'won'` 時補 `meta.cleared`（`app.ts:195-198`）
-4. 聲望結算：`renownPaid` 旗標保證一局只結一次（`app.ts:201-223`），數值由 `renownFor()`（`sim/state.ts:137`）算，並 toast 通知。`startLevel()` 會把旗標重設（`app.ts:555`）
+4. 聲望結算：`renownPaid` 旗標保證一局只結一次（`app.ts:201-223`），數值由 `renownFor()`（`sim/state.ts:137`）算，並 toast 通知。`startLevel()` 會把旗標重設（`app.ts:561`）
 
-寫檔節流：只有 `metaDirty` 時才倒數 `saveTimer`，**最多每 2 秒一次 `saveMeta()`**（`app.ts:226-231`）。局外操作（買升級／道具／改編隊）則走各自的 handler 立即存檔（`app.ts:372-407`）。
+寫檔節流：只有 `metaDirty` 時才倒數 `saveTimer`，**最多每 2 秒一次 `saveMeta()`**（`app.ts:226-231`）。局外操作（買升級／道具／改編隊）則走各自的 handler 立即存檔（`app.ts:378-413`）。
 
 ### 音效解鎖
 
-瀏覽器自動播放政策：`AudioContext` 必須在使用者手勢後才建立。`app.ts:83-86` 用 `pointerdown` / `keydown` 各掛一個 `{ once: true }` 的 `unlock`；`Audio.unlock()`（`core/audio.ts:133-157`）建 ctx、master gain（0.9）與一段固定種子白噪音 buffer，已建立則只 `resume()` suspended 的 ctx。`toggleMute()`（`app.ts:354-360`）也會先呼叫 `unlock()`——玩家點喇叭本身就是有效手勢。
+瀏覽器自動播放政策：`AudioContext` 必須在使用者手勢後才建立。`app.ts:83-86` 用 `pointerdown` / `keydown` 各掛一個 `{ once: true }` 的 `unlock`；`Audio.unlock()`（`core/audio.ts:133-157`）建 ctx、master gain（0.9）與一段固定種子白噪音 buffer，已建立則只 `resume()` suspended 的 ctx。`toggleMute()`（`app.ts:360-366`）也會先呼叫 `unlock()`——玩家點喇叭本身就是有效手勢。
 `Audio.play()` 在 ctx 還沒建立前呼叫是**安全的 no-op**（`audio.ts:160`），所以不需要在 drainEvents 裡判斷。
 攻擊音節流表在 `audio.ts:102-110`（同名音效在該秒數內只播一次）：後期每秒 20 次攻擊全播會變成噪音牆。
 
@@ -264,29 +264,29 @@ clearRect + 紙底 → drawTileLayer → drawHintCells(拖曳落點) → drawRan
 7. **`--ui` 只由 `syncUiScale()` 寫。** 不要在 CSS 裡寫死 px 字級，也不要在 JS 別處覆蓋它。
 8. **`index.html` 是 DOM 的唯一定義處。** `hud.ts:72-76` / `screens.ts:93-97` / `wish.ts:16-20` 的 `el()` 找不到節點會直接 `throw`，所以刪 HTML 節點會讓整個 App 建構失敗。加畫面要同時：`index.html` 加 `<section class="screen" hidden>`、`ScreenName` 加字面值（`screens.ts:31`）、`Screens.show()` 加 `hidden` 切換與 render 呼叫。
 9. **`hidden` 屬性靠 `style.css:23-25` 的 `[hidden] { display: none !important }` 生效**，元件自己的 `display` 會壓過它。新元件用 `hidden` 而不要自己發明 `.is-open`。
-10. **三個底部浮層（資訊／心願／羈絆詳情）不能同時開**（都占畫面底部，見核心概念第 7 段）：`select()` 會 `wishPanel.hide()`（`app.ts:607-612`），`openWishPanel()` 會清 `selectedCell`（`app.ts:341-345`），`showBond()` 兩個都關（`hud.ts:223-231`）。
-11. **`startLevel()` 的重設清單**（`app.ts:537-562`）：`selectedCell` / `mode` / `renownPaid` / `particles.clear()` / `wishPanel.hide()` / `hud.onLevelChanged()` / `renderer.resize()`。新增任何「跨局會殘留」的 app 層欄位都要加進這裡。
-12. **`newSeed()` 是 `Date.now()`**（`app.ts:663`）。要重現 bug 就把它改成固定值——這是唯一的隨機來源入口，`sim/` 內禁用 `Math.random()`（`particles.ts:27-33` 與 `audio.ts:151-154` 也都用固定種子的 LCG，讓畫面／音色在同機器上可重現）。
+10. **三個底部浮層（資訊／心願／羈絆詳情）不能同時開**（都占畫面底部，見核心概念第 7 段）：`select()` 會 `wishPanel.hide()`（`app.ts:613-618`），`openWishPanel()` 會清 `selectedCell`（`app.ts:347-351`），`showBond()` 兩個都關（`hud.ts:223-231`）。
+11. **`startLevel()` 的重設清單**（`app.ts:543-568`）：`selectedCell` / `mode` / `renownPaid` / `particles.clear()` / `wishPanel.hide()` / `hud.onLevelChanged()` / `renderer.resize()`。新增任何「跨局會殘留」的 app 層欄位都要加進這裡。
+12. **`newSeed()` 是 `Date.now()`**（`app.ts:669`）。要重現 bug 就把它改成固定值——這是唯一的隨機來源入口，`sim/` 內禁用 `Math.random()`（`particles.ts:27-33` 與 `audio.ts:151-154` 也都用固定種子的 LCG，讓畫面／音色在同機器上可重現）。
 13. **`renderer.resize()` 的 dpr 上限是 2**（`renderer.ts:73`）：3x 螢幕全開會讓填充率變成 2.25 倍而幾乎看不出差別。
 14. **`Effect.kind === 'ring'` 用 `toX - fromX` 攜帶半徑**（`renderer.ts:500-501`，產生端見 `sim/skills.ts`）。這是個省欄位的約定，改 `Effect` 結構時別忘了它。
-15. **`FX_COLOR['none'] = 'transparent'`**（`fx.ts:23`）：圖鑑／編隊／心願面板拿 fx 當字色時必須排除 `none`，否則字會消失（`screens.ts:623`、`screens.ts:455`、`wish.ts:63` 都寫了 `g.fx !== 'none'` 的 fallback）。
+15. **`FX_COLOR['none'] = 'transparent'`**（`fx.ts:23`）：圖鑑／編隊／心願面板拿 fx 當字色時必須排除 `none`，否則字會消失（`screens.ts:629`、`screens.ts:458`、`wish.ts:63` 都寫了 `g.fx !== 'none'` 的 fallback）。
 16. **`drainEvents()` 依賴當幀 `state` 仍與事件一致**：`merge` 事件靠 `char` 反查場上單位取座標（`app.ts:269`），找不到就不噴粒子。不要把 drain 延後到下一幀。
 
 ## 我想改 X → 動哪裡
 
 | 想改什麼 | 動哪裡 | 注意 |
 |---|---|---|
-| 新增一種 sim 事件的音效／粒子 | `sim/types.ts:303` 加 `SimEvent` 變體 → sim 內 `emit()` → `app.ts:262` 的 switch | switch 沒 `default`，漏接是靜默的；粒子要新方法就加在 `particles.ts` |
+| 新增一種 sim 事件的音效／粒子 | `sim/types.ts:324` 加 `SimEvent` 變體 → sim 內 `emit()` → `app.ts:262` 的 switch | switch 沒 `default`，漏接是靜默的；粒子要新方法就加在 `particles.ts` |
 | 改某個音效的音色 | `core/audio.ts:46-99` 的 `RECIPES` | 只改這張表就好；新增音效名要同時加進 `SfxName`（`audio.ts:10-29`） |
 | 攻擊音太吵／太稀疏 | `core/audio.ts:102-110` 的 `THROTTLE` | 秒數越大越安靜 |
-| 新增一種攻擊特效 `FxKind` | `sim/types.ts` 的 `FxKind` → `render/fx.ts:13` 的 `FX_COLOR` → `fx.ts:56` 的 switch → `app.ts:668` 的 `attackSfx()` | 三處都要加，`FX_COLOR` 漏了會 undefined 導致整幀繪製異常 |
+| 新增一種攻擊特效 `FxKind` | `sim/types.ts` 的 `FxKind` → `render/fx.ts:13` 的 `FX_COLOR` → `fx.ts:56` 的 switch → `app.ts:674` 的 `attackSfx()` | 三處都要加，`FX_COLOR` 漏了會 undefined 導致整幀繪製異常 |
 | 改階級／品質／提示／狀態顏色 | `render/theme.ts`（`TIER_COLOR:29` / `TIER_TINT:38` / `HINT_COLOR:51` / `QUALITY_COLOR:57` / `STATUS_COLOR:63`） | 提示色與品質色要保持可辨（見核心概念第 5 段的青綠衝突事故） |
 | 改棋盤上某個東西的畫法 | `render/renderer.ts` 對應的 `drawXxx` | 保持三趟順序；不要在 draw 裡改 state |
 | 加／改一個 HUD 元素 | `index.html` 加節點 → `hud.ts:79-110` 加 `el()` 欄位 → `hud.ts:231` 的 `update()` 寫值 | 高頻更新的請用 `dataset.sig` 差異比對 |
 | 加一個 HUD 按鈕觸發遊戲動作 | `HudHost`（`hud.ts:14`）加方法 → `hud.ts:181` 的 `bind()` 綁 click → `App` 實作並呼叫 `sim/actions.ts` | 別讓 `hud.ts` 直接 import `sim/actions` |
 | 往狀態列再加一個讀數 | `index.html` 的 `.bar-stats` 加 `.stat` → `hud.ts` 的 `update()` 寫值 | 讀數區在 375px 已接近塞滿（見核心概念第 6 段的實測）。再加一項就得先讓出別的東西，別靠壓縮字級硬塞 |
 | 改羈絆詳情顯示的內容 | `bondDetailHtml()`（`hud.ts:467-504`） | 加成一律用 `pct()` 翻成 ±%；新增 `BondDef` 欄位要記得補進這裡，否則玩家看不到 |
-| 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:445`），這是刻意的。最近一例：無盡畫面（`screens.ts` 的 `renderEndless`） |
+| 加一個全螢幕畫面 | `index.html` 加 `.screen` → `ScreenName`（`screens.ts:31`）→ `Screens` 加 DOM 欄位、`show()` 的 `hidden` 切換與 `renderXxx()` → 需要動 meta 就在 `ScreensHost` 加方法 | 畫面開著時模擬會凍結（`app.ts:451`），這是刻意的。最近一例：無盡畫面（`screens.ts` 的 `renderEndless`） |
 | 選單再加一個入口 | `index.html` 的 `.nav-grid` 加按鈕 → `style.css` 加 `.nav-xxx` 底色 | 網格是 3 欄；第 7 個入口用 `.nav-row`（`grid-column: 1/-1`）獨占一整列，否則第三列會只有一格看起來像漏了東西 |
 | 在新畫面裡放關卡卡片 | 直接用 `.level-card`（`renderEndless`／`renderDaily` 都是） | ⚠ `.codex-body` 是**純 block 容器**：`<button>` 會 shrink-to-fit，卡片寬度隨文字長短參差、右側 `.lv-meta` 被壓成兩行擠在一起。`.level-card { width: 100% }` 與 `.codex-body .level-card + .level-card` 的 `margin-top` 就是在補這件事（在 flex 的 `.level-list` 裡是 no-op）。說明文字（`.codex-detail`）一律放**卡片之後**——手機一頁只看得到約 4 張卡 |
 | 改選關卡／圖鑑／兵書／商城／編隊的呈現 | `ui/screens.ts` 對應 `renderXxx()` | 資料表本身在 `data/`（見 [02-data-tables.md](../02-data-tables.md)） |
@@ -297,7 +297,7 @@ clearRect + 紙底 → drawTileLayer → drawHintCells(拖曳落點) → drawRan
 | 改粒子上限／密度 | `render/particles.ts:10` 的 `MAX` 與各方法的迴圈次數 | 超量丟棄是刻意的 |
 | 改拖放手感 | `input/pointer.ts:17` 的 `TAP_SLOP`、`evalTarget()`（`pointer.ts:239`） | 「點一下手牌 → 點一下空地」的 armed 流程（`pointer.ts:102-115`、`174-184`、`214-225`）是手機主要放置方式，別破壞 |
 | 改 PWA 快取策略／圖示 | `vite.config.ts` 的 `pwaPlugin()`、`public/manifest.webmanifest`、`public/icons/` | 驗證一律 `npm run build && npm run preview` |
-| 加開發密技 | `core/devtools.ts` 加函式 → `ScreensHost`（`screens.ts:64-71`）加方法 → `App` 實作 → `screens.ts:382-389` 的 actions 陣列 | 密技繞過 `sim/actions.ts` 的驗證，僅供測試 |
+| 加開發密技 | `core/devtools.ts` 加函式 → `ScreensHost`（`screens.ts:64-71`）加方法 → `App` 實作 → `screens.ts:385-392` 的 actions 陣列 | 密技繞過 `sim/actions.ts` 的驗證，僅供測試 |
 
 ## 相關頁面
 

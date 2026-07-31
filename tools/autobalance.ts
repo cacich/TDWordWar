@@ -6,7 +6,7 @@
  *
  *   npm run sim              # 單關（預設巨鹿）30 局，含直方圖
  *   npm run sim 16 guandu    # 指定局數與關卡（無盡：endless_guandu）
- *   npm run sim 12 all       # ★ 九關的難度曲線一次看完（每關 12 局）
+ *   npm run sim 12 all       # ★ 主線全關的難度曲線一次看完（每關 12 局）
  *
  * 目標不是「每關都一樣」：`arc`（難度弧長度，見 data/levels）決定每一關的預期比例，
  * 這裡直接印出「實際比例 vs arc 換算出的預期比例」，所以偏差看的是**曲線**而不是單點。
@@ -19,7 +19,7 @@ import { WAVE_REF } from '../src/sim/waves'
 import { candidateCells, playPrep } from './dumb-ai'
 
 const GAMES = Number(process.argv[2] ?? 30)
-/** 第二個參數選關：npm run sim 30 guandu；`all` = 跑完主線九關 */
+/** 第二個參數選關：npm run sim 30 guandu；`all` = 跑完主線全關 */
 const LEVEL = process.argv[3] ?? 'julu'
 const FIXED_DT = 1 / 60
 
@@ -27,7 +27,7 @@ const FIXED_DT = 1 / 60
  * 傻 AI 大約死在難度弧上的第幾個參考波。**經驗常數**，是把 `arc` 換算成
  * 「預期陣亡比例」的橋：預期中位數 ≈ maxWave × DEATH_REF / arc。
  * 它會隨玩家端的平衡（字表、羈絆、射程）漂移；整條曲線一起偏移時就是該更新這個數字，
- * 而不是去改九關的 arc。
+ * 而不是去改各關的 arc。
  */
 const DEATH_REF = 20
 
@@ -66,7 +66,7 @@ function targetOf(levelKey: string): number {
 }
 
 if (LEVEL === 'all') {
-  console.log(`\n=== 難度曲線：主線九關 × ${GAMES} 局（傻 AI）===`)
+  console.log(`\n=== 難度曲線：主線全關 × ${GAMES} 局（傻 AI）===`)
   console.log('關卡        arc  中位數/總波   比例   預期   偏差   通關率')
   for (const key of LEVEL_ORDER) {
     const lv = LEVELS[key]
@@ -84,7 +84,7 @@ if (LEVEL === 'all') {
   }
   console.log(
     '\n「比例」應該一路遞減（越後面的關卡越難）；某一關偏差超過 ±20% 就調那一關的 arc。' +
-      '\n整條曲線一起偏移＝玩家端的平衡動了，改 tools/autobalance.ts 的 DEATH_REF，不要九關一起改。\n',
+      '\n整條曲線一起偏移＝玩家端的平衡動了，改 tools/autobalance.ts 的 DEATH_REF，不要整條一起改。\n',
   )
 } else {
   const { median, results, won } = run(LEVEL)

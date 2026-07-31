@@ -11,8 +11,8 @@
  * 中段落到一半上下，最後三關近乎打不完——那正是難度曲線該有的形狀。
  * 若前兩關也通不了，先看是不是關卡數值被調爆了；若最後三關輕鬆通關，就是後段太簡單。
  *
- *   npm run ai              # 九關各 8 局
- *   npm run ai 12           # 九關各 12 局
+ *   npm run ai              # 主線每關 8 局
+ *   npm run ai 12           # 主線每關 12 局
  *   npm run ai 12 guandu    # 只跑官渡 12 局
  */
 import { mulberry32 } from '../src/core/rng'

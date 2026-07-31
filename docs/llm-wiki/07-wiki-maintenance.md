@@ -69,6 +69,8 @@
 | `data/bonds.ts`（羈絆） | [02](02-data-tables.md) 的羈絆數、[modules/04](modules/04-combat-and-skills.md)、`docs/game-design.md` §5.5 的羈絆表 |
 | `data/enemies.ts`（敵人／BOSS） | [modules/05](modules/05-economy-and-waves.md) 的敵表、[02](02-data-tables.md) 的敵種數與 traits 表、`docs/game-design.md` §7.4、[00-index](00-index.md) 的內容量 |
 | `data/enemies.ts` 的 `TRAIT_COUNTERS`（新增 trait） | 同上，**並確認 `TRAIT_LABEL` 與 `COUNTER_LABEL` 都補齊**（`enemies-ext.test.ts` 會檢查） |
+| `data/levels/index.ts` 的 `mods`（戰場特性） | [modules/03](modules/03-board-and-mapgen.md) 的 `LevelDef` 欄位表與「`mods` 一個欄位驅動兩件事」、[CLAUDE.md](../../CLAUDE.md) 的「戰場特性」段。⚠ 新增旋鈕要同時補：`LevelMods`（types.ts）、讀它的那一處 sim、`modTags()` 的說明、`level-mods.test.ts` 的中性預設值測試 |
+| `sim/step.ts` 的 `stepFrenzy`／`stepEnemySupport`（卡波防線） | [modules/05](modules/05-economy-and-waves.md) 的「卡波與督戰」與「敵方光環一律有疊加上限」、[CLAUDE.md](../../CLAUDE.md) 的「卡波」段。⚠ **三層缺一不可**（互不治療／疊加上限／督戰），改前先讀那兩節為什麼 |
 | `data/levels/index.ts`（關卡／`bias`） | [modules/03](modules/03-board-and-mapgen.md) 的關卡表、[02](02-data-tables.md) 的關卡表、`docs/game-design.md` §8.1、**並更新各關 sim 中位數** |
 | `data/shop.ts` / `upgrades.ts` | [modules/06](modules/06-meta-progression.md)，若改價格要更新總價與局數估算 |
 | `data/achievements.ts`（成就） | [modules/06](modules/06-meta-progression.md) 的成就節、[00-index](00-index.md) 的內容量、`docs/game-design.md` §8.2 的分區表；**改獎勵要重算總額**（目前 2130，須夾在兵書 1230 與商城 13590 之間，有守護測試） |
@@ -78,17 +80,17 @@
 | `sim/persist.ts` 的 `RunSnapshot` | [modules/06](modules/06-meta-progression.md) 的續玩節、[04-invariants](04-invariants.md)。⚠ **新增 `GameState` 可變欄位時要一併加進快照**，漏了會靜默遺失 |
 | `sim/skills.ts`（技能／組合技） | [modules/04](modules/04-combat-and-skills.md) 的原型清單與註冊表數量、[02](02-data-tables.md) |
 | `sim/combat.ts` 的常數 | [modules/04](modules/04-combat-and-skills.md)、[02](02-data-tables.md) 的公式區、[03-change-recipes.md](03-change-recipes.md) 的難度旋鈕表 |
-| `sim/waves.ts`（`HP_GROWTH` 等） | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §7.5，**並更新各關 sim 中位數**。⚠ 若整條曲線一起偏移，要改的是 `tools/autobalance.ts` 的 `DEATH_REF`，不是九關的 `arc` |
+| `sim/waves.ts`（`HP_GROWTH` 等） | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §7.5，**並更新各關 sim 中位數**。⚠ 若整條曲線一起偏移，要改的是 `tools/autobalance.ts` 的 `DEATH_REF`，不是各關的 `arc` |
 | `sim/economy.ts` | [modules/05](modules/05-economy-and-waves.md)、`docs/game-design.md` §6，**並跑 `npm run econ` 確認「一波征兵 1～2 次」仍成立** |
 | `data/enemies.ts` 的 `bounty` | 同上——它佔總收入約 65%，是經濟的主力旋鈕，改它一定要跑 `npm run econ` |
-| `data/glyphs.ts` 的 `atk`（整批縮放） | [02](02-data-tables.md) 的平衡基準（「刀」那把尺）、**並跑 `npm run sim` 九關** |
-| `level.arc`（難度弧長度＝**難度主旋鈕**） | 更新 [modules/03](modules/03-board-and-mapgen.md) 與 [02](02-data-tables.md) 的關卡表（含「比例」欄）、`docs/game-design.md` §8.1、[CLAUDE.md](../../CLAUDE.md) 的難度儀表板段，並重跑 `npm run sim 12 all` |
+| `data/glyphs.ts` 的 `atk`（整批縮放） | [02](02-data-tables.md) 的平衡基準（「刀」那把尺）、**並跑 `npm run sim 16 all`** |
+| `level.arc`（難度弧長度＝**難度主旋鈕**） | 更新 [modules/03](modules/03-board-and-mapgen.md) 與 [02](02-data-tables.md) 的關卡表（含「比例」欄）、`docs/game-design.md` §8.1、[CLAUDE.md](../../CLAUDE.md) 的難度儀表板段，並重跑 `npm run sim 16 all` |
 | `level.maxWave` | 它現在**只是關卡長度**（難度看 `arc`）。仍要更新上面那些關卡表，因為預期中位數 = `maxWave × 20 / arc` 會跟著變 |
 | `sim/state.ts` 的 `recalcUnits` / `MetaProgress` | [modules/01](modules/01-state-and-units.md)、若動 `MetaProgress` 還要看 [modules/06](modules/06-meta-progression.md) 與 `core/save.ts` 的遷移 |
 | `sim/actions.ts`（新增操作） | [modules/02](modules/02-actions-and-combine.md) |
 | `sim/types.ts` 的 `Perks` | [modules/06](modules/06-meta-progression.md) 的 Perks 對應表 |
-| `sim/autoplay.ts` 的旋鈕（`TUNE` / `THINK_INTERVAL`） | [CLAUDE.md](../../CLAUDE.md) 的「AI 代管」段，**並跑 `npm run ai` 前後對照**：同時記下九關波數中位數與**耗時**（耗時就是手機的發熱量表，改決策頻率一定要看它） |
-| `sim/autoplay.ts` 的估值函式（`Cov`／`Geom.runs`／`defInfo`） | 這些是**純快取**，行為必須完全不變：跑 `npm run ai` 對照九關中位數（數字要一樣）與耗時（要更低）。[CLAUDE.md](../../CLAUDE.md) 的「AI 代管」段有現況耗時 |
+| `sim/autoplay.ts` 的旋鈕（`TUNE` / `THINK_INTERVAL`） | [CLAUDE.md](../../CLAUDE.md) 的「AI 代管」段，**並跑 `npm run ai` 前後對照**：同時記下各關波數中位數與**耗時**（耗時就是手機的發熱量表，改決策頻率一定要看它） |
+| `sim/autoplay.ts` 的估值函式（`Cov`／`Geom.runs`／`defInfo`） | 這些是**純快取**，行為必須完全不變：跑 `npm run ai` 對照各關中位數（數字要一樣）與耗時（要更低）。[CLAUDE.md](../../CLAUDE.md) 的「AI 代管」段有現況耗時 |
 | `core/loop.ts` 的 `MIN_FRAME`／`render/renderer.ts` 的地形快取／`ui/hud.ts` 的 `setText` | [modules/07](modules/07-presentation.md)（每幀、渲染分層、契約 5）。這三處都是**省電**設計，改動前先確認理解「為什麼不能每幀重畫」 |
 | `ui/hud.ts` / `index.html` / `style.css`（HUD 版面） | [modules/07](modules/07-presentation.md) 的檔案規模表（行數）、核心概念的狀態列／底部浮層兩段，**並校對「契約與陷阱」裡所有 `hud.ts:行號`**——HUD 是行號最密集的一頁 |
 | 新增檔案到 `src/` | [00-index.md](00-index.md) 的檔案地圖 **＋** 對應的 `modules/` 頁；若是新子系統，照模板開新頁 |
@@ -127,7 +129,7 @@
 ```bash
 npm test          # 資料表完整性、技能註冊表對得上、羈絆門檻相容性都有測試把關
 npm run typecheck
-npm run sim 12 all # 改任何數值後必跑；九關的「比例」要一路遞減（1.00 → 0.45）
+npm run sim 16 all # 改任何數值後必跑；主線各關的「比例」要一路遞減（1.00 → 0.35）
 npm run econ      # 改經濟數值後必跑；征兵次數目標 1～2 次/波
 ```
 
@@ -180,7 +182,10 @@ grep -o -E '(state|types|step|combat|actions|waves|economy|pool|skills|bonds)\.t
 | `perksFrom` 等級 0 時全部欄位為中性值 | `shop.test.ts` |
 | 每種商城道具只影響自己負責的 `Perks` 欄位 | `shop.test.ts` |
 | 羈絆門檻不超過編隊武將上限（否則永遠湊不齊） | `loadout.test.ts` |
-| 12 種 BOSS 的機制指紋互不相同（不能只是血量差異） | `enemies-ext.test.ts` |
+| 13 種 BOSS 的機制指紋互不相同（不能只是血量差異） | `enemies-ext.test.ts` |
+| 治療者之間不互相治療、敵方光環疊加有上限、單波敵種佔比有上限 | `stall.test.ts` |
+| **僵局一定會被督戰打破**（波次不會永遠卡住），而正常推進與磨血不會誤觸發 | `stall.test.ts` |
+| 戰場特性 `mods` 的每個欄位省略時完全等同舊行為（中性預設值） | `level-mods.test.ts` |
 | 死亡分裂圖無環、單次分裂總量有上限 | `enemies-ext.test.ts` |
 | 每個用到的 `EnemyTrait` 都有對應的應對手段與中文標籤 | `enemies-ext.test.ts` |
 | 關卡 `bias` 都是合法 trait 且有敵人帶該 trait | `enemies-ext.test.ts` |

@@ -9,18 +9,22 @@
  *   血量的指數吃 `wave × arc / maxWave`（見 sim/waves.ts），所以
  *   **`arc` 越大這一關越難**，而改 `maxWave` 只是改「打幾波」，不再連帶改陡度。
  *
- * 平衡基準：`npm run sim 12 all` 量傻 AI 在九關的陣亡中位數，`arc` 直接換算成預期比例——
+ * 平衡基準：`npm run sim 16 all` 量傻 AI 在主線各關的陣亡中位數，`arc` 直接換算成預期比例——
  *   傻 AI 大約死在弧上的第 20 個參考波，所以 **中位數 ≈ maxWave × 20 / arc**。
  *   arc = 40 → 死在一半；arc = 20 → 剛好打到底（教學關要的就是這個）。
  *
- * ⚠ 九關的 arc 刻意**逐關不遞減**（20 → 41），量出來的「抵達比例」因此一路遞減
- *   （1.00 → 0.45），這才是「越後面越難」的來源。以前沒有 arc、九關一律走完整條參考弧，
- *   九關難度一樣平（比例全是 0.5），而最短的教學關反而是全遊戲最陡的一段（每波血量 ×1.99）。
+ * ⚠ 主線的 arc 刻意**逐關不遞減**，量出來的「抵達比例」因此一路遞減，
+ *   這才是「越後面越難」的來源。以前沒有 arc、每一關一律走完整條參考弧，
+ *   難度就完全一樣平（比例全是 0.5），而最短的教學關反而是全遊戲最陡的一段（每波血量 ×1.99）。
  * ⚠ arc 不是「照關卡順序等差」就會對：生命數與字池也算難度，
  *   所以 2 條命的五丈原用的弧比 3 條命的襄陽短。看的是量出來的比例，不是 arc 本身好不好看。
- * hpMul 退居微調（整個 0.55～1.28 區間只值約 2 個參考波），lives 則是容錯度。
+ * ⚠ **驗收看的是「比例」的排序，不是「偏差」那一欄**：實際比例 ≈ k / arc，預期比例 = 20 / arc，
+ *   兩者同時吃 arc，所以偏差百分比其實**對 arc 不敏感**（它量的是 k，也就是這一關的
+ *   地圖／生命／字池讓傻 AI 比參考值多撐了幾成）。要修正的是排序，調 arc 就對了。
+ * hpMul 退居微調（整個 0.55～1.30 區間只值約 2 個參考波），lives 則是容錯度。
+ * 另外還有一條與血量無關的軸：戰場特性 `mods`（見下方 `LevelDef.mods`）。
  */
-import type { EnemyTrait } from '../../sim/types'
+import type { EnemyTrait, LevelMods } from '../../sim/types'
 
 export interface LevelDef {
   key: string
@@ -67,11 +71,38 @@ export interface LevelDef {
    * 否則會出現兩份不同步的真相。
    */
   bias?: EnemyTrait[]
+  /**
+   * 戰場特性（見 sim/types.ts 的 `LevelMods`）。
+   * 每個欄位都是**中性預設值**，省略＝舊行為，所以既有關卡完全不受影響。
+   *
+   * ⚠ 它會實質改變難度，而 `arc` 換算出的預期比例並不知道這件事——
+   *   加了 mods 的關卡一定要跑 `npm run sim 12 <key>` 重新對 `arc`。
+   */
+  mods?: LevelMods
+}
+
+/**
+ * 戰場特性 → 玩家看得懂的一句話。**UI 只讀這裡**，不要在關卡資料裡另外手寫說明，
+ * 否則會跟 `mods` 變成兩份會不同步的真相（跟 `bias` → `countersFor` 同一個慣例）。
+ */
+export function modTags(level: LevelDef): string[] {
+  const m = level.mods
+  if (!m) return []
+  const out: string[] = []
+  if (m.bossEvery !== undefined) out.push(`每 ${m.bossEvery} 波就有賊將`)
+  if (m.spawnGap !== undefined) out.push('賊潮不絕（出怪更密集）')
+  if (m.enemySpeedMul !== undefined && m.enemySpeedMul !== 1) {
+    out.push(`敵軍行軍 ×${m.enemySpeedMul.toFixed(2)}`)
+  }
+  if (m.rangeMul !== undefined && m.rangeMul !== 1) {
+    out.push(`濃霧：我軍射程 ×${m.rangeMul.toFixed(2)}`)
+  }
+  return out
 }
 
 export const LEVEL_ORDER = [
   'huangjin', 'dongzhuo', 'julu', 'guandu', 'chibi', 'wuzhang',
-  'xiangyang', 'hanzhong', 'luoyang',
+  'xiangyang', 'hanzhong', 'luoyang', 'hefei', 'hulao', 'xuchang',
 ] as const
 
 export const LEVELS: Record<string, LevelDef> = {
@@ -205,7 +236,7 @@ export const LEVELS: Record<string, LevelDef> = {
     lives: 2,
     maxWave: 40,
     // 只有 2 條命，所以弧跟赤壁一樣長就已經比它難（漏一隻的代價高一倍）
-    arc: 31,
+    arc: 32,
     hpMul: 1.1,
     pool: { support: 7, generals: 9 },
     // 妖道與高血敵人並存，考驗集火與持續輸出
@@ -245,15 +276,86 @@ export const LEVELS: Record<string, LevelDef> = {
   luoyang: {
     key: 'luoyang',
     name: '洛陽',
-    subtitle: '★ 隨機地形。最終關。飛行、高速與治療同時上陣',
+    subtitle: '★ 隨機地形。飛行、高速與治療同時上陣',
     startFood: 32,
     lives: 2,
     maxWave: 40,
-    arc: 41,
+    arc: 44,
     hpMul: 1.28,
     pool: { support: 8, generals: 10 },
     bias: ['flying', 'fast', 'healer'],
     gen: { cols: 9, rows: 17, minPathLen: 58, blockRate: 0.08 },
+  },
+
+  // ── 終盤三關：難度不再只靠血量，改由「戰場特性」各自扭一個規則 ──
+  // 每一關動的是不同的旋鈕（出怪節奏／BOSS 密度／我方射程），
+  // 所以就算血量曲線一樣，玩家要換的東西完全不同。三關的 arc 都跑過 sim 對過。
+  hefei: {
+    key: 'hefei',
+    name: '合肥',
+    subtitle: '★ 隨機地形。逍遙津。賊潮不絕，出怪間隔只有一半',
+    startFood: 30,
+    lives: 3,
+    maxWave: 36,
+    arc: 45,
+    hpMul: 1.2,
+    pool: { support: 8, generals: 9 },
+    // 出怪間隔砍半＝同時在場的敵人約兩倍，逼玩家非有清場能力不可
+    mods: { spawnGap: 0.4 },
+    bias: ['swarm', 'fast'],
+    gen: { cols: 9, rows: 16, minPathLen: 54 },
+  },
+
+  hulao: {
+    key: 'hulao',
+    name: '虎牢關',
+    subtitle: '固定關隘長路。每 3 波就有一名賊將壓陣',
+    startFood: 30,
+    lives: 3,
+    maxWave: 30,
+    arc: 47,
+    hpMul: 1.15,
+    pool: { support: 8, generals: 9 },
+    // BOSS 從每 5 波變成每 3 波：這一關考的是「隨時都要有能打 BOSS 的爆發」，
+    // 而不是「靠雜兵波喘口氣、只在第 5 波拚一次」
+    mods: { bossEvery: 3 },
+    bias: ['tanky', 'armored'],
+    // ⚠ 蛇形長路，列與列之間一律隔 2 列（只有第 13 列是單格連接），
+    //   確保 BFS 最短路 == 畫出來的路，不會有走不到的路格（mapgen.test.ts 會抓）
+    map: [
+      'S########',
+      'PPPPPPPP#',
+      'PP..PPPP#',
+      '#########',
+      '#PPPPPPPP',
+      '#PPP..PPP',
+      '#########',
+      'PPPPPPPP#',
+      'PPPP..PP#',
+      '#########',
+      '#PPPPPPPP',
+      '#PP..PPPP',
+      '#########',
+      'PPPPPPPP#',
+      'C########',
+    ],
+  },
+
+  xuchang: {
+    key: 'xuchang',
+    name: '許昌',
+    subtitle: '★ 隨機地形。最終關。夜霧壓境，我軍射程受限',
+    startFood: 34,
+    lives: 2,
+    maxWave: 40,
+    arc: 49,
+    hpMul: 1.3,
+    pool: { support: 9, generals: 11 },
+    // 射程 −15% 會把「塔擺在哪裡」的容錯度整個收窄；行軍加速再壓縮反應時間。
+    // 這兩個旋鈕都不改血量，所以它難的地方跟前面每一關都不一樣
+    mods: { rangeMul: 0.85, enemySpeedMul: 1.1 },
+    bias: ['healer', 'armored', 'fast'],
+    gen: { cols: 9, rows: 17, minPathLen: 60, blockRate: 0.08 },
   },
 }
 
@@ -262,7 +364,7 @@ export const JULU = LEVELS.julu
 // ── 無盡模式 ──────────────────────────────────────────
 /**
  * 無盡＝「同一關，但沒有終點」。地圖、字池、敵人偏好、`hpMul`、生命全部沿用原關，
- * 只把 `maxWave` 換成 `Infinity`。所以它不是 9 個新關卡，而是 9 個既有關卡的**推導變體**
+ * 只把 `maxWave` 換成 `Infinity`。所以它不是 新關卡，而是每個既有關卡的**推導變體**
  * （`endlessOf()`）——原關改數值，無盡版自動跟著改，不會出現兩份會不同步的真相。
  *
  * ★ 難度弧：血量的指數吃「相對進度」`wave × arc / maxWave`（見 sim/waves.ts），

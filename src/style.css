@@ -873,6 +873,18 @@ body {
   white-space: nowrap;
 }
 
+/* 戰場特性（見 data/levels 的 modTags）。刻意用紅系與「建議帶」的褐系分開：
+   一個是「這一關改了規則」的警告，一個是「你該帶什麼」的提示 */
+.level-card .lv-mod {
+  font-size: calc(var(--ui) * 0.72);
+  border: 1px solid #a8412c;
+  color: #a8412c;
+  background: #fbe8e2;
+  border-radius: calc(var(--ui) * 0.42);
+  padding: 0 calc(var(--ui) * 0.35);
+  white-space: nowrap;
+}
+
 .level-card .lv-meta {
   font-size: calc(var(--ui) * 0.78);
   color: var(--ink-soft);

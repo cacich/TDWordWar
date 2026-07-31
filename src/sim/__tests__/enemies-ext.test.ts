@@ -72,6 +72,7 @@ describe('敵表完整性', () => {
         b.slowImmune ?? false,
         b.flying,
         !!b.healAura,
+        !!b.buffAura,
         !!b.regen,
         !!b.splitInto,
         !!b.escort,

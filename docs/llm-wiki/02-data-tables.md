@@ -117,13 +117,15 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
   traits,                        // ★ 必填：這隻敵人「難對付的地方」
   ccImmune?, burnImmune?, slowImmune?,
   healAura?: { radius, hps },    // 為半徑內其他敵人回血（比例／秒）
+  buffAura?: { radius, defAdd?, speedMul? },  // 加防／加速光環（旗賊、戰鼓將）
+  maxShare?,                     // 這一種在單一波裡的數量佔比上限（0～1）
   regen?,                        // 自我回血（最大血量的比例／秒）
   splitInto?: { key, count },    // 死亡分裂
   escort?: { key, count },       // 生成時一起帶出的護衛
   boss?, minWave? }
 ```
 
-目前 **22 種敵人 = 10 一般兵 + 12 種 BOSS**。
+目前 **24 種敵人 = 11 一般兵 + 13 種 BOSS**。
 
 - `speed` 單位是「每秒前進幾格」
 - `def` 走遞減公式：`傷害 = atk × (1 - def/(def+60))`，`DEF_K = 60` 定義在 `sim/combat.ts`
@@ -133,6 +135,9 @@ baseAps = avg(組成字牌的 baseAps) × apsMul
   **易傷刻意無法免疫**，否則控場流會對 BOSS 完全失效
 - ⚠ **灼燒無視防禦**（走 `damageEnemy` 不經 `mitigate`），所以「高防」的解法是持續傷害；
   `burnImmune` 是唯一能封掉這條路、逼玩家改帶高單擊的手段
+- ⚠ **敵方光環（`healAura` / `buffAura`）一律有疊加上限，治療者之間也不互相治療**，
+  實作在 `sim/step.ts`。沒有這兩條會出現「一波打不死又推不動」的無限卡波，
+  詳見 [modules/05](modules/05-economy-and-waves.md) 的「卡波與督戰」
 - 實際血量 = `enemyBaseHp(wave, maxWave, arc) × hpMul`。⚠ **指數吃的是「走完難度弧的百分比」**
   （`wave × arc / maxWave`），難度看關卡的 `arc` 不是波數，見 [modules/05](modules/05-economy-and-waves.md)
 
@@ -252,7 +257,7 @@ requireTag: { tag: '馬', count: 2 }       // 帶此 tag 的武將達到數量�
 S 出兵口   C 大營   # 路   P 空地   . 障礙
 ```
 
-目前 **9 關**（3 關固定地圖 + 6 關隨機地形），另有**由這 9 關推導出的 9 個無盡變體**
+目前 **12 關**（4 關固定地圖 + 8 關隨機地形），另有**由這 12 關推導出的 12 個無盡變體**
 （`endless_<key>`，`maxWave: Infinity`；見 [modules/03](modules/03-board-and-mapgen.md) 的「無盡變體」）。
 
 - **`pool` 是必填欄位**（漏掉會 TS 編譯錯誤）：`support` = 抽幾個謀略／經濟字，
@@ -269,22 +274,27 @@ S 出兵口   C 大營   # 路   P 空地   . 障礙
 - `maxWave` 為 `Infinity` 就是無盡：改走絕對波次曲線（等同 `arc` = 40），成績記在 `meta.endless`
 - 設計決定 #2：**障礙不阻擋射線**，`.` 只影響可放置性與視覺
 
-各關偏好與傻 AI 中位數（**目標 ≈ `maxWave × 20 / arc`**，±20% 內算達標；`npm run sim 12 all`）：
+各關偏好與傻 AI 中位數（**目標 ≈ `maxWave × 20 / arc`**，±20% 內算達標；`npm run sim 16 all`）：
 
-| 關卡 | 波數 | arc | hpMul | bias | 建議帶 | sim 中位數 | 比例 |
+| 關卡 | 波數 | arc | hpMul | bias | 戰場特性 `mods` | sim 中位數 | 比例 |
 |---|---|---|---|---|---|---|---|
 | 黃巾之亂 | 12 | 20 | 0.85 | —（教學） | — | 12 | 1.00 |
-| 討伐董卓 | 18 | 23 | 1.00 | flying | 對空 | 15 | 0.83 |
-| 巨鹿 | 30 | 28 | 1.15 | swarm | 範圍、貫穿 | 24 | 0.80 |
-| 官渡 | 24 | 31 | 1.10 | fast | 控場 | 17 | 0.71 |
-| 赤壁 | 30 | 31 | 1.20 | armored | 持續傷害、單體高傷 | 19 | 0.63 |
-| 五丈原 | 40 | 31 | 1.10 | healer, tanky | 單體高傷、持續傷害 | 24 | 0.60 |
-| 襄陽 | 32 | 39 | 1.25 | swarm, splitter | 範圍、貫穿 | 17 | 0.53 |
-| 漢中 | 32 | 39 | 1.20 | armored, tanky | 持續傷害、單體高傷 | 15 | 0.47 |
-| 洛陽 | 40 | 41 | 1.28 | flying, fast, healer | 對空、控場、單體高傷 | 18 | 0.45 |
+| 討伐董卓 | 18 | 23 | 1.00 | flying | — | 16 | 0.89 |
+| 巨鹿 | 30 | 28 | 1.15 | swarm | — | 23 | 0.77 |
+| 官渡 | 24 | 31 | 1.10 | fast | — | 18 | 0.75 |
+| 赤壁 | 30 | 31 | 1.20 | armored | — | 19 | 0.63 |
+| 五丈原 | 40 | 32 | 1.10 | healer, tanky | — | 25 | 0.63 |
+| 襄陽 | 32 | 39 | 1.25 | swarm, splitter | — | 17 | 0.53 |
+| 漢中 | 32 | 39 | 1.20 | armored, tanky | — | 15 | 0.47 |
+| 洛陽 | 40 | 44 | 1.28 | flying, fast, healer | — | 20 | 0.50 |
+| 合肥 | 36 | 45 | 1.20 | swarm, fast | `spawnGap: 0.4` | 15 | 0.42 |
+| 虎牢關 | 30 | 47 | 1.15 | tanky, armored | `bossEvery: 3` | 12 | 0.40 |
+| 許昌 | 40 | 49 | 1.30 | healer, armored, fast | `rangeMul: 0.85`、`enemySpeedMul: 1.1` | 14 | 0.35 |
 
-★ **「比例」一路遞減才是難度曲線**（1.00 → 0.45）。九關的 `arc` 因此逐關不遞減；
+★ **「比例」一路遞減才是難度曲線**（1.00 → 0.35）。`arc` 因此逐關不遞減；
 它不是等差，因為生命數與字池也算難度（2 條命的五丈原用的弧比襄陽短）。
+⚠ 漢中 0.47／洛陽 0.50 的先後在 16 局取樣下屬於雜訊（洛陽是雙峰分佈），不必再往上疊 `arc` 去追。
+⚠ **戰場特性也是難度**，但 `arc` 換算出的預期值不知道它存在——加 `mods` 的關卡一定要重跑 sim。
 
 無盡變體沿用同一份 `hpMul`／`bias`／字池，弧一律 40（絕對波次），目標 `WAVE_REF/2 = 20`：
 黃巾 22・巨鹿 21・洛陽 19。

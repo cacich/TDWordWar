@@ -158,6 +158,7 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     levelName: level.name,
     hpMul: level.hpMul,
     bias: level.bias ?? [],
+    mods: level.mods ?? {},
     board,
     rng,
     pool: pool.chars,
@@ -181,6 +182,12 @@ export function createGame(levelKey = 'julu', seed = 20260727, meta: MetaProgres
     spawnQueue: [],
     waveTime: 0,
     recruitsThisWave: 0,
+    frenzy: 0,
+    stallT: 0,
+    stallMark: 0,
+    stallKills: 0,
+    // 低水位以 Infinity 起算，第一幀就會被場上總血量取代（見 sim/step.ts 的 stepFrenzy）
+    stallHp: Infinity,
     smeltFreeLeft: 3,
     lastIncome: { base: 0, units: 0 },
     activeBonds: [],
@@ -416,8 +423,8 @@ export function recalcUnits(state: GameState): void {
     // 羈絆倍率之外，再乘上局外道具（號令旗／疾風令）的全場加成
     u.atk = u.baseAtk * bonds.atkMul * state.perks.atkMul
     u.aps = u.baseAps * bonds.apsMul * state.perks.apsMul
-    // 精工兵器：疊在全域射程倍率（RANGE_MUL）之上的額外加成
-    u.range = effectiveRange(state.board, u) * state.perks.rangeMul
+    // 精工兵器（道具）× 戰場特性（濃霧）：都疊在全域射程倍率（RANGE_MUL）之上
+    u.range = effectiveRange(state.board, u) * state.perks.rangeMul * (state.mods.rangeMul ?? 1)
   }
 
   // 3. 光環：套在羈絆之後，兩者相乘。

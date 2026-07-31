@@ -210,6 +210,11 @@ export function dealDamage(
  *   slowImmune → 減速（疾風系）
  *   burnImmune → 灼燒（因為灼燒無視防禦，這是唯一能逼玩家改帶高單擊的手段）
  * 易傷（vuln）刻意不給任何免疫，否則控場流會完全失去對 BOSS 的作用。
+ *
+ * ⚠ 定身與擊退再乘上 (1 − frenzy)：**它們是「敵人推不動」這種卡波的唯一成因**
+ *   （擊退每次把敵人推回去，敵人於是永遠走不到大營結束這一波）。督戰爬滿時兩者歸零，
+ *   保證波次一定收得掉。減速刻意不受影響——它只讓敵人變慢，不會讓進度停住。
+ *   見 sim/step.ts 的 stepFrenzy。
  */
 export function applyStatus(state: GameState, e: Enemy, onHit: OnHit, baseAtk: number): void {
   if (onHit.slowDur && !e.slowImmune) e.slow = Math.max(e.slow, onHit.slowDur)
@@ -218,9 +223,10 @@ export function applyStatus(state: GameState, e: Enemy, onHit: OnHit, baseAtk: n
     e.burnT = Math.max(e.burnT, onHit.burn.dur)
     e.burnDps = Math.max(e.burnDps, baseAtk * onHit.burn.mul)
   }
-  if (!e.ccImmune) {
-    if (onHit.stunDur) e.stun = Math.max(e.stun, onHit.stunDur)
-    if (onHit.knock) e.dist = Math.max(0, e.dist - onHit.knock)
+  const ccMul = 1 - state.frenzy
+  if (!e.ccImmune && ccMul > 0) {
+    if (onHit.stunDur) e.stun = Math.max(e.stun, onHit.stunDur * ccMul)
+    if (onHit.knock) e.dist = Math.max(0, e.dist - onHit.knock * ccMul)
   }
   if (onHit.knock && !e.ccImmune) {
     const p = enemyPos(state.board, e)

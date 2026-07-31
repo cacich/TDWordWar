@@ -7,7 +7,7 @@
  */
 import { BOSSES, ENEMY_BY_KEY, REGULARS } from '../data/enemies'
 import { pickWeighted } from '../core/rng'
-import type { EnemyDef, EnemyTrait, SpawnEntry } from './types'
+import type { EnemyDef, EnemyTrait, LevelMods, SpawnEntry } from './types'
 
 /**
  * 第 0 波的基準血量。**線性項**：它整條曲線等比例上下移，所以是用來抵銷
@@ -82,9 +82,15 @@ export function enemyCount(wave: number): number {
   return Math.min(6 + Math.floor(wave * 1.4), MAX_WAVE_ENEMIES)
 }
 
-export function isBossWave(wave: number): boolean {
-  return wave % 5 === 0
+/** 預設每 5 波一隻 BOSS；關卡可用戰場特性的 `bossEvery` 改（見 types.ts 的 LevelMods） */
+export const BOSS_EVERY = 5
+
+export function isBossWave(wave: number, every: number = BOSS_EVERY): boolean {
+  return wave % every === 0
 }
+
+/** 預設出怪間隔（秒）。關卡可用戰場特性的 `spawnGap` 改 */
+export const SPAWN_GAP = 0.75
 
 /** 該波次可以出現的敵種（依 minWave 開放） */
 function eligible(pool: EnemyDef[], wave: number): EnemyDef[] {
@@ -111,6 +117,21 @@ export function pickBoss(wave: number, rng: () => number, bias: readonly EnemyTr
   return pickWeighted(rng, pool, (d) => weightOf(d, bias))
 }
 
+/**
+ * ★ 單一敵種在一波裡的數量上限（`EnemyDef.maxShare`）。
+ *
+ * 只為一件事存在：**同一波出太多治療系會直接卡波**。關卡的 bias 加權是 ×4，
+ * 而妖道又帶 `healer`，所以「偏好治療」的關卡很容易一次倒出一大串妖道，
+ * 疊在一起就是玩家打不動的鐵板。真正的根治在 sim/step.ts（互不治療 + 回血上限），
+ * 這裡是第二道防線：讓「一波裡有幾隻妖道」本身就有天花板。
+ *
+ * ⚠ 到頂的敵種是**整個被排除在抽取之外**，不是抽到再重抽——重抽會多消耗 rng，
+ *   讓同一顆種子產出不同的一局（`buildWave` 的決定性是本專案的基本假設）。
+ */
+function shareCap(def: EnemyDef, n: number): number {
+  return def.maxShare === undefined ? Infinity : Math.max(1, Math.floor(n * def.maxShare))
+}
+
 export function buildWave(
   wave: number,
   rng: () => number,
@@ -118,19 +139,26 @@ export function buildWave(
   bias: readonly EnemyTrait[] = [],
   maxWave: number = WAVE_REF,
   arc: number = WAVE_REF,
+  mods: LevelMods = {},
 ): SpawnEntry[] {
   const out: SpawnEntry[] = []
   const base = enemyBaseHp(wave, maxWave, arc) * hpMul
-  const pool = composition(wave)
+  let pool = composition(wave)
   const n = enemyCount(wave)
-  const gap = 0.75
+  const gap = mods.spawnGap ?? SPAWN_GAP
+  const used: Record<string, number> = {}
 
   for (let i = 0; i < n; i++) {
     const def = pickWeighted(rng, pool, (d) => weightOf(d, bias))
     out.push({ at: i * gap, defKey: def.key, hp: Math.round(base * def.hpMul) })
+    used[def.key] = (used[def.key] ?? 0) + 1
+    // 到頂就退出候選池。留最後一個敵種當保險，池子不可能被清空
+    if (used[def.key] >= shareCap(def, n) && pool.length > 1) {
+      pool = pool.filter((d) => d !== def)
+    }
   }
 
-  if (isBossWave(wave)) {
+  if (isBossWave(wave, mods.bossEvery ?? BOSS_EVERY)) {
     const boss = pickBoss(wave, rng, bias)
     const at = n * gap + 2
     out.push({ at, defKey: boss.key, hp: Math.round(base * boss.hpMul) })

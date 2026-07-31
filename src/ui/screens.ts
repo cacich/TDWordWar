@@ -16,7 +16,7 @@ import { BONDS } from '../data/bonds'
 import { BOSSES, COUNTER_LABEL, ENEMY_BY_KEY, REGULARS, TRAIT_LABEL, countersFor } from '../data/enemies'
 import { GENERALS, generalsUsing } from '../data/generals'
 import { GLYPHS, qualityName } from '../data/glyphs'
-import { LEVELS, LEVEL_ORDER } from '../data/levels'
+import { LEVELS, LEVEL_ORDER, modTags } from '../data/levels'
 import { isGeneralUnlocked } from '../data/loadout'
 import { UPGRADES } from '../data/upgrades'
 import { SHOP, itemLevel } from '../data/shop'
@@ -208,6 +208,8 @@ export class Screens {
       const tips = countersFor(level.bias)
         .map((c) => `<span class="lv-tip">${COUNTER_LABEL[c]}</span>`)
         .join('')
+      // 無盡沿用原關的 mods（endlessOf 是整份 spread），所以特性標籤也要跟著顯示
+      const mods = modTags(level).map((t) => `<span class="lv-mod">${t}</span>`).join('')
 
       const card = document.createElement('button')
       card.className = `level-card${unlocked ? '' : ' locked'}${level.gen ? ' random' : ''}`
@@ -216,6 +218,7 @@ export class Screens {
         <div>
           <div class="lv-name">${level.name}・無盡</div>
           <div class="lv-sub">${unlocked ? level.subtitle : `通關「${level.name}」後開放無盡`}</div>
+          ${unlocked && mods ? `<div class="lv-tips"><span class="lv-tip-label">戰場</span>${mods}</div>` : ''}
           ${unlocked && tips ? `<div class="lv-tips"><span class="lv-tip-label">建議帶</span>${tips}</div>` : ''}
         </div>
         <div class="lv-meta">
@@ -570,6 +573,8 @@ export class Screens {
       // 推薦手段由關卡的 bias 經 TRAIT_COUNTERS 推導，不是另外手寫的清單
       const counters = countersFor(level.bias)
       const tips = counters.map((c) => `<span class="lv-tip">${COUNTER_LABEL[c]}</span>`).join('')
+      // 戰場特性同理，由 mods 經 modTags 推導（見 data/levels 的 modTags）
+      const mods = modTags(level).map((t) => `<span class="lv-mod">${t}</span>`).join('')
 
       const card = document.createElement('button')
       card.className = `level-card${unlocked ? '' : ' locked'}${level.gen ? ' random' : ''}`
@@ -578,6 +583,7 @@ export class Screens {
         <div>
           <div class="lv-name">${level.name}</div>
           <div class="lv-sub">${unlocked ? level.subtitle : `通關「${LEVELS[LEVEL_ORDER[i - 1]].name}」後解鎖`}</div>
+          ${unlocked && mods ? `<div class="lv-tips"><span class="lv-tip-label">戰場</span>${mods}</div>` : ''}
           ${unlocked && tips ? `<div class="lv-tips"><span class="lv-tip-label">建議帶</span>${tips}</div>` : ''}
         </div>
         <div class="lv-meta">

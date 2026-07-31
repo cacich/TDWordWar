@@ -227,8 +227,23 @@ export interface EnemyDef {
   burnImmune?: boolean
   /** 免疫減速 */
   slowImmune?: boolean
-  /** 為半徑內其他敵人每秒回血（妖道系） */
+  /**
+   * 為半徑內其他敵人每秒回血（妖道系）。
+   * ⚠ 疊加有上限（`step.ts` 的 `HEAL_CAP_HPS`），且**治療者之間不互相治療**——
+   *   否則一群妖道會互奶成不死的鐵板，見 step.ts 的「敵方光環的疊加上限」。
+   */
   healAura?: { radius: number; hps: number }
+  /**
+   * 為半徑內其他敵人加防／加速（旗賊、戰鼓將）。與 healAura 一樣有疊加上限。
+   * defAdd 走 `mitigate()` 的遞減公式，speedMul 反而讓敵人更快抵達，兩者都不會造成卡波。
+   */
+  buffAura?: { radius: number; defAdd?: number; speedMul?: number }
+  /**
+   * 這一種敵人在單一波裡的數量佔比上限（0～1）。
+   * 存在的理由只有一個：**同一波出太多治療系會直接卡波**（見 sim/step.ts 的督戰機制）。
+   * 沒宣告就沒有上限。
+   */
+  maxShare?: number
   /** 自我每秒回血，數值是「最大血量的比例」，逼玩家用爆發而非磨血 */
   regen?: number
   /** 死亡時分裂出的小怪 */
@@ -247,6 +262,12 @@ export interface Enemy {
   char: string
   hp: number
   maxHp: number
+  /**
+   * ⚠ `def` 與 `speed` 是**每幀從敵表重算的衍生值**，不是可以長期寫入的狀態：
+   * `stepEnemySupport`（sim/step.ts）每一幀都先把它們重設回 `EnemyDef` 的基準值，
+   * 再疊上當下的敵方光環（旗賊加防、戰鼓將加速）。想長期改變一隻敵人的攻防速度，
+   * 要走敵表或光環，直接指派會在下一幀被蓋掉。
+   */
   def: number
   speed: number
   flying: boolean
@@ -310,6 +331,8 @@ export type SimEvent =
   | { kind: 'skill'; name: string; x: number; y: number }
   | { kind: 'combo'; name: string }
   | { kind: 'leak' }
+  /** 這一波陷入僵局，賊軍開始督戰（見 sim/step.ts 的 stepFrenzy）。整波只發一次 */
+  | { kind: 'frenzy' }
   | { kind: 'waveClear'; wave: number }
   | { kind: 'won' }
   | { kind: 'lost' }
@@ -383,6 +406,25 @@ export interface Perks {
   cdMul: number
 }
 
+// ── 戰場特性 ──────────────────────────────────────────
+/**
+ * 關卡的「戰場特性」。沿用 `Perks` 的**中性預設值**慣例：每個欄位省略時就是舊行為，
+ * 所以既有九關完全不受影響，sim 也不必知道「特性」這個上層概念。
+ *
+ * 型別放在 sim/types.ts（而不是 data/levels）是因為 `GameState` 要帶它，
+ * 而 data → sim 的依賴方向是「只取型別」。
+ */
+export interface LevelMods {
+  /** 每幾波出現一隻 BOSS（預設 5）。虎牢關用它把賊將密度拉到 3 */
+  bossEvery?: number
+  /** 出怪間隔秒數（預設 0.75）。越小＝同時在場的敵人越多，逼玩家要有清場能力 */
+  spawnGap?: number
+  /** 本關敵人的移動速度倍率（預設 1）。與局外道具的 `perks.enemySpeedMul` 相乘 */
+  enemySpeedMul?: number
+  /** 本關友軍射程倍率（預設 1，<1 ＝ 濃霧）。與 `perks.rangeMul` 相乘 */
+  rangeMul?: number
+}
+
 // ── 遊戲狀態 ──────────────────────────────────────────
 export type Phase = 'prep' | 'battle' | 'won' | 'lost'
 
@@ -400,6 +442,8 @@ export interface GameState {
   hpMul: number
   /** 本關的敵人偏好（見 data/levels），buildWave 依它加權敵種與 BOSS 的出現率 */
   bias: EnemyTrait[]
+  /** 本關的戰場特性（見上方 `LevelMods`）。整局固定，欄位省略時就是舊行為 */
+  mods: LevelMods
   board: Board
   /**
    * 本局的亂數產生器。⚠ 它是**閉包**，`JSON.stringify` 會靜默丟掉它——
@@ -443,6 +487,21 @@ export interface GameState {
   /** 本波已生成完畢且場上無敵人 → 進入下一波 */
   waveTime: number
   recruitsThisWave: number
+  /**
+   * 督戰強度 0～1（見 sim/step.ts 的 `stepFrenzy`）。
+   * 這一波陷入僵局（打不死又推不動）時才會從 0 爬上來：回血光環遞減、敵速提升、
+   * 控場失效。**它是「波次一定會結束」的最後保證**，不是難度旋鈕。
+   */
+  frenzy: number
+  /** 僵局已持續幾秒（runtime，每波與每次有進展時歸零） */
+  stallT: number
+  /**
+   * 判斷「這一波有沒有進展」用的三個水位：最前方進度（高水位）、累計擊殺、
+   * 場上總血量（低水位）。三個都沒動夠久就是僵局，見 sim/step.ts 的 stepFrenzy。
+   */
+  stallMark: number
+  stallKills: number
+  stallHp: number
   smeltFreeLeft: number
   /** 上一波的結算收入，供 UI 顯示 */
   lastIncome: { base: number; units: number }
